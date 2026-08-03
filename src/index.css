@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #8b5cf6;
+    --color-accent: #ec4899;
+    --font-arabic: 'Tahoma', 'Tajawal', sans-serif;
+  }
+}
+
+/* Custom RTL Tahoma font class */
+.font-tahoma-arabic {
+  font-family: 'Tahoma', 'Tajawal', sans-serif;
+  direction: rtl;
+  text-align: right;
+}
+
+/* Glittering Title Effect */
+.glitter-title {
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    #e9d5ff 25%,
+    #a855f7 50%,
+    #ec4899 75%,
+    #ffffff 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 4s linear infinite;
+  filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.45));
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Floating Vintage VHS / DVD Disc 3D Hover Effect */
+.floating-disc-container {
+  perspective: 1000px;
+}
+
+.floating-disc {
+  animation: float3D 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+}
+
+.floating-disc:hover {
+  transform: rotateY(15deg) rotateX(10deg) scale(1.08) translateY(-10px);
+  box-shadow: 0 25px 50px -12px rgba(168, 85, 247, 0.5), 0 0 30px rgba(236, 72, 153, 0.4);
+}
+
+@keyframes float3D {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-16px) rotate(2deg);
+  }
+}
+
+/* Glassmorphism Card Style */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-panel-glow {
+  background: rgba(23, 15, 38, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
+}
+
+/* Custom Animated Progress Bar */
+@keyframes shimmerProgress {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-bar {
+  background: linear-gradient(90deg, #8b5cf6 0%, #ec4899 50%, #3b82f6 100%);
+  background-size: 200% 100%;
+  animation: shimmerProgress 2s infinite linear;
+}
+
+/* Custom Scrollbar for Subtitle Table */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.7);
+}
