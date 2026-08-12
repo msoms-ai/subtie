@@ -9,6 +9,24 @@ import { GoogleGenAI } from '@google/genai';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env file automatically if present
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    if (typeof process.loadEnvFile === 'function') {
+      process.loadEnvFile(envPath);
+    } else {
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+      lines.forEach(line => {
+        const match = line.match(/^\s*([\w.-]+)\s*=\s*['"]?(.*?)['"]?\s*$/);
+        if (match) process.env[match[1]] = match[2];
+      });
+    }
+  } catch (err) {
+    console.error('Error loading .env file:', err.message);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
