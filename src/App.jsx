@@ -46,6 +46,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleLoadProject = (project) => {
+    setCurrentProject(project);
+    setView('editor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleGoHome = () => {
     setView('landing');
     setCurrentProject(null);
@@ -62,7 +68,10 @@ export default function App() {
       {/* Main Content Views */}
       <main className="flex-grow">
         {view === 'landing' && (
-          <LandingHero onStartWizard={handleStartWizard} />
+          <LandingHero
+            onStartWizard={handleStartWizard}
+            onLoadProject={handleLoadProject}
+          />
         )}
 
         {view === 'wizard' && (
@@ -75,7 +84,7 @@ export default function App() {
         {view === 'editor' && currentProject && (
           <SubtitleWorkspace
             initialProject={currentProject}
-            onSaveProject={(updated) => setCurrentProject(updated)}
+            onSaveAndClose={handleGoHome}
           />
         )}
       </main>

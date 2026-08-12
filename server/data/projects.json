@@ -1,1 +1,95 @@
-{}
+{
+  "subtie_1785785213632_5sqeq": {
+    "id": "subtie_1785785213632_5sqeq",
+    "animeName": "Detective Conan",
+    "season": "1",
+    "episodeNum": "1",
+    "episodeTitle": "episode 1",
+    "videoUrl": "/uploads/subtie_1785785213632_5sqeq/video.mp4",
+    "srtUrl": "/uploads/subtie_1785785213632_5sqeq/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:03,500",
+        "endTime": "00:00:06,800",
+        "startSeconds": 3.5,
+        "endSeconds": 6.8,
+        "japaneseText": "海賊王に、俺はなる！",
+        "arabicText": "سأصبح ملك القراصنة!",
+        "verified": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:07,200",
+        "endTime": "00:00:10,500",
+        "startSeconds": 7.2,
+        "endSeconds": 10.5,
+        "japaneseText": "諦めるな！仲間が待っているんだ！",
+        "arabicText": "لا تستسلم! رفاقك في انتظارك!",
+        "verified": true
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:11,100",
+        "endTime": "00:00:15,000",
+        "startSeconds": 11.1,
+        "endSeconds": 15,
+        "japaneseText": "この世界には、まだ見ぬ秘宝が眠っている。",
+        "arabicText": "في هذا العالم، لا تزال هناك كنز مخفي ينتظر اكتشافه.",
+        "verified": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:15,600",
+        "endTime": "00:00:19,400",
+        "startSeconds": 15.6,
+        "endSeconds": 19.4,
+        "japaneseText": "さあ、出航の時だ！風が吹いている！",
+        "arabicText": "هيا بنا، حان وقت الإبحار! الرياح تهب لصالحنا!",
+        "verified": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:20,000",
+        "endTime": "00:00:24,200",
+        "startSeconds": 20,
+        "endSeconds": 24.2,
+        "japaneseText": "約束は必ず果たす。それが俺たちの流儀だ。",
+        "arabicText": "سنفي بالوعد دون شك. هذا هو أسلوبنا وطريقتنا.",
+        "verified": true
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:25,000",
+        "endTime": "00:00:29,800",
+        "startSeconds": 25,
+        "endSeconds": 29.8,
+        "japaneseText": "真実を確かめるために、俺たちは突き進む！",
+        "arabicText": "من أجل معرفة الحقيقة، سنواصل التقدم إلى الأمام!",
+        "verified": false
+      }
+    ],
+    "characters": [
+      {
+        "id": "c1",
+        "name": "Luffy / ルフィ",
+        "title": "Main Protagonist & Captain",
+        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=150&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "c2",
+        "name": "Zoro / ゾロ",
+        "title": "Combatant & Swordsman",
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "c3",
+        "name": "Nami / ナミ",
+        "title": "Navigator & Strategist",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=150&auto=format&fit=crop&q=80"
+      }
+    ],
+    "createdAt": "2026-08-03T19:27:04.458Z",
+    "updatedAt": "2026-08-03T19:28:05.687Z"
+  }
+}

@@ -1,60 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Film, Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, Loader2, FileVideo } from 'lucide-react';
+import { Film, Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Play, Cpu } from 'lucide-react';
+import StickFigureFightAnimation from './StickFigureFightAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   const [currentStep, setCurrentStep] = useState(1);
 
   // Form State
-  const [animeName, setAnimeName] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [projectType, setProjectType] = useState('Episode'); // Movie, Trailer, Clip, Episode
+  const [mediaTitle, setMediaTitle] = useState('');
 
-  const [season, setSeason] = useState('1');
-  const [episodeNum, setEpisodeNum] = useState('1');
-  const [episodeTitle, setEpisodeTitle] = useState('');
-
+  // Upload State
   const [videoFile, setVideoFile] = useState(null);
   const [projectId, setProjectId] = useState(null);
-  const [videoUrl, setVideoUrl] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadCompleted, setUploadCompleted] = useState(false);
 
-  // Processing State
+  // AI Processing State
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [processProgress, setProcessProgress] = useState(0);
+  const [processStatusMsg, setProcessStatusMsg] = useState('');
 
-  // Anime Search Autocomplete effect
-  useEffect(() => {
-    if (!animeName.trim() || animeName.length < 2) {
-      setSuggestions([]);
+  const projectTypes = [
+    { id: 'Episode', label: 'Anime Episode', desc: 'Full anime series episode' },
+    { id: 'Movie', label: 'Feature Movie', desc: 'Full length animated movie' },
+    { id: 'Trailer', label: 'Teaser / Trailer', desc: 'Promotional trailer video' },
+    { id: 'Clip', label: 'Short Video Clip', desc: 'Short scene or highlights clip' }
+  ];
+
+  // Step 3 -> Step 4 Upload Simulation Action
+  const handleUploadClick = async () => {
+    if (!videoFile) {
+      alert('Please select an MP4 video file first.');
       return;
     }
 
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const res = await fetch(`/api/anime-search?q=${encodeURIComponent(animeName)}`);
-        const data = await res.json();
-        setSuggestions(data.results || []);
-      } catch (err) {
-        console.error('Anime search failed:', err);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
+    setCurrentStep(4);
+    setIsUploading(true);
+    setUploadProgress(10);
 
-    return () => clearTimeout(timer);
-  }, [animeName]);
-
-  // Video Upload Action
-  const handleUploadVideo = async (file) => {
-    if (!file || !file.name.toLowerCase().endsWith('.mp4')) {
-      alert('Please select a valid MP4 video file.');
-      return;
-    }
-
-    setVideoFile(file);
     const formData = new FormData();
-    formData.append('video', file);
+    formData.append('video', videoFile);
+
+    // Simulate progress animation for file upload
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(interval);
+          return 90;
+        }
+        return prev + 15;
+      });
+    }, 400);
 
     try {
       const res = await fetch('/api/upload', {
@@ -62,45 +60,49 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         body: formData
       });
       const data = await res.json();
+      clearInterval(interval);
+
       if (data.success) {
+        setUploadProgress(100);
         setProjectId(data.projectId);
-        setVideoUrl(data.videoUrl);
+        setTimeout(() => {
+          setIsUploading(false);
+          setUploadCompleted(true);
+          setCurrentStep(5);
+        }, 600);
       } else {
         alert(data.error || 'Upload failed');
+        setCurrentStep(3);
       }
     } catch (err) {
-      console.error('Video upload failed:', err);
-      alert('Video upload error. Please try again.');
+      clearInterval(interval);
+      console.error('Upload error:', err);
+      alert('Network upload error. Please try again.');
+      setCurrentStep(3);
     }
   };
 
-  // Start AI Processing Pipeline
+  // Step 5 -> Step 6 AI Processing Pipeline
   const startAIProcessing = async () => {
-    if (!projectId) {
-      alert('Please upload a video first.');
-      return;
-    }
-
-    setCurrentStep(4);
+    setCurrentStep(6);
     setIsProcessing(true);
-    setProgress(5);
-    setStatusMessage('Creating unique project directory and saving video...');
+    setProcessProgress(5);
+    setProcessStatusMsg('Initializing backend AI engine & file structure...');
 
-    // Simulate progress stages
     const stages = [
-      { pct: 25, msg: 'Extracting audio track from MP4 file...' },
-      { pct: 50, msg: 'AI Transcribing Japanese speech & generating timestamps...' },
-      { pct: 75, msg: 'AI Pre-translating Japanese lines to Arabic...' },
-      { pct: 90, msg: 'Extracting key character profiles and visual avatars...' },
-      { pct: 100, msg: 'Saving SRT subtitle file and building editor...' }
+      { pct: 20, msg: 'Separating audio track from video file...' },
+      { pct: 45, msg: 'AI Japanese Voice ASR & Timestamp alignment...' },
+      { pct: 70, msg: 'AI Pre-translating Japanese lines to English & Arabic...' },
+      { pct: 90, msg: 'Generating SRT & ASS subtitle file structure...' },
+      { pct: 100, msg: 'Processing complete! Loading Working Table Workspace...' }
     ];
 
-    let currentIdx = 0;
+    let stageIdx = 0;
     const interval = setInterval(async () => {
-      if (currentIdx < stages.length) {
-        setProgress(stages[currentIdx].pct);
-        setStatusMessage(stages[currentIdx].msg);
-        currentIdx++;
+      if (stageIdx < stages.length) {
+        setProcessProgress(stages[stageIdx].pct);
+        setProcessStatusMsg(stages[stageIdx].msg);
+        stageIdx++;
       } else {
         clearInterval(interval);
         try {
@@ -109,10 +111,9 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               projectId,
-              animeName: animeName || 'Anime Project',
-              season,
-              episodeNum,
-              episodeTitle: episodeTitle || `Episode ${episodeNum}`
+              projectName: projectName || 'Untitled Project',
+              projectType,
+              mediaTitle: mediaTitle || 'Untitled Video'
             })
           });
           const data = await res.json();
@@ -133,7 +134,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       
-      {/* Wizard Header & Progress Bar */}
+      {/* Step Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <button
@@ -144,13 +145,13 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
             <span>Back to Home</span>
           </button>
           <span className="text-xs font-bold text-purple-400 uppercase tracking-widest bg-purple-950/60 px-3 py-1 rounded-full border border-purple-500/20">
-            Step {currentStep} of 4
+            Step {currentStep} of 6
           </span>
         </div>
 
-        {/* Step Indicators */}
-        <div className="grid grid-cols-4 gap-2">
-          {['Anime Title', 'Episode Info', 'Upload MP4', 'AI Processing'].map((label, idx) => {
+        {/* Multi-step progress bar */}
+        <div className="grid grid-cols-6 gap-1.5">
+          {['Project Name & Type', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'].map((label, idx) => {
             const stepNum = idx + 1;
             const isActive = currentStep === stepNum;
             const isDone = currentStep > stepNum;
@@ -161,7 +162,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
                     isDone ? 'bg-purple-500' : isActive ? 'bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse' : 'bg-slate-800'
                   }`}
                 />
-                <span className={`text-[11px] font-medium mt-2 hidden sm:inline ${isActive ? 'text-purple-300 font-semibold' : 'text-slate-500'}`}>
+                <span className={`text-[10px] font-medium mt-1.5 hidden sm:inline truncate max-w-full ${isActive ? 'text-purple-300 font-semibold' : 'text-slate-500'}`}>
                   {label}
                 </span>
               </div>
@@ -170,106 +171,94 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       </div>
 
-      {/* STEP 1: Anime Name Autocomplete */}
+      {/* STEP 1: Enter Project Name & Select Project Type */}
       {currentStep === 1 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
-            <h3 className="text-2xl font-bold text-white mb-1">Name the Anime</h3>
+            <h3 className="text-2xl font-bold text-white mb-1">Step 1: Project Setup</h3>
             <p className="text-xs text-slate-400">
-              Type to search trusted anime titles from AniList database.
+              Enter your project name and select the type of media project you are creating.
             </p>
           </div>
 
-          <div className="relative">
-            <div className="relative flex items-center">
-              <Search className="w-5 h-5 text-purple-400 absolute left-4 pointer-events-none" />
-              <input
-                type="text"
-                value={animeName}
-                onChange={(e) => setAnimeName(e.target.value)}
-                placeholder="e.g. One Piece, Attack on Titan..."
-                className="w-full bg-slate-900/90 border border-slate-700 focus:border-purple-500 rounded-2xl pl-12 pr-10 py-4 text-base text-white outline-none transition shadow-inner"
-              />
-              {isSearching && <Loader2 className="w-5 h-5 text-purple-400 absolute right-4 animate-spin" />}
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">Project Name</label>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="e.g. One Piece Wano Fansub Project"
+              className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-base text-white outline-none transition"
+            />
+          </div>
 
-            {/* Suggestions Dropdown */}
-            {suggestions.length > 0 && (
-              <div className="absolute z-20 top-full left-0 right-0 mt-2 bg-slate-900 border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
-                {suggestions.map((title, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setAnimeName(title);
-                      setSuggestions([]);
-                    }}
-                    className="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-purple-900/40 hover:text-white transition flex items-center space-x-2 border-b border-slate-800/50 last:border-0"
-                  >
-                    <Film className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>{title}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-2">Project Type</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {projectTypes.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setProjectType(t.id)}
+                  className={`p-4 rounded-2xl border text-left transition flex items-start space-x-3 ${
+                    projectType === t.id
+                      ? 'bg-purple-950/80 border-purple-500 text-white shadow-lg shadow-purple-500/20'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <Layers className={`w-5 h-5 shrink-0 mt-0.5 ${projectType === t.id ? 'text-pink-400' : 'text-slate-500'}`} />
+                  <div>
+                    <h4 className="text-sm font-bold">{t.label}</h4>
+                    <p className="text-xs opacity-75 mt-0.5">{t.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex justify-end pt-4">
             <button
-              disabled={!animeName.trim()}
+              disabled={!projectName.trim()}
               onClick={() => setCurrentStep(2)}
               className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-sm transition shadow-lg shadow-purple-500/20"
             >
-              <span>Next: Episode Details</span>
+              <span>Next: Media Details</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: Season & Episode Details */}
+      {/* STEP 2: Name of the Project & Name of the Video Clip, Movie, Episode or Trailer */}
       {currentStep === 2 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
-            <h3 className="text-2xl font-bold text-white mb-1">Episode Information</h3>
+            <h3 className="text-2xl font-bold text-white mb-1">Step 2: Video Details</h3>
             <p className="text-xs text-slate-400">
-              Select season, episode number, and episode title for <span className="text-purple-300 font-semibold">{animeName}</span>.
+              Specify the title of the video ({projectType}) for <span className="text-purple-300 font-semibold">{projectName}</span>.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Season Number</label>
-              <select
-                value={season}
-                onChange={(e) => setSeason(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 text-sm text-white outline-none"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => (
-                  <option key={s} value={s}>Season {s}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Episode Number</label>
-              <input
-                type="number"
-                min="1"
-                value={episodeNum}
-                onChange={(e) => setEpisodeNum(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 text-sm text-white outline-none"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">Project Name</label>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              className="w-full bg-slate-900/70 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 outline-none"
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Episode Title (Optional)</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              Title of {projectType}
+            </label>
             <input
               type="text"
-              value={episodeTitle}
-              onChange={(e) => setEpisodeTitle(e.target.value)}
-              placeholder="e.g. The Dawn of Adventure"
-              className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 text-sm text-white outline-none"
+              value={mediaTitle}
+              onChange={(e) => setMediaTitle(e.target.value)}
+              placeholder={`e.g. Episode 1071: Gear 5 Awakens`}
+              className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-base text-white outline-none transition"
             />
           </div>
 
@@ -281,29 +270,30 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
               Back
             </button>
             <button
+              disabled={!mediaTitle.trim()}
               onClick={() => setCurrentStep(3)}
-              className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm transition shadow-lg shadow-purple-500/20"
+              className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-sm transition shadow-lg shadow-purple-500/20"
             >
-              <span>Next: Upload Video</span>
+              <span>Next: Upload File</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 3: Upload MP4 Video */}
+      {/* STEP 3: Upload Video File from Local Drive */}
       {currentStep === 3 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
-            <h3 className="text-2xl font-bold text-white mb-1">Upload Video File</h3>
+            <h3 className="text-2xl font-bold text-white mb-1">Step 3: Select Video File</h3>
             <p className="text-xs text-slate-400">
-              Upload the video file in <span className="text-pink-400 font-semibold">.mp4</span> format. It will be stored in a unique server directory.
+              Select your video file from your local drive (.mp4 format) and click Upload.
             </p>
           </div>
 
           <div className="border-2 border-dashed border-purple-500/40 hover:border-purple-400 bg-purple-950/20 rounded-3xl p-8 flex flex-col items-center justify-center text-center transition">
             <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
-              <Upload className="w-8 h-8 animate-pulse" />
+              <Upload className="w-8 h-8 animate-bounce" />
             </div>
             
             {videoFile ? (
@@ -311,18 +301,17 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
                 <FileVideo className="w-6 h-6 text-pink-400" />
                 <div className="text-left">
                   <p className="text-sm font-semibold text-white">{videoFile.name}</p>
-                  <p className="text-xs text-slate-400">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB • Unique Folder Saved</p>
+                  <p className="text-xs text-slate-400">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                 </div>
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 ml-2" />
               </div>
             ) : (
               <>
-                <p className="text-sm font-semibold text-slate-200">Drag & drop your MP4 anime episode file here</p>
-                <p className="text-xs text-slate-400 mt-1">or click to browse your computer</p>
+                <p className="text-sm font-semibold text-slate-200">Select MP4 video from local drive</p>
                 <input
                   type="file"
                   accept="video/mp4"
-                  onChange={(e) => e.target.files?.[0] && handleUploadVideo(e.target.files[0])}
+                  onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
                   className="mt-4 cursor-pointer file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500 text-xs text-slate-400"
                 />
               </>
@@ -337,19 +326,84 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
               Back
             </button>
             <button
-              disabled={!projectId}
-              onClick={startAIProcessing}
+              disabled={!videoFile}
+              onClick={handleUploadClick}
               className="flex items-center space-x-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 disabled:opacity-50 text-white font-bold text-sm transition shadow-lg shadow-purple-500/30"
             >
-              <Sparkles className="w-4 h-4 text-pink-200" />
-              <span>Start AI Processing</span>
+              <Upload className="w-4 h-4" />
+              <span>Upload Video</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 4: AI Processing Progress Screen */}
+      {/* STEP 4: Ongoing Percentage & Animated Stick Figures Fighting */}
       {currentStep === 4 && (
+        <div className="glass-panel-glow rounded-3xl p-8 sm:p-10 border border-purple-500/30 text-center space-y-6">
+          <div>
+            <h3 className="text-2xl font-bold text-white mb-1">Uploading Video to Server</h3>
+            <p className="text-xs text-purple-300">
+              Please wait while your video file is being uploaded...
+            </p>
+          </div>
+
+          {/* Short Animated Two Stick Characters Fighting */}
+          <StickFigureFightAnimation />
+
+          {/* Ongoing Percentage & Loading Bar */}
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
+              <div
+                className="h-full rounded-full shimmer-bar transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-400">Uploading {videoFile?.name}</span>
+              <span className="text-white bg-purple-950 px-3 py-0.5 rounded-full border border-purple-500/30">
+                {uploadProgress}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 5: Upload Successful & Completed Confirmation */}
+      {currentStep === 5 && (
+        <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-emerald-500/30 text-center space-y-6">
+          <div className="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/20">
+            <CheckCircle2 className="w-10 h-10 animate-bounce" />
+          </div>
+
+          <div>
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
+              Upload Successful and Completed!
+            </h3>
+            <p className="text-sm text-slate-300 max-w-md mx-auto">
+              Your video file has been saved in a unique project directory on the server:
+              <br />
+              <code className="text-xs text-purple-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 mt-2 inline-block">
+                server/uploads/{projectId}/video.mp4
+              </code>
+            </p>
+          </div>
+
+          <div className="pt-4">
+            <button
+              onClick={startAIProcessing}
+              className="flex items-center space-x-2 px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-bold text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all"
+            >
+              <Cpu className="w-5 h-5 text-pink-200" />
+              <span>Proceed to AI Video Processing</span>
+              <ArrowRight className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 6: AI Audio Extraction & Japanese Transcription Processing Screen */}
+      {currentStep === 6 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-purple-500/30 text-center space-y-8">
           <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center">
             <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
@@ -359,30 +413,29 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
 
           <div>
             <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
-              Processing Video with AI
+              AI Audio & Subtitle Processing
             </h3>
             <p className="text-sm text-purple-300/80 max-w-md mx-auto">
-              Extracting audio, transcribing Japanese voice, creating SRT timestamps, and generating Arabic AI pre-translations.
+              Separating audio from video, transcribing Japanese speech timestamps, and pre-translating to English & Arabic.
             </p>
           </div>
 
-          {/* Interactive Progress Bar & Percentage */}
+          {/* Progress Bar & Status */}
           <div className="max-w-md mx-auto space-y-3">
             <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
               <div
                 className="h-full rounded-full shimmer-bar transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${processProgress}%` }}
               />
             </div>
-            
+
             <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-purple-400">{statusMessage}</span>
+              <span className="text-purple-400">{processStatusMsg}</span>
               <span className="text-white bg-purple-950 px-2.5 py-0.5 rounded-full border border-purple-500/30">
-                {progress}%
+                {processProgress}%
               </span>
             </div>
           </div>
-
         </div>
       )}
 

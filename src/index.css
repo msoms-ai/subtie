@@ -92,6 +92,37 @@
   }
 }
 
+/* Stick Figure Fighting Animations */
+@keyframes punchLeft {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(18px) rotate(-10deg); }
+}
+
+@keyframes kickRight {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-25deg) translateX(-15px); }
+}
+
+@keyframes sparkClash {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+.animate-punch-left {
+  animation: punchLeft 0.6s ease-in-out infinite;
+  transform-origin: 100px 50px;
+}
+
+.animate-kick-right {
+  animation: kickRight 0.6s ease-in-out infinite;
+  transform-origin: 200px 65px;
+}
+
+.animate-spark {
+  animation: sparkClash 0.6s ease-in-out infinite;
+  transform-origin: 145px 48px;
+}
+
 /* Glassmorphism Card Style */
 .glass-panel {
   background: rgba(15, 23, 42, 0.75);
