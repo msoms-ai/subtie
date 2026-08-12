@@ -23,75 +23,6 @@ const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Seed initial sample project if store is empty
-function seedInitialStore() {
-  if (!fs.existsSync(PROJECTS_FILE)) {
-    const sampleId = 'subtie_sample_01';
-    const sampleProject = {
-      id: sampleId,
-      projectName: 'One Piece Wano Arc',
-      projectType: 'Episode',
-      mediaTitle: 'Episode 1071: Gear 5 Awakens',
-      videoUrl: `/uploads/${sampleId}/video.mp4`,
-      srtUrl: `/uploads/${sampleId}/subtitle.srt`,
-      subtitles: [
-        {
-          id: 1,
-          startTime: "00:00:03,500",
-          endTime: "00:00:06,800",
-          startSeconds: 3.5,
-          endSeconds: 6.8,
-          japaneseText: "海賊王に、俺はなる！",
-          englishText: "I am the man who will become the Pirate King!",
-          arabicText: "سأصبح الرجل الذي ينال لقب ملك القراصنة!",
-          approved: true
-        },
-        {
-          id: 2,
-          startTime: "00:00:07,200",
-          endTime: "00:00:10,500",
-          startSeconds: 7.2,
-          endSeconds: 10.5,
-          japaneseText: "諦めるな！仲間が待っているんだ！",
-          englishText: "Don't give up! Your comrades are waiting!",
-          arabicText: "لا تستسلم أبداً! رفاقك في انتظار عودتك!",
-          approved: true
-        },
-        {
-          id: 3,
-          startTime: "00:00:11,100",
-          endTime: "00:00:15,000",
-          startSeconds: 11.1,
-          endSeconds: 15.0,
-          japaneseText: "この世界には、まだ見ぬ秘宝が眠っている。",
-          englishText: "Unseen treasures lie dormant across this world.",
-          arabicText: "في هذا العالم الشاسع، لا تزال هناك كنوز أسطورية ينتظر اكتشافها.",
-          approved: false
-        },
-        {
-          id: 4,
-          startTime: "00:00:15,600",
-          endTime: "00:00:19,400",
-          startSeconds: 15.6,
-          endSeconds: 19.4,
-          japaneseText: "さあ、出航の時だ！風が吹いている！",
-          englishText: "Now is the time to set sail! The wind is blowing!",
-          arabicText: "هيا بنا، حان وقت الإبحار الآن! الرياح تهب لصالحنا!",
-          approved: true
-        }
-      ],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    fs.writeFileSync(PROJECTS_FILE, JSON.stringify({ [sampleId]: sampleProject }, null, 2), 'utf8');
-  }
-}
-seedInitialStore();
-
-// Serve uploaded video and static files
-app.use('/uploads', express.static(UPLOADS_DIR));
-
 // Configure Multer storage per unique project folder
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -127,45 +58,52 @@ function writeProjects(data) {
 }
 
 // Real Gemini AI Video Processing Function
-async function processVideoWithGemini(videoPath) {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function processVideoWithGemini(videoPath, providedApiKey) {
+  const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.log('No GEMINI_API_KEY environment variable found. Falling back to high quality processing pipeline.');
-    return null;
+    throw new Error('GEMINI_API_KEY_MISSING');
   }
 
-  try {
-    console.log(`Starting real Gemini AI Processing on video: ${videoPath}`);
-    const ai = new GoogleGenAI({ apiKey });
+  console.log(`[Gemini AI Engine] Starting real video processing on: ${videoPath}`);
+  const ai = new GoogleGenAI({ apiKey });
 
-    // Upload video file to Gemini Files API
-    const uploadResult = await ai.files.upload({
-      file: videoPath,
-      mimeType: 'video/mp4'
-    });
+  // 1. Upload video file to Gemini Files API
+  console.log(`[Gemini AI Engine] Uploading MP4 file to Gemini Files API...`);
+  const uploadResult = await ai.files.upload({
+    file: videoPath,
+    mimeType: 'video/mp4'
+  });
 
-    console.log(`Uploaded to Gemini Files API: ${uploadResult.name}. Waiting for active status...`);
+  console.log(`[Gemini AI Engine] File uploaded: ${uploadResult.name}. Waiting for ACTIVE status...`);
 
-    // Poll until file state is ACTIVE
-    let fileState = uploadResult;
-    while (fileState.state === 'PROCESSING') {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      fileState = await ai.files.get({ name: uploadResult.name });
-    }
+  // 2. Poll until file state is ACTIVE
+  let fileState = uploadResult;
+  let attempts = 0;
+  while (fileState.state === 'PROCESSING' && attempts < 60) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    fileState = await ai.files.get({ name: uploadResult.name });
+    attempts++;
+  }
 
-    if (fileState.state !== 'ACTIVE') {
-      throw new Error(`Gemini File state is ${fileState.state}`);
-    }
+  if (fileState.state !== 'ACTIVE') {
+    throw new Error(`Gemini File processing failed with state: ${fileState.state}`);
+  }
 
-    const prompt = `
-Analyze the provided video clip carefully.
-Transcribe all Japanese spoken audio with exact start and end timestamps (formatted as HH:MM:SS,mmm and start/end seconds).
-For each spoken line/sentence, provide:
-1. "japaneseText": The original spoken Japanese dialogue in kanji/kana.
-2. "englishText": Accurate English translation.
-3. "arabicText": High-quality natural Arabic translation (العربية).
+  console.log(`[Gemini AI Engine] File active. Sending multimodal transcription & translation prompt to gemini-2.0-flash...`);
 
-Return ONLY valid JSON matching this exact structure:
+  // 3. Multimodal Prompt for Japanese Speech Transcription & Dual Translation
+  const prompt = `
+You are an expert anime subtitle translator and ASR system.
+Analyze the provided video file carefully. Listen to all spoken audio dialogue in Japanese.
+
+Tasks:
+1. Transcribe every spoken Japanese line/sentence accurately with exact start and end timestamps (formatted as HH:MM:SS,mmm and start/end seconds).
+2. For each spoken line, provide:
+   - "japaneseText": Original spoken Japanese dialogue.
+   - "englishText": Accurate, natural English translation.
+   - "arabicText": High-quality natural Arabic translation (العربية).
+
+Return ONLY valid JSON with no extra commentary or markdown formatting outside the JSON object:
 {
   "subtitles": [
     {
@@ -182,31 +120,30 @@ Return ONLY valid JSON matching this exact structure:
 }
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: [
-        fileState,
-        { text: prompt }
-      ]
-    });
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: [
+      fileState,
+      { text: prompt }
+    ]
+  });
 
-    const text = response.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.subtitles && Array.isArray(parsed.subtitles)) {
-        return parsed.subtitles.map((sub, idx) => ({
-          ...sub,
-          id: idx + 1,
-          approved: false
-        }));
-      }
+  const text = response.text || '';
+  console.log(`[Gemini AI Engine] Received AI response. Parsing JSON subtitles...`);
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (parsed.subtitles && Array.isArray(parsed.subtitles)) {
+      return parsed.subtitles.map((sub, idx) => ({
+        ...sub,
+        id: idx + 1,
+        approved: false
+      }));
     }
-  } catch (err) {
-    console.error('Gemini AI Processing error:', err);
   }
 
-  return null;
+  throw new Error('Gemini API did not return valid subtitles JSON format.');
 }
 
 // 1. Video Upload Endpoint
@@ -229,7 +166,7 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
 
 // 2. AI Processing Pipeline Endpoint
 app.post('/api/process', async (req, res) => {
-  const { projectId, projectName, projectType, mediaTitle } = req.body;
+  const { projectId, projectName, projectType, mediaTitle, apiKey } = req.body;
 
   if (!projectId) {
     return res.status(400).json({ error: 'Missing projectId' });
@@ -242,110 +179,54 @@ app.post('/api/process', async (req, res) => {
 
   const videoPath = path.join(projectDir, 'video.mp4');
 
-  // Attempt real Gemini AI Video Processing
-  let subtitles = await processVideoWithGemini(videoPath);
+  try {
+    // Perform Real Gemini AI Video Processing
+    const subtitles = await processVideoWithGemini(videoPath, apiKey);
 
-  // Fallback high quality subtitle lines if Gemini key is not set or file is simulated
-  if (!subtitles || subtitles.length === 0) {
-    subtitles = [
-      {
-        id: 1,
-        startTime: "00:00:03,500",
-        endTime: "00:00:06,800",
-        startSeconds: 3.5,
-        endSeconds: 6.8,
-        japaneseText: "海賊王に、俺はなる！",
-        englishText: "I am the man who will become the Pirate King!",
-        arabicText: "سأصبح الرجل الذي ينال لقب ملك القراصنة!",
-        approved: false
-      },
-      {
-        id: 2,
-        startTime: "00:00:07,200",
-        endTime: "00:00:10,500",
-        startSeconds: 7.2,
-        endSeconds: 10.5,
-        japaneseText: "諦めるな！仲間が待っているんだ！",
-        englishText: "Don't give up! Your comrades are waiting!",
-        arabicText: "لا تستسلم أبداً! رفاقك في انتظار عودتك!",
-        approved: true
-      },
-      {
-        id: 3,
-        startTime: "00:00:11,100",
-        endTime: "00:00:15,000",
-        startSeconds: 11.1,
-        endSeconds: 15.0,
-        japaneseText: "この世界には、まだ見ぬ秘宝が眠っている。",
-        englishText: "Unseen treasures lie dormant across this world.",
-        arabicText: "في هذا العالم الشاسع، لا تزال هناك كنوز أسطورية ينتظر اكتشافها.",
-        approved: false
-      },
-      {
-        id: 4,
-        startTime: "00:00:15,600",
-        endTime: "00:00:19,400",
-        startSeconds: 15.6,
-        endSeconds: 19.4,
-        japaneseText: "さあ、出航の時だ！風が吹いている！",
-        englishText: "Now is the time to set sail! The wind is blowing!",
-        arabicText: "هيا بنا، حان وقت الإبحار الآن! الرياح تهب لصالحنا!",
-        approved: false
-      },
-      {
-        id: 5,
-        startTime: "00:00:20,000",
-        endTime: "00:00:24,200",
-        startSeconds: 20.0,
-        endSeconds: 24.2,
-        japaneseText: "約束は必ず果たす。それが俺たちの流儀だ。",
-        englishText: "We will surely keep our promise. That is our way.",
-        arabicText: "سنفي بوعودنا دون تردد. هذا هو أسلوبنا وطريقتنا.",
-        approved: true
-      },
-      {
-        id: 6,
-        startTime: "00:00:25,000",
-        endTime: "00:00:29,800",
-        startSeconds: 25.0,
-        endSeconds: 29.8,
-        japaneseText: "真実を確かめるために、俺たちは突き進む！",
-        englishText: "In order to ascertain the truth, we push forward!",
-        arabicText: "من أجل الوصول إلى الحقيقة، سنستمر في التقدم إلى الأمام!",
-        approved: false
-      }
-    ];
+    // Save SRT content to disk
+    let srtContent = '';
+    subtitles.forEach((sub, idx) => {
+      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.japaneseText}\n${sub.englishText}\n${sub.arabicText}\n\n`;
+    });
+
+    const srtPath = path.join(projectDir, 'subtitle.srt');
+    fs.writeFileSync(srtPath, srtContent, 'utf8');
+
+    const projectState = {
+      id: projectId,
+      projectName: projectName || 'Untitled Subtie Project',
+      projectType: projectType || 'Episode',
+      mediaTitle: mediaTitle || 'Untitled Video',
+      videoUrl: `/uploads/${projectId}/video.mp4`,
+      srtUrl: `/uploads/${projectId}/subtitle.srt`,
+      subtitles: subtitles,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const projects = readProjects();
+    projects[projectId] = projectState;
+    writeProjects(projects);
+
+    return res.json({
+      success: true,
+      project: projectState
+    });
+  } catch (err) {
+    console.error('AI Processing error:', err.message);
+
+    if (err.message === 'GEMINI_API_KEY_MISSING') {
+      return res.status(400).json({
+        error: 'GEMINI_API_KEY_MISSING',
+        message: 'A valid Gemini API Key is required to process the video with real AI. Please enter your Gemini API Key.'
+      });
+    }
+
+    return res.status(500).json({
+      error: 'GEMINI_PROCESSING_FAILED',
+      message: `Gemini AI Video Processing failed: ${err.message}`
+    });
   }
-
-  // Save SRT content to disk
-  let srtContent = '';
-  subtitles.forEach((sub, idx) => {
-    srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.japaneseText}\n${sub.englishText}\n${sub.arabicText}\n\n`;
-  });
-
-  const srtPath = path.join(projectDir, 'subtitle.srt');
-  fs.writeFileSync(srtPath, srtContent, 'utf8');
-
-  const projectState = {
-    id: projectId,
-    projectName: projectName || 'Untitled Subtie Project',
-    projectType: projectType || 'Episode',
-    mediaTitle: mediaTitle || 'Untitled Video',
-    videoUrl: `/uploads/${projectId}/video.mp4`,
-    srtUrl: `/uploads/${projectId}/subtitle.srt`,
-    subtitles: subtitles,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  const projects = readProjects();
-  projects[projectId] = projectState;
-  writeProjects(projects);
-
-  res.json({
-    success: true,
-    project: projectState
-  });
 });
 
 // 3. Get All Projects
@@ -429,7 +310,7 @@ app.post('/api/project/:id/save', (req, res) => {
   res.json({ success: true, project: projects[id] });
 });
 
-// 7. Export Subtitles as .SRT or .ASS in selected language
+// 7. Export Subtitles as .SRT or .ASS
 app.get('/api/project/:id/export', (req, res) => {
   const { id } = req.params;
   const format = (req.query.format || 'srt').toLowerCase();

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Film, Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Play, Cpu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Film, Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, Key, AlertCircle, RefreshCw } from 'lucide-react';
 import StickFigureFightAnimation from './StickFigureFightAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
@@ -21,6 +21,11 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
   const [processStatusMsg, setProcessStatusMsg] = useState('');
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  // API Key Prompt State
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   const projectTypes = [
     { id: 'Episode', label: 'Anime Episode', desc: 'Full anime series episode' },
@@ -43,7 +48,6 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
     const formData = new FormData();
     formData.append('video', videoFile);
 
-    // Simulate progress animation for file upload
     const interval = setInterval(() => {
       setUploadProgress(prev => {
         if (prev >= 90) {
@@ -83,52 +87,65 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
-  const startAIProcessing = async () => {
+  const startAIProcessing = async (overrideApiKey = null) => {
+    const activeApiKey = overrideApiKey || localStorage.getItem('SUBTIE_GEMINI_API_KEY') || '';
+
+    if (!activeApiKey.trim()) {
+      setShowApiKeyModal(true);
+      return;
+    }
+
     setCurrentStep(6);
     setIsProcessing(true);
-    setProcessProgress(5);
-    setProcessStatusMsg('Initializing backend AI engine & file structure...');
+    setErrorMessage(null);
+    setProcessProgress(10);
+    setProcessStatusMsg('Uploading video to Gemini Files API...');
 
-    const stages = [
-      { pct: 20, msg: 'Separating audio track from video file...' },
-      { pct: 45, msg: 'AI Japanese Voice ASR & Timestamp alignment...' },
-      { pct: 70, msg: 'AI Pre-translating Japanese lines to English & Arabic...' },
-      { pct: 90, msg: 'Generating SRT & ASS subtitle file structure...' },
-      { pct: 100, msg: 'Processing complete! Loading Working Table Workspace...' }
-    ];
+    try {
+      const res = await fetch('/api/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          projectName: projectName || 'Untitled Project',
+          projectType,
+          mediaTitle: mediaTitle || 'Untitled Video',
+          apiKey: activeApiKey
+        })
+      });
 
-    let stageIdx = 0;
-    const interval = setInterval(async () => {
-      if (stageIdx < stages.length) {
-        setProcessProgress(stages[stageIdx].pct);
-        setProcessStatusMsg(stages[stageIdx].msg);
-        stageIdx++;
-      } else {
-        clearInterval(interval);
-        try {
-          const res = await fetch('/api/process', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              projectName: projectName || 'Untitled Project',
-              projectType,
-              mediaTitle: mediaTitle || 'Untitled Video'
-            })
-          });
-          const data = await res.json();
-          if (data.success) {
-            setTimeout(() => {
-              setIsProcessing(false);
-              onCompleteProcess(data.project);
-            }, 600);
-          }
-        } catch (err) {
-          console.error('AI Processing error:', err);
-          alert('Processing error occurred.');
+      const data = await res.json();
+
+      if (!data.success) {
+        setIsProcessing(false);
+        if (data.error === 'GEMINI_API_KEY_MISSING') {
+          setShowApiKeyModal(true);
+        } else {
+          setErrorMessage(data.message || 'Gemini AI Processing failed.');
         }
+        return;
       }
-    }, 1200);
+
+      setProcessProgress(100);
+      setProcessStatusMsg('Processing complete! Loading Working Table Workspace...');
+      setTimeout(() => {
+        setIsProcessing(false);
+        onCompleteProcess(data.project);
+      }, 800);
+
+    } catch (err) {
+      setIsProcessing(false);
+      console.error('AI Processing fetch error:', err);
+      setErrorMessage('Network connection error while calling Gemini AI API.');
+    }
+  };
+
+  const handleSaveModalApiKey = (e) => {
+    e.preventDefault();
+    if (!apiKeyInput.trim()) return;
+    localStorage.setItem('SUBTIE_GEMINI_API_KEY', apiKeyInput.trim());
+    setShowApiKeyModal(false);
+    startAIProcessing(apiKeyInput.trim());
   };
 
   return (
@@ -149,9 +166,9 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
           </span>
         </div>
 
-        {/* Multi-step progress bar */}
+        {/* Step Indicators */}
         <div className="grid grid-cols-6 gap-1.5">
-          {['Project Name & Type', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'].map((label, idx) => {
+          {['Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'].map((label, idx) => {
             const stepNum = idx + 1;
             const isActive = currentStep === stepNum;
             const isDone = currentStep > stepNum;
@@ -229,7 +246,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       )}
 
-      {/* STEP 2: Name of the Project & Name of the Video Clip, Movie, Episode or Trailer */}
+      {/* STEP 2: Name of Project & Video Title */}
       {currentStep === 2 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
@@ -281,7 +298,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       )}
 
-      {/* STEP 3: Upload Video File from Local Drive */}
+      {/* STEP 3: Upload MP4 Video */}
       {currentStep === 3 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
@@ -337,7 +354,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       )}
 
-      {/* STEP 4: Ongoing Percentage & Animated Stick Figures Fighting */}
+      {/* STEP 4: Uploading Progress with Stick Figures Fighting */}
       {currentStep === 4 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-10 border border-purple-500/30 text-center space-y-6">
           <div>
@@ -347,10 +364,8 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
             </p>
           </div>
 
-          {/* Short Animated Two Stick Characters Fighting */}
           <StickFigureFightAnimation />
 
-          {/* Ongoing Percentage & Loading Bar */}
           <div className="max-w-md mx-auto space-y-3">
             <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
               <div
@@ -369,7 +384,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       )}
 
-      {/* STEP 5: Upload Successful & Completed Confirmation */}
+      {/* STEP 5: Upload Successful Confirmation */}
       {currentStep === 5 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-emerald-500/30 text-center space-y-6">
           <div className="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/20">
@@ -391,7 +406,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
 
           <div className="pt-4">
             <button
-              onClick={startAIProcessing}
+              onClick={() => startAIProcessing()}
               className="flex items-center space-x-2 px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-bold text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all"
             >
               <Cpu className="w-5 h-5 text-pink-200" />
@@ -402,39 +417,131 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
         </div>
       )}
 
-      {/* STEP 6: AI Audio Extraction & Japanese Transcription Processing Screen */}
+      {/* STEP 6: Real Gemini AI Video Processing */}
       {currentStep === 6 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-purple-500/30 text-center space-y-8">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center">
-            <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
-              <Sparkles className="w-10 h-10 text-purple-400 animate-spin" />
+          
+          {errorMessage ? (
+            <div className="space-y-4">
+              <div className="w-16 h-16 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold text-white">Gemini AI Processing Error</h3>
+              <p className="text-sm text-rose-300 max-w-md mx-auto leading-relaxed">{errorMessage}</p>
+              
+              <div className="pt-4 flex justify-center space-x-4">
+                <button
+                  onClick={() => setShowApiKeyModal(true)}
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white font-semibold text-xs"
+                >
+                  <Key className="w-4 h-4" />
+                  <span>Update Gemini API Key</span>
+                </button>
+                <button
+                  onClick={() => startAIProcessing()}
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Retry Processing</span>
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center">
+                <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
+                  <Sparkles className="w-10 h-10 text-purple-400 animate-spin" />
+                </div>
+              </div>
 
-          <div>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
-              AI Audio & Subtitle Processing
-            </h3>
-            <p className="text-sm text-purple-300/80 max-w-md mx-auto">
-              Separating audio from video, transcribing Japanese speech timestamps, and pre-translating to English & Arabic.
+              <div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
+                  Real Gemini AI Video Processing
+                </h3>
+                <p className="text-sm text-purple-300/80 max-w-md mx-auto">
+                  Uploading video to Gemini Files API, extracting Japanese speech timestamps, and pre-translating to English & Arabic.
+                </p>
+              </div>
+
+              <div className="max-w-md mx-auto space-y-3">
+                <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
+                  <div
+                    className="h-full rounded-full shimmer-bar transition-all duration-500"
+                    style={{ width: `${processProgress}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-purple-400">{processStatusMsg}</span>
+                  <span className="text-white bg-purple-950 px-2.5 py-0.5 rounded-full border border-purple-500/30">
+                    {processProgress}%
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+        </div>
+      )}
+
+      {/* Gemini API Key Modal (Prompted if key is missing) */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="relative w-full max-w-md glass-panel-glow rounded-3xl p-6 text-slate-100 shadow-2xl border border-purple-500/40 space-y-5">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Enter Gemini API Key</h3>
+                <p className="text-xs text-purple-300/80">Required to process your video with real AI</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              To transcribe the actual audio track of your uploaded video file, please provide a Gemini API Key.
             </p>
-          </div>
 
-          {/* Progress Bar & Status */}
-          <div className="max-w-md mx-auto space-y-3">
-            <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
-              <div
-                className="h-full rounded-full shimmer-bar transition-all duration-500"
-                style={{ width: `${processProgress}%` }}
-              />
-            </div>
+            <form onSubmit={handleSaveModalApiKey} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  required
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none font-mono"
+                />
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Get a free key at{' '}
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-purple-400 underline hover:text-pink-300"
+                  >
+                    Google AI Studio
+                  </a>.
+                </p>
+              </div>
 
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-purple-400">{processStatusMsg}</span>
-              <span className="text-white bg-purple-950 px-2.5 py-0.5 rounded-full border border-purple-500/30">
-                {processProgress}%
-              </span>
-            </div>
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center space-x-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-xs font-bold text-white shadow-lg"
+                >
+                  <span>Start Processing</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
