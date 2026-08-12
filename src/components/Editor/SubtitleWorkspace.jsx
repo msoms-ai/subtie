@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, Check, X, ArrowLeft } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, X, ArrowLeft, Languages } from 'lucide-react';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose }) {
   const [project, setProject] = useState(initialProject);
@@ -125,14 +125,14 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose }) {
       {/* Main Workspace Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Side: Uploaded Video Player */}
+        {/* Left Side: Loaded Video Player */}
         <div className="lg:col-span-5 glass-panel-glow rounded-3xl p-4 border border-purple-500/30 shadow-2xl sticky top-24">
           <div className="flex items-center justify-between mb-3 px-2">
             <span className="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
               <Film className="w-4 h-4 text-purple-400" />
               <span>Loaded Media Player</span>
             </span>
-            <span className="text-[11px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500/30">
+            <span className="text-[11px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
               {approvedCount}/{totalLines} Approved
             </span>
           </div>
@@ -147,113 +147,119 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose }) {
           </div>
 
           <p className="text-[11px] text-slate-400 text-center mt-3">
-            Click any row in the table to jump to that timestamp
+            Click any subtitle line timestamp to jump video to that moment
           </p>
         </div>
 
-        {/* Remaining Space: Subtitle Working Table */}
-        <div className="lg:col-span-7 glass-panel rounded-3xl p-4 sm:p-6 border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-white">
-              Working Table Page (Subtitles)
-            </h3>
+        {/* Right Side: Spacious Subtitle Card List */}
+        <div className="lg:col-span-7 space-y-5">
+          <div className="flex items-center justify-between glass-panel px-5 py-4 rounded-2xl border border-slate-800">
+            <div className="flex items-center space-x-2">
+              <Languages className="w-5 h-5 text-purple-400" />
+              <h3 className="text-base font-bold text-white">
+                Subtitle Translation Workspace
+              </h3>
+            </div>
             <span className="text-xs text-purple-300 font-medium">
-              Japanese ASR $\rightarrow$ English AI $\rightarrow$ Arabic RTL
+              Full-width line editing layout
             </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead>
-                <tr className="text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                  <th className="py-2.5 px-2 w-24">Time</th>
-                  <th className="py-2.5 px-2">Japanese</th>
-                  <th className="py-2.5 px-2">English AI</th>
-                  <th className="py-2.5 px-2 text-right">Arabic (RTL Tahoma)</th>
-                  <th className="py-2.5 px-2 text-center w-20">Human Check</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {subtitles.map((sub) => {
-                  const isActive = activeSubId === sub.id;
-                  return (
-                    <tr
-                      key={sub.id}
-                      className={`transition-colors ${
-                        isActive ? 'bg-purple-950/50 border-l-4 border-purple-500' : 'hover:bg-slate-900/60'
+          {/* Subtitle Line Cards */}
+          <div className="space-y-4">
+            {subtitles.map((sub, idx) => {
+              const isActive = activeSubId === sub.id;
+              return (
+                <div
+                  key={sub.id}
+                  className={`glass-panel p-5 rounded-3xl border transition shadow-md space-y-3.5 ${
+                    isActive
+                      ? 'border-purple-500 bg-purple-950/30 shadow-purple-500/20'
+                      : 'border-slate-800 hover:border-purple-500/30'
+                  }`}
+                >
+                  {/* Card Header: Timestamp Badge & Human Check Approved Button */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => handleSelectLine(sub)}
+                      className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/30 text-purple-300 font-mono text-xs transition"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-pink-400" />
+                      <span className="font-semibold">Line #{idx + 1}</span>
+                      <span className="text-slate-400">|</span>
+                      <span>{sub.startTime.split(',')[0]} $\rightarrow$ {sub.endTime.split(',')[0]}</span>
+                    </button>
+
+                    {/* Human Check Approved Button */}
+                    <button
+                      onClick={() => handleToggleApproved(sub.id)}
+                      className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                        sub.approved
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                          : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
                       }`}
                     >
-                      {/* Start / End Timestamp */}
-                      <td
-                        onClick={() => handleSelectLine(sub)}
-                        className="py-3 px-2 font-mono text-purple-300 cursor-pointer whitespace-nowrap"
-                      >
-                        <div className="flex items-center space-x-1 hover:text-pink-300">
-                          <Volume2 className="w-3 h-3 text-purple-400" />
-                          <span className="text-[11px]">{sub.startTime.split(',')[0]}</span>
-                        </div>
-                        <div className="text-[9px] text-slate-500 pl-4">
-                          {sub.endTime.split(',')[0]}
-                        </div>
-                      </td>
+                      {sub.approved ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Approved</span>
+                        </>
+                      ) : (
+                        <>
+                          <Circle className="w-4 h-4 text-slate-500" />
+                          <span>Human Check</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
 
-                      {/* Transcribed Japanese */}
-                      <td
-                        onClick={() => handleSelectLine(sub)}
-                        className="py-3 px-2 font-medium text-slate-200 text-xs cursor-pointer"
-                      >
-                        {sub.japaneseText}
-                      </td>
+                  {/* Japanese Line on Full Width */}
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-1">
+                      Original Spoken Japanese (ASR)
+                    </span>
+                    <div className="w-full bg-slate-950/90 border border-purple-500/30 rounded-2xl px-4 py-3 text-sm font-semibold text-purple-200 tracking-wide shadow-inner">
+                      {sub.japaneseText}
+                    </div>
+                  </div>
 
-                      {/* English Translation */}
-                      <td className="py-3 px-2">
-                        <input
-                          type="text"
-                          value={sub.englishText || ''}
-                          onChange={(e) => handleEnglishChange(sub.id, e.target.value)}
-                          className="w-full bg-slate-900/90 border border-slate-800 focus:border-purple-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 outline-none"
-                        />
-                      </td>
+                  {/* Two Full Width Editing Fields: English & Arabic */}
+                  <div className="space-y-3 pt-1">
+                    
+                    {/* Full-Width English Field */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        English Translation (AI / Manual Edit)
+                      </label>
+                      <input
+                        type="text"
+                        value={sub.englishText || ''}
+                        onChange={(e) => handleEnglishChange(sub.id, e.target.value)}
+                        placeholder="Enter full English translation..."
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-slate-100 outline-none transition shadow-inner font-normal"
+                      />
+                    </div>
 
-                      {/* Arabic Translation (RTL Tahoma) */}
-                      <td className="py-3 px-2">
-                        <input
-                          type="text"
-                          dir="rtl"
-                          value={sub.arabicText || ''}
-                          onChange={(e) => handleArabicChange(sub.id, e.target.value)}
-                          className="w-full font-tahoma-arabic bg-slate-900/90 border border-slate-800 focus:border-purple-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 outline-none"
-                        />
-                      </td>
+                    {/* Full-Width Arabic Field (RTL Tahoma) */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-pink-400 mb-1">
+                        الترجمة العربية (Arabic Translation - RTL Tahoma)
+                      </label>
+                      <input
+                        type="text"
+                        dir="rtl"
+                        value={sub.arabicText || ''}
+                        onChange={(e) => handleArabicChange(sub.id, e.target.value)}
+                        placeholder="أدخل الترجمة العربية الكاملة..."
+                        className="w-full font-tahoma-arabic bg-slate-950 border border-slate-800 focus:border-pink-500 rounded-2xl px-4 py-3 text-sm text-slate-100 outline-none transition shadow-inner font-normal"
+                      />
+                    </div>
 
-                      {/* Human Check Approved Tick Button */}
-                      <td className="py-3 px-2 text-center">
-                        <button
-                          onClick={() => handleToggleApproved(sub.id)}
-                          className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-[11px] font-semibold transition ${
-                            sub.approved
-                              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
-                          }`}
-                        >
-                          {sub.approved ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Approved</span>
-                            </>
-                          ) : (
-                            <>
-                              <Circle className="w-3.5 h-3.5 text-slate-500" />
-                              <span>Check</span>
-                            </>
-                          )}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </div>
+
+                </div>
+              );
+            })}
           </div>
         </div>
 

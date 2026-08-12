@@ -91,5 +91,83 @@
     ],
     "createdAt": "2026-08-03T19:27:04.458Z",
     "updatedAt": "2026-08-03T19:28:05.687Z"
+  },
+  "subtie_1786559977278_uxuzz": {
+    "id": "subtie_1786559977278_uxuzz",
+    "projectName": "Detective Conan Movie 2026 Trial",
+    "projectType": "Trailer",
+    "mediaTitle": "Trailer of movie 2026",
+    "videoUrl": "/uploads/subtie_1786559977278_uxuzz/video.mp4",
+    "srtUrl": "/uploads/subtie_1786559977278_uxuzz/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:03,500",
+        "endTime": "00:00:06,800",
+        "startSeconds": 3.5,
+        "endSeconds": 6.8,
+        "japaneseText": "海賊王に、俺はなる！",
+        "englishText": "I am the man who will become the Pirate King!",
+        "arabicText": "سأصبح الرجل الذي ينال لقب ملك القراصنة!",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:07,200",
+        "endTime": "00:00:10,500",
+        "startSeconds": 7.2,
+        "endSeconds": 10.5,
+        "japaneseText": "諦めるな！仲間が待っているんだ！",
+        "englishText": "Don't give up! Your comrades are waiting!",
+        "arabicText": "لا تستسلم أبداً! رفاقك في انتظار عودتك!",
+        "approved": true
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:11,100",
+        "endTime": "00:00:15,000",
+        "startSeconds": 11.1,
+        "endSeconds": 15,
+        "japaneseText": "この世界には、まだ見ぬ秘宝が眠っている。",
+        "englishText": "Unseen treasures lie dormant across this world.",
+        "arabicText": "في هذا العالم الشاسع، لا تزال هناك كنوز أسطورية ينتظر اكتشافها.",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:15,600",
+        "endTime": "00:00:19,400",
+        "startSeconds": 15.6,
+        "endSeconds": 19.4,
+        "japaneseText": "さあ、出航の時だ！風が吹いている！",
+        "englishText": "Now is the time to set sail! The wind is blowing!",
+        "arabicText": "هيا بنا، حان وقت الإبحار الآن! الرياح تهب لصالحنا!",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:20,000",
+        "endTime": "00:00:24,200",
+        "startSeconds": 20,
+        "endSeconds": 24.2,
+        "japaneseText": "約束は必ず果たす。それが俺たちの流儀だ。",
+        "englishText": "We will surely keep our promise. That is our way.",
+        "arabicText": "سنفي بوعودنا دون تردد. هذا هو أسلوبنا وطريقتنا.",
+        "approved": true
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:25,000",
+        "endTime": "00:00:29,800",
+        "startSeconds": 25,
+        "endSeconds": 29.8,
+        "japaneseText": "真実を確かめるために、俺たちは突き進む！",
+        "englishText": "In order to ascertain the truth, we push forward!",
+        "arabicText": "من أجل الوصول إلى الحقيقة، سنستمر في التقدم إلى الأمام!",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-12T18:39:48.909Z",
+    "updatedAt": "2026-08-12T18:39:48.910Z"
   }
 }
