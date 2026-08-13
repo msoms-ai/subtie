@@ -5,11 +5,30 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+
+// Set ffmpeg binary path from installer
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env file automatically if present
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json({ limit: '100mb' }));
+
+// Ensure directories exist
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const DATA_DIR = path.join(__dirname, 'data');
+const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
+
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// Load .env file if present
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   try {
@@ -26,20 +45,6 @@ if (fs.existsSync(envPath)) {
     console.error('Error loading .env file:', err.message);
   }
 }
-
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-
-// Ensure directories exist
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const DATA_DIR = path.join(__dirname, 'data');
-const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
-
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // Configure Multer storage per unique project folder
 const storage = multer.diskStorage({
@@ -75,24 +80,45 @@ function writeProjects(data) {
   fs.writeFileSync(PROJECTS_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// Real Gemini AI Video Processing Function
-async function processVideoWithGemini(videoPath, providedApiKey) {
+// Extract Audio Track from MP4 Video File locally
+function extractAudioTrack(videoPath, audioPath) {
+  return new Promise((resolve, reject) => {
+    console.log(`[Audio Extractor] Extracting audio track from: ${videoPath} -> ${audioPath}`);
+    ffmpeg(videoPath)
+      .output(audioPath)
+      .noVideo()
+      .audioCodec('libmp3lame')
+      .audioBitrate(128)
+      .on('end', () => {
+        console.log(`[Audio Extractor] Audio extraction completed: ${audioPath}`);
+        resolve(audioPath);
+      })
+      .on('error', (err) => {
+        console.error('[Audio Extractor Error]', err);
+        reject(err);
+      })
+      .run();
+  });
+}
+
+// Process Extracted Audio File with Gemini AI
+async function processAudioWithGemini(audioPath, providedApiKey) {
   const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY_MISSING');
+    throw new Error('GEMINI_API_KEY is not configured in server/.env');
   }
 
-  console.log(`[Gemini AI Engine] Starting real video processing on: ${videoPath}`);
+  console.log(`[Gemini AI Engine] Initializing Gemini API for audio file: ${audioPath}`);
   const ai = new GoogleGenAI({ apiKey });
 
-  // 1. Upload video file to Gemini Files API
-  console.log(`[Gemini AI Engine] Uploading MP4 file to Gemini Files API...`);
+  // 1. Upload ONLY the extracted audio file to Gemini Files API
+  console.log(`[Gemini AI Engine] Uploading extracted MP3 audio file to Gemini Files API...`);
   const uploadResult = await ai.files.upload({
-    file: videoPath,
-    mimeType: 'video/mp4'
+    file: audioPath,
+    mimeType: 'audio/mp3'
   });
 
-  console.log(`[Gemini AI Engine] File uploaded: ${uploadResult.name}. Waiting for ACTIVE status...`);
+  console.log(`[Gemini AI Engine] Audio file uploaded: ${uploadResult.name}. Waiting for ACTIVE status...`);
 
   // 2. Poll until file state is ACTIVE
   let fileState = uploadResult;
@@ -104,24 +130,24 @@ async function processVideoWithGemini(videoPath, providedApiKey) {
   }
 
   if (fileState.state !== 'ACTIVE') {
-    throw new Error(`Gemini File processing failed with state: ${fileState.state}`);
+    throw new Error(`Gemini Audio file processing failed with state: ${fileState.state}`);
   }
 
-  console.log(`[Gemini AI Engine] File active. Sending multimodal transcription & translation prompt to gemini-2.0-flash...`);
+  console.log(`[Gemini AI Engine] Audio file active. Transcribing Japanese speech & translating to English & Arabic...`);
 
   // 3. Multimodal Prompt for Japanese Speech Transcription & Dual Translation
   const prompt = `
 You are an expert anime subtitle translator and ASR system.
-Analyze the provided video file carefully. Listen to all spoken audio dialogue in Japanese.
+Listen carefully to the provided audio track.
 
 Tasks:
 1. Transcribe every spoken Japanese line/sentence accurately with exact start and end timestamps (formatted as HH:MM:SS,mmm and start/end seconds).
 2. For each spoken line, provide:
-   - "japaneseText": Original spoken Japanese dialogue.
-   - "englishText": Accurate, natural English translation.
-   - "arabicText": High-quality natural Arabic translation (العربية).
+   - "japaneseText": Original spoken Japanese dialogue in kanji/kana.
+   - "englishText": Accurate, natural English translation of the Japanese line.
+   - "arabicText": High-quality natural Arabic translation (العربية) of the Japanese line.
 
-Return ONLY valid JSON with no extra commentary or markdown formatting outside the JSON object:
+Return ONLY valid JSON matching this exact structure:
 {
   "subtitles": [
     {
@@ -182,7 +208,7 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   });
 });
 
-// 2. AI Processing Pipeline Endpoint
+// 2. AI Audio Extraction & Gemini Processing Endpoint
 app.post('/api/process', async (req, res) => {
   const { projectId, projectName, projectType, mediaTitle, apiKey } = req.body;
 
@@ -196,10 +222,14 @@ app.post('/api/process', async (req, res) => {
   }
 
   const videoPath = path.join(projectDir, 'video.mp4');
+  const audioPath = path.join(projectDir, 'audio.mp3');
 
   try {
-    // Perform Real Gemini AI Video Processing
-    const subtitles = await processVideoWithGemini(videoPath, apiKey);
+    // Step A: Extract Audio Track from Video File locally
+    await extractAudioTrack(videoPath, audioPath);
+
+    // Step B: Upload Extracted Audio to Gemini & Transcribe/Translate
+    const subtitles = await processAudioWithGemini(audioPath, apiKey);
 
     // Save SRT content to disk
     let srtContent = '';
@@ -216,6 +246,7 @@ app.post('/api/process', async (req, res) => {
       projectType: projectType || 'Episode',
       mediaTitle: mediaTitle || 'Untitled Video',
       videoUrl: `/uploads/${projectId}/video.mp4`,
+      audioUrl: `/uploads/${projectId}/audio.mp3`,
       srtUrl: `/uploads/${projectId}/subtitle.srt`,
       subtitles: subtitles,
       createdAt: new Date().toISOString(),
@@ -231,18 +262,11 @@ app.post('/api/process', async (req, res) => {
       project: projectState
     });
   } catch (err) {
-    console.error('AI Processing error:', err.message);
-
-    if (err.message === 'GEMINI_API_KEY_MISSING') {
-      return res.status(400).json({
-        error: 'GEMINI_API_KEY_MISSING',
-        message: 'A valid Gemini API Key is required to process the video with real AI. Please enter your Gemini API Key.'
-      });
-    }
+    console.error('Audio & AI Processing error:', err);
 
     return res.status(500).json({
       error: 'GEMINI_PROCESSING_FAILED',
-      message: `Gemini AI Video Processing failed: ${err.message}`
+      message: `Audio extraction / Gemini AI Processing failed: ${err.message}`
     });
   }
 });

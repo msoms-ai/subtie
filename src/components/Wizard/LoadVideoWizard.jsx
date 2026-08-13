@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Film, Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, Key, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw } from 'lucide-react';
 import StickFigureFightAnimation from './StickFigureFightAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
@@ -7,7 +7,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
 
   // Form State
   const [projectName, setProjectName] = useState('');
-  const [projectType, setProjectType] = useState('Episode'); // Movie, Trailer, Clip, Episode
+  const [projectType, setProjectType] = useState('Episode');
   const [mediaTitle, setMediaTitle] = useState('');
 
   // Upload State
@@ -23,10 +23,6 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   const [processStatusMsg, setProcessStatusMsg] = useState('');
   const [errorMessage, setErrorMessage] = useState(null);
 
-  // API Key Prompt State
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-
   const projectTypes = [
     { id: 'Episode', label: 'Anime Episode', desc: 'Full anime series episode' },
     { id: 'Movie', label: 'Feature Movie', desc: 'Full length animated movie' },
@@ -34,7 +30,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
     { id: 'Clip', label: 'Short Video Clip', desc: 'Short scene or highlights clip' }
   ];
 
-  // Step 3 -> Step 4 Upload Simulation Action
+  // Step 3 -> Step 4 Upload Action
   const handleUploadClick = async () => {
     if (!videoFile) {
       alert('Please select an MP4 video file first.');
@@ -87,19 +83,30 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
-  const startAIProcessing = async (overrideApiKey = null) => {
-    const activeApiKey = overrideApiKey || localStorage.getItem('SUBTIE_GEMINI_API_KEY') || '';
-
-    if (!activeApiKey.trim()) {
-      setShowApiKeyModal(true);
-      return;
-    }
-
+  const startAIProcessing = async () => {
     setCurrentStep(6);
     setIsProcessing(true);
     setErrorMessage(null);
-    setProcessProgress(10);
-    setProcessStatusMsg('Uploading video to Gemini Files API...');
+    setProcessProgress(15);
+    setProcessStatusMsg('Extracting audio track from video file...');
+
+    // Progress animation steps
+    const progressTimer = setInterval(() => {
+      setProcessProgress(prev => {
+        if (prev < 40) return prev + 5;
+        if (prev < 80) return prev + 2;
+        if (prev < 95) return prev + 1;
+        return prev;
+      });
+    }, 1000);
+
+    setTimeout(() => {
+      setProcessStatusMsg('Uploading extracted audio track to Gemini Files API...');
+    }, 3000);
+
+    setTimeout(() => {
+      setProcessStatusMsg('Transcribing Japanese speech & translating to English & Arabic...');
+    }, 7000);
 
     try {
       const res = await fetch('/api/process', {
@@ -109,20 +116,16 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
           projectId,
           projectName: projectName || 'Untitled Project',
           projectType,
-          mediaTitle: mediaTitle || 'Untitled Video',
-          apiKey: activeApiKey
+          mediaTitle: mediaTitle || 'Untitled Video'
         })
       });
 
       const data = await res.json();
+      clearInterval(progressTimer);
 
       if (!data.success) {
         setIsProcessing(false);
-        if (data.error === 'GEMINI_API_KEY_MISSING') {
-          setShowApiKeyModal(true);
-        } else {
-          setErrorMessage(data.message || 'Gemini AI Processing failed.');
-        }
+        setErrorMessage(data.message || 'Audio extraction / Gemini AI Processing failed.');
         return;
       }
 
@@ -131,21 +134,14 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
       setTimeout(() => {
         setIsProcessing(false);
         onCompleteProcess(data.project);
-      }, 800);
+      }, 600);
 
     } catch (err) {
+      clearInterval(progressTimer);
       setIsProcessing(false);
       console.error('AI Processing fetch error:', err);
-      setErrorMessage('Network connection error while calling Gemini AI API.');
+      setErrorMessage('Network connection error during audio extraction / Gemini AI processing.');
     }
-  };
-
-  const handleSaveModalApiKey = (e) => {
-    e.preventDefault();
-    if (!apiKeyInput.trim()) return;
-    localStorage.setItem('SUBTIE_GEMINI_API_KEY', apiKeyInput.trim());
-    setShowApiKeyModal(false);
-    startAIProcessing(apiKeyInput.trim());
   };
 
   return (
@@ -406,18 +402,18 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
 
           <div className="pt-4">
             <button
-              onClick={() => startAIProcessing()}
+              onClick={startAIProcessing}
               className="flex items-center space-x-2 px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-bold text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all"
             >
               <Cpu className="w-5 h-5 text-pink-200" />
-              <span>Proceed to AI Video Processing</span>
+              <span>Extract Audio & Process with Gemini AI</span>
               <ArrowRight className="w-5 h-5 text-white" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 6: Real Gemini AI Video Processing */}
+      {/* STEP 6: Audio Extraction & Real Gemini AI Video Processing */}
       {currentStep === 6 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-purple-500/30 text-center space-y-8">
           
@@ -426,23 +422,16 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
               <div className="w-16 h-16 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
                 <AlertCircle className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-white">Gemini AI Processing Error</h3>
+              <h3 className="text-2xl font-bold text-white">Audio / AI Processing Error</h3>
               <p className="text-sm text-rose-300 max-w-md mx-auto leading-relaxed">{errorMessage}</p>
               
               <div className="pt-4 flex justify-center space-x-4">
                 <button
-                  onClick={() => setShowApiKeyModal(true)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white font-semibold text-xs"
-                >
-                  <Key className="w-4 h-4" />
-                  <span>Update Gemini API Key</span>
-                </button>
-                <button
-                  onClick={() => startAIProcessing()}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-slate-800 text-slate-200 font-semibold text-xs"
+                  onClick={startAIProcessing}
+                  className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition shadow-lg"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>Retry Processing</span>
+                  <span>Retry Audio Extraction & Gemini AI</span>
                 </button>
               </div>
             </div>
@@ -456,10 +445,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
 
               <div>
                 <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">
-                  Real Gemini AI Video Processing
+                  Extracting Audio & Gemini AI Processing
                 </h3>
                 <p className="text-sm text-purple-300/80 max-w-md mx-auto">
-                  Uploading video to Gemini Files API, extracting Japanese speech timestamps, and pre-translating to English & Arabic.
+                  Extracting audio track locally, uploading MP3 to Gemini API, transcribing Japanese speech timestamps, and translating to English & Arabic.
                 </p>
               </div>
 
@@ -481,68 +470,6 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
             </>
           )}
 
-        </div>
-      )}
-
-      {/* Gemini API Key Modal (Prompted if key is missing) */}
-      {showApiKeyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className="relative w-full max-w-md glass-panel-glow rounded-3xl p-6 text-slate-100 shadow-2xl border border-purple-500/40 space-y-5">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <Key className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Enter Gemini API Key</h3>
-                <p className="text-xs text-purple-300/80">Required to process your video with real AI</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              To transcribe the actual audio track of your uploaded video file, please provide a Gemini API Key.
-            </p>
-
-            <form onSubmit={handleSaveModalApiKey} className="space-y-4">
-              <div>
-                <input
-                  type="password"
-                  required
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none font-mono"
-                />
-                <p className="text-[11px] text-slate-400 mt-2">
-                  Get a free key at{' '}
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-purple-400 underline hover:text-pink-300"
-                  >
-                    Google AI Studio
-                  </a>.
-                </p>
-              </div>
-
-              <div className="pt-2 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowApiKeyModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex items-center space-x-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-xs font-bold text-white shadow-lg"
-                >
-                  <span>Start Processing</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
 
