@@ -142,6 +142,8 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose }) {
               ref={videoRef}
               src={project.videoUrl}
               controls
+              playsInline
+              preload="metadata"
               className="w-full h-full object-contain"
             />
           </div>
@@ -187,7 +189,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose }) {
                       <Volume2 className="w-3.5 h-3.5 text-pink-400" />
                       <span className="font-semibold">Line #{idx + 1}</span>
                       <span className="text-slate-400">|</span>
-                      <span>{sub.startTime.split(',')[0]} $\rightarrow$ {sub.endTime.split(',')[0]}</span>
+                      <span>{sub.startTime.split(',')[0]} → {sub.endTime.split(',')[0]}</span>
                     </button>
 
                     {/* Human Check Approved Button */}

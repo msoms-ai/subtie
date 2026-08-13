@@ -28,6 +28,9 @@ const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// Serve static uploaded videos and audio files
+app.use('/uploads', express.static(UPLOADS_DIR));
+
 // Load .env file if present
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
@@ -226,7 +229,9 @@ app.post('/api/process', async (req, res) => {
     return res.status(404).json({ error: 'Project directory not found' });
   }
 
-  const videoPath = path.join(projectDir, 'video.mp4');
+  const files = fs.readdirSync(projectDir);
+  const videoFileName = files.find(f => f.startsWith('video.')) || 'video.mp4';
+  const videoPath = path.join(projectDir, videoFileName);
   const audioPath = path.join(projectDir, 'audio.mp3');
 
   try {
@@ -250,7 +255,7 @@ app.post('/api/process', async (req, res) => {
       projectName: projectName || 'Untitled Subtie Project',
       projectType: projectType || 'Episode',
       mediaTitle: mediaTitle || 'Untitled Video',
-      videoUrl: `/uploads/${projectId}/video.mp4`,
+      videoUrl: `/uploads/${projectId}/${videoFileName}`,
       audioUrl: `/uploads/${projectId}/audio.mp3`,
       srtUrl: `/uploads/${projectId}/subtitle.srt`,
       subtitles: subtitles,
