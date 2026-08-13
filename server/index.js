@@ -165,9 +165,14 @@ Return ONLY valid JSON matching this exact structure:
 `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.5-flash',
     contents: [
-      fileState,
+      {
+        fileData: {
+          fileUri: fileState.uri,
+          mimeType: fileState.mimeType || 'audio/mp3'
+        }
+      },
       { text: prompt }
     ]
   });
