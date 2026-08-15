@@ -14,7 +14,7 @@ export default function Header({ onGoHome, onOpenProjects, lang = 'en', theme = 
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
             <Film className="w-5 h-5 text-white" />
           </div>
-          <span className="hidden sm:inline-block text-xs font-black uppercase tracking-wider text-purple-200 bg-purple-950/80 theme-light:bg-purple-700 theme-light:text-white px-3 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 shadow-sm">
+          <span className="hidden sm:inline-block text-xs font-black uppercase tracking-wider text-purple-200 bg-purple-950/80 theme-light:bg-purple-700 theme-light:text-white px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 shadow-sm">
             {isAr ? 'منصة ترجمة الأنمي' : 'Anime Fansub Hub'}
           </span>
         </div>
@@ -37,30 +37,36 @@ export default function Header({ onGoHome, onOpenProjects, lang = 'en', theme = 
           {/* Language Switcher Button (Vibrant & High-Contrast) */}
           <button
             onClick={onToggleLang}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-purple-700 to-indigo-700 text-white border-2 border-purple-500/30 theme-light:border-slate-900 shadow-md transition hover:scale-105"
+            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-2 rounded-xl text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-purple-200 theme-light:text-white border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
             title="Switch Language / تغيير اللغة"
           >
-            <Globe className="w-4 h-4 text-yellow-300" />
-            <span className="font-black text-xs text-white">{isAr ? 'EN' : 'عربي'}</span>
+            <Globe className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
+            <span className="font-black text-xs">{isAr ? 'EN' : 'عربي'}</span>
           </button>
 
-          {/* Theme Switcher (Bright Clear Sun/Moon Pill in Light Mode & Dark Mode) */}
+          {/* Theme Switcher (Sleek Matching Pill Button) */}
           <button
             onClick={onToggleTheme}
-            className={`p-2.5 rounded-xl text-xs font-black border-2 transition hover:scale-105 shadow-md flex items-center justify-center ${
-              isLight
-                ? 'bg-amber-300 border-slate-900 text-slate-950'
-                : 'bg-slate-900 border-purple-500/40 text-amber-400'
-            }`}
+            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-2 rounded-xl text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-amber-300 theme-light:text-yellow-300 border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
             title={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           >
-            {isLight ? <Moon className="w-4.5 h-4.5 text-slate-950 fill-slate-950" /> : <Sun className="w-4.5 h-4.5 text-amber-400" />}
+            {isLight ? (
+              <>
+                <Moon className="w-4 h-4 text-yellow-300 fill-yellow-300" />
+                <span className="hidden md:inline text-white font-extrabold">{isAr ? 'داكن' : 'Dark'}</span>
+              </>
+            ) : (
+              <>
+                <Sun className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span className="hidden md:inline text-purple-200 font-extrabold">{isAr ? 'مضيء' : 'Light'}</span>
+              </>
+            )}
           </button>
 
           {/* My Projects Button */}
           <button
             onClick={onOpenProjects}
-            className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-4 py-2.5 rounded-xl transition-all shadow-md shadow-purple-500/20 border-2 border-transparent theme-light:border-slate-900"
+            className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-4 py-2 rounded-xl transition-all shadow-md shadow-purple-500/20"
           >
             <FolderKanban className="w-4 h-4 text-pink-200" />
             <span>{isAr ? 'مشاريعي' : 'My Projects'}</span>
