@@ -4,28 +4,28 @@ export default function Footer({ onOpenAbout, onOpenContact, onOpenRules, lang =
   const isAr = lang === 'ar';
 
   return (
-    <footer className="w-full border-t border-slate-800/80 theme-light:border-slate-300 bg-slate-950/90 theme-light:bg-white/90 py-10 px-4 sm:px-6 lg:px-8 mt-auto">
+    <footer className="w-full border-t border-slate-800/80 theme-light:border-purple-300 bg-slate-950/95 theme-light:bg-white/95 py-10 px-4 sm:px-6 lg:px-8 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col items-center justify-center space-y-6">
         
         {/* Navigation Links */}
-        <nav className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 text-sm font-medium text-slate-400 theme-light:text-slate-600">
+        <nav className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 text-sm sm:text-base font-extrabold text-white theme-light:text-slate-950">
           <button
             onClick={onOpenAbout}
-            className="hover:text-purple-400 theme-light:hover:text-purple-700 transition-colors"
+            className="hover:text-purple-300 theme-light:hover:text-purple-700 transition-colors"
           >
             {isAr ? 'عن المنصة' : 'About'}
           </button>
-          <span className="text-slate-700 theme-light:text-slate-300">•</span>
+          <span className="text-pink-400 font-black">•</span>
           <button
             onClick={onOpenContact}
-            className="hover:text-pink-400 theme-light:hover:text-pink-700 transition-colors"
+            className="hover:text-pink-300 theme-light:hover:text-pink-700 transition-colors"
           >
             {isAr ? 'اتصل بنا' : 'Contact'}
           </button>
-          <span className="text-slate-700 theme-light:text-slate-300">•</span>
+          <span className="text-pink-400 font-black">•</span>
           <button
             onClick={onOpenRules}
-            className="hover:text-purple-400 theme-light:hover:text-purple-700 transition-colors"
+            className="hover:text-purple-300 theme-light:hover:text-purple-700 transition-colors"
           >
             {isAr ? 'القوانين والتعليمات' : 'Rules'}
           </button>
@@ -33,9 +33,9 @@ export default function Footer({ onOpenAbout, onOpenContact, onOpenRules, lang =
 
         {/* Required Bottom Branding Line */}
         <div className="text-center">
-          <p className="text-xs sm:text-sm font-medium text-slate-400/90 theme-light:text-slate-600 tracking-wide">
+          <p className="text-xs sm:text-sm font-extrabold text-white theme-light:text-slate-950 tracking-wide">
             {isAr ? 'مبادرة من فريق ' : 'an initiative from '}
-            <span className="text-purple-400 theme-light:text-purple-700 font-bold">msoms.ai</span>
+            <span className="text-purple-400 theme-light:text-purple-800 font-black">msoms.ai</span>
             {isAr ? ' - 2026' : ' team - 2026'}
           </p>
         </div>
