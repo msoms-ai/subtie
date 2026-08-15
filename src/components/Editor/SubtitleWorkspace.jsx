@@ -288,36 +288,38 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   <div className="space-y-2 text-xs">
                     
                     {/* Field 1: Japanese (Inline) */}
-                    <div className="flex items-center space-x-2">
-                      <span className="w-20 shrink-0 font-bold uppercase text-purple-400 text-[11px]">
-                        Japanese:
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                      <span className={`w-24 shrink-0 font-bold uppercase text-purple-400 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
+                        {isAr ? 'اليابانية:' : 'Japanese:'}
                       </span>
                       <input
                         type="text"
+                        dir={isAr ? 'rtl' : 'ltr'}
                         value={sub.japaneseText || ''}
                         onChange={(e) => handleJapaneseChange(sub.id, e.target.value)}
-                        className="flex-1 bg-slate-950 border border-purple-500/30 rounded-xl px-3 py-1.5 text-xs text-purple-200 font-semibold outline-none focus:border-purple-400 transition"
+                        className={`flex-1 bg-slate-950 border border-purple-500/30 rounded-xl px-3 py-1.5 text-xs text-purple-200 font-semibold outline-none focus:border-purple-400 transition ${isAr ? 'font-tahoma-arabic text-right' : 'text-left'}`}
                       />
                     </div>
 
                     {/* Field 2: English (Inline) */}
-                    <div className="flex items-center space-x-2">
-                      <span className="w-20 shrink-0 font-bold uppercase text-slate-400 text-[11px]">
-                        English:
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                      <span className={`w-24 shrink-0 font-bold uppercase text-slate-400 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
+                        {isAr ? 'الإنجليزية:' : 'English:'}
                       </span>
                       <input
                         type="text"
+                        dir={isAr ? 'rtl' : 'ltr'}
                         value={sub.englishText || ''}
                         onChange={(e) => handleEnglishChange(sub.id, e.target.value)}
-                        placeholder="Enter English translation..."
-                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-purple-500 transition"
+                        placeholder={isAr ? 'أدخل الترجمة الإنجليزية...' : 'Enter English translation...'}
+                        className={`flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-purple-500 transition ${isAr ? 'text-right' : 'text-left'}`}
                       />
                     </div>
 
                     {/* Field 3: Arabic (Inline RTL Tahoma) */}
-                    <div className="flex items-center space-x-2">
-                      <span className="w-20 shrink-0 font-bold uppercase text-pink-400 text-[11px]">
-                        Arabic:
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                      <span className={`w-24 shrink-0 font-bold uppercase text-pink-400 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
+                        {isAr ? 'العربية:' : 'Arabic:'}
                       </span>
                       <input
                         type="text"
@@ -325,7 +327,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                         value={sub.arabicText || ''}
                         onChange={(e) => handleArabicChange(sub.id, e.target.value)}
                         placeholder="أدخل الترجمة العربية..."
-                        className="flex-1 font-tahoma-arabic bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-pink-500 transition"
+                        className="flex-1 font-tahoma-arabic bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-pink-500 transition text-right"
                       />
                     </div>
 
