@@ -123,14 +123,14 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
                   <div className="absolute bottom-6 left-4 right-4 z-30 flex items-center justify-center text-center px-2 pointer-events-none">
                     {hoveredCloud ? (
                       <p
-                        className="text-base sm:text-lg font-black text-white font-tahoma-arabic leading-snug drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] stroke-black tracking-wide"
+                        className="text-base sm:text-lg font-black font-tahoma-arabic leading-snug anime-subtitle-overlay tracking-wide"
                         dir="rtl"
                       >
                         {currentSlide.arabicText}
                       </p>
                     ) : (
                       <p
-                        className="text-base sm:text-lg font-black text-white font-mono leading-snug drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] tracking-wider"
+                        className="text-base sm:text-lg font-black font-mono leading-snug anime-subtitle-overlay tracking-wider"
                       >
                         {currentSlide.japaneseText}
                       </p>

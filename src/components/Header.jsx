@@ -6,7 +6,7 @@ export default function Header({ onGoHome, onOpenProjects, lang = 'en', theme = 
   const isLight = theme === 'light';
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-purple-500/10 bg-slate-950/80 backdrop-blur-md theme-light:bg-white/95 theme-light:border-slate-300">
+    <header className="sticky top-0 z-40 w-full border-b border-purple-500/10 bg-slate-950/80 backdrop-blur-md theme-light:bg-white/95 theme-light:border-purple-600">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         
         {/* Left Branding */}
@@ -34,29 +34,29 @@ export default function Header({ onGoHome, onOpenProjects, lang = 'en', theme = 
         {/* Right Action Controls */}
         <div className="flex items-center space-x-2 sm:space-x-3 rtl:space-x-reverse">
           
-          {/* Language Switcher */}
+          {/* Language Switcher Button (Crystal Clear in Light & Dark Mode) */}
           <button
             onClick={onToggleLang}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-2 rounded-xl text-xs font-black bg-slate-900/80 theme-light:bg-white border border-slate-800 theme-light:border-slate-400 text-purple-300 theme-light:text-purple-900 hover:border-purple-500/40 shadow-sm transition"
+            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-2 rounded-xl text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-purple-200 theme-light:text-white border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
             title="Switch Language / تغيير اللغة"
           >
-            <Globe className="w-3.5 h-3.5 text-pink-400" />
-            <span>{isAr ? 'EN' : 'عربي'}</span>
+            <Globe className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
+            <span className="font-black text-xs">{isAr ? 'EN' : 'عربي'}</span>
           </button>
 
           {/* Theme Switcher (Light / Dark) */}
           <button
             onClick={onToggleTheme}
-            className="p-2 rounded-xl text-xs font-black bg-slate-900/80 theme-light:bg-white border border-slate-800 theme-light:border-slate-400 text-amber-400 theme-light:text-purple-900 hover:border-purple-500/40 shadow-sm transition"
+            className="p-2.5 rounded-xl text-xs font-black bg-slate-900 theme-light:bg-purple-100 border border-slate-700 theme-light:border-purple-400 text-amber-400 theme-light:text-purple-900 shadow-md transition hover:scale-105"
             title={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           >
-            {isLight ? <Moon className="w-4 h-4 text-purple-700" /> : <Sun className="w-4 h-4 text-amber-400" />}
+            {isLight ? <Moon className="w-4 h-4 text-purple-900" /> : <Sun className="w-4 h-4 text-amber-400" />}
           </button>
 
           {/* My Projects Button */}
           <button
             onClick={onOpenProjects}
-            className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 px-4 py-2 rounded-xl transition-all shadow-md shadow-purple-500/20"
+            className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 px-4 py-2.5 rounded-xl transition-all shadow-md shadow-purple-500/20"
           >
             <FolderKanban className="w-4 h-4 text-pink-200" />
             <span>{isAr ? 'مشاريعي' : 'My Projects'}</span>
