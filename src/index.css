@@ -37,16 +37,16 @@
 .theme-light .glitter-title {
   background: linear-gradient(
     135deg,
-    #581c87 0%,
+    #4c1d95 0%,
     #7e22ce 25%,
     #be185d 50%,
-    #4338ca 75%,
-    #581c87 100%
+    #3730a3 75%,
+    #4c1d95 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 10px rgba(126, 34, 206, 0.2));
+  filter: drop-shadow(0 2px 8px rgba(126, 34, 206, 0.25));
 }
 
 @keyframes shine {
@@ -55,13 +55,95 @@
   }
 }
 
+/* =========================================================
+   AUTHENTIC MANGA BOOK LIGHT THEME DESIGN SYSTEM
+   ========================================================= */
+
+/* 1. Manga Printed Paper Background + Halftone Dots Grid */
+.theme-light {
+  background-color: #fffdfa !important;
+  background-image: 
+    radial-gradient(rgba(147, 51, 234, 0.08) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(236, 72, 153, 0.05) 1.5px, transparent 1.5px) !important;
+  background-size: 24px 24px, 12px 12px !important;
+  background-position: 0 0, 12px 12px !important;
+  color: #0f172a !important;
+}
+
+/* 2. Manga Comic Panel Card Styling (Thick Ink Outlines & Offset Comic Shadows) */
+.theme-light .glass-panel,
+.theme-light .glass-panel-glow {
+  background: #ffffff !important;
+  border: 2.5px solid #0f172a !important;
+  border-radius: 1.5rem !important;
+  box-shadow: 6px 6px 0px #0f172a !important;
+  color: #0f172a !important;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.theme-light .glass-panel:hover,
+.theme-light .glass-panel-glow:hover {
+  box-shadow: 8px 8px 0px #8b5cf6 !important;
+}
+
+/* 3. Manga Header & Input Adjustments */
+.theme-light header {
+  background: rgba(255, 253, 250, 0.92) !important;
+  border-bottom: 2.5px solid #0f172a !important;
+}
+
+.theme-light h1,
+.theme-light h2,
+.theme-light h3,
+.theme-light h4,
+.theme-light h5,
+.theme-light h6 {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+.theme-light p,
+.theme-light label {
+  color: #1e293b !important;
+}
+
+.theme-light input,
+.theme-light select,
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 2px solid #0f172a !important;
+  box-shadow: 3px 3px 0px rgba(15, 23, 42, 0.15) !important;
+  font-weight: 600 !important;
+}
+
+.theme-light input:focus,
+.theme-light select:focus,
+.theme-light textarea:focus {
+  border-color: #8b5cf6 !important;
+  box-shadow: 4px 4px 0px #8b5cf6 !important;
+}
+
+.theme-light input::placeholder {
+  color: #64748b !important;
+}
+
+/* Manga Speed Line Background Effect */
+.manga-speed-lines {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(139, 92, 246, 0.04) 0deg 3deg,
+    transparent 3deg 15deg
+  );
+}
+
 /* Organic Cloud Frame Styling */
 .cloud-frame-shadow {
   filter: drop-shadow(0 15px 35px rgba(139, 92, 246, 0.25));
 }
 
 .theme-light .cloud-frame-shadow {
-  filter: drop-shadow(0 15px 35px rgba(168, 85, 247, 0.2));
+  filter: drop-shadow(6px 6px 0px #0f172a);
 }
 
 /* Floating Cloud Upload Motion */
@@ -85,7 +167,7 @@
   animation: uploadFileToCloud 2.2s ease-in-out infinite;
 }
 
-/* Glassmorphism Card Style - Dark & Light Mode */
+/* Dark Mode Glassmorphism Defaults */
 .glass-panel {
   background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(16px);
@@ -101,54 +183,7 @@
   box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
 }
 
-/* HIGH-CONTRAST JOYFUL LIGHT MANGA THEME OVERRIDES */
-.theme-light {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
-}
-
-.theme-light .glass-panel {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 10px 30px -5px rgba(148, 163, 184, 0.25) !important;
-  color: #0f172a !important;
-}
-
-.theme-light .glass-panel-glow {
-  background: #ffffff !important;
-  border-color: rgba(168, 85, 247, 0.4) !important;
-  box-shadow: 0 12px 35px rgba(147, 51, 234, 0.15) !important;
-  color: #0f172a !important;
-}
-
-.theme-light h1,
-.theme-light h2,
-.theme-light h3,
-.theme-light h4,
-.theme-light h5,
-.theme-light h6 {
-  color: #0f172a !important;
-}
-
-.theme-light p,
-.theme-light span:not(.glitter-title) {
-  color: #334155;
-}
-
-.theme-light input,
-.theme-light select,
-.theme-light textarea {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #cbd5e1 !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-}
-
-.theme-light input::placeholder {
-  color: #94a3b8 !important;
-}
-
-/* Custom Animated Progress Bar */
+/* Custom Progress Bar */
 @keyframes shimmerProgress {
   0% {
     background-position: -200% 0;

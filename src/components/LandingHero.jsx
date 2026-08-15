@@ -28,9 +28,9 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
           {/* Left Column: Clean Title & Action */}
           <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
             
-            <div className="inline-flex items-center space-x-2 bg-purple-950/60 theme-light:bg-purple-100 px-3.5 py-1.5 rounded-full border border-purple-500/30 text-purple-300 theme-light:text-purple-800 text-xs font-bold shadow-sm">
-              <Sparkles className="w-4 h-4 text-pink-400" />
-              <span>{isAr ? 'منصة الترجمة التشاركية للأنمي' : 'Collaborative Anime Fansub Hub'}</span>
+            <div className="inline-flex items-center space-x-2 bg-purple-950/60 theme-light:bg-purple-600 theme-light:text-white px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-slate-900 text-purple-300 text-xs font-extrabold shadow-sm">
+              <Sparkles className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
+              <span>{isAr ? '第1章 • منصة ترجمة الأنمي المانغا' : '第1章 • Anime Manga Fansub Hub'}</span>
             </div>
 
             {/* Clean Title */}
