@@ -31,13 +31,15 @@ export default function Footer({ onOpenAbout, onOpenContact, onOpenRules, lang =
           </button>
         </nav>
 
-        {/* Required Bottom Branding Line */}
+        {/* Required Bottom Branding Line in Solid Purple Pill (Always Pure Bold White Text) */}
         <div className="text-center">
-          <p className="text-xs sm:text-sm font-extrabold text-white theme-light:text-slate-950 tracking-wide">
-            {isAr ? 'مبادرة من فريق ' : 'an initiative from '}
-            <span className="text-purple-400 theme-light:text-purple-800 font-black">msoms.ai</span>
-            {isAr ? ' - 2026' : ' team - 2026'}
-          </p>
+          <div className="inline-block bg-purple-950 theme-light:bg-purple-700 px-5 py-2 rounded-full border border-purple-500/40 theme-light:border-purple-800 shadow-md">
+            <p className="text-xs sm:text-sm font-black text-white tracking-wide">
+              {isAr ? 'مبادرة من فريق ' : 'an initiative from '}
+              <span className="text-pink-300 theme-light:text-yellow-300 font-black">msoms.ai</span>
+              {isAr ? ' - 2026' : ' team - 2026'}
+            </p>
+          </div>
         </div>
 
       </div>
