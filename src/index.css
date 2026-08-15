@@ -17,17 +17,17 @@
   text-align: right;
 }
 
-/* Universal Subtitle Overlay Text Style (Forces 100% Crisp White + Strong Black Outline everywhere) */
-.anime-subtitle-overlay {
+/* Universal Subtitle Overlay Text Style (ALWAYS 100% Crisp Bold White on Artwork Images) */
+.anime-subtitle-overlay,
+.theme-light .anime-subtitle-overlay {
   color: #ffffff !important;
   font-weight: 900 !important;
   text-shadow: 
-    -2px -2px 0 #000,  
-     2px -2px 0 #000,
-    -2px  2px 0 #000,
-     2px  2px 0 #000,
+    -2px -2px 0 #000000,  
+     2px -2px 0 #000000,
+    -2px  2px 0 #000000,
+     2px  2px 0 #000000,
      0 4px 14px rgba(0, 0, 0, 0.95) !important;
-  -webkit-text-stroke: 1px #000000;
 }
 
 /* Glittering Title Effect */
@@ -115,7 +115,7 @@
   font-weight: 800 !important;
 }
 
-.theme-light p,
+.theme-light p:not(.anime-subtitle-overlay),
 .theme-light label {
   color: #1e293b !important;
 }
