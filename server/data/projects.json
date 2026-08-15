@@ -301,5 +301,128 @@
     ],
     "createdAt": "2026-08-15T19:24:49.356Z",
     "updatedAt": "2026-08-15T19:25:59.152Z"
+  },
+  "subtie_1786831805087_3t78d": {
+    "id": "subtie_1786831805087_3t78d",
+    "projectName": "أنيمي جديد",
+    "projectType": "Trailer",
+    "mediaTitle": "1111",
+    "videoUrl": "/uploads/subtie_1786831805087_3t78d/video.mp4",
+    "audioUrl": "/uploads/subtie_1786831805087_3t78d/audio.mp3",
+    "srtUrl": "/uploads/subtie_1786831805087_3t78d/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:00,100",
+        "endTime": "00:00:05,200",
+        "startSeconds": 0.1,
+        "endSeconds": 5.2,
+        "japaneseText": "ゴォォォリャァァァァ！イケメンお兄さんフィィィィッシュ！",
+        "englishText": "Take that! Handsome guy, fished!",
+        "arabicText": "خذ هذه! لقد اصطدت شاباً وسيماً!",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:07,200",
+        "endTime": "00:00:13,400",
+        "startSeconds": 7.2,
+        "endSeconds": 13.4,
+        "japaneseText": "けど、ちょっと困ったことにここ、異世界なんですよねえ。",
+        "englishText": "But the slightly troubling part is that this is another world.",
+        "arabicText": "ولكن المشكلة المحيرة هي أن هذا عالم آخر.",
+        "approved": true
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:14,100",
+        "endTime": "00:00:15,400",
+        "startSeconds": 14.1,
+        "endSeconds": 15.4,
+        "japaneseText": "食べますか？",
+        "englishText": "Would you like to eat?",
+        "arabicText": "هل تود تناول بعض الطعام؟",
+        "approved": true
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:16,600",
+        "endTime": "00:00:23,100",
+        "startSeconds": 16.6,
+        "endSeconds": 23.1,
+        "japaneseText": "ありがたく。俺はビル。エルラージの街で冒険者をしている。",
+        "englishText": "Gratefully. I'm Bill. I'm an adventurer in the town of Elrage.",
+        "arabicText": "بكل سرور. أنا بيل، أعمل كمغامر في مدينة إلريج.",
+        "approved": true
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:23,500",
+        "endTime": "00:00:26,200",
+        "startSeconds": 23.5,
+        "endSeconds": 26.2,
+        "japaneseText": "お前、料理が作れるのか？",
+        "englishText": "You can cook?",
+        "arabicText": "أيمكنك الطهي؟",
+        "approved": true
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:26,300",
+        "endTime": "00:00:28,400",
+        "startSeconds": 26.3,
+        "endSeconds": 28.4,
+        "japaneseText": "まあ、人並みですが。",
+        "englishText": "Well, just as well as anyone.",
+        "arabicText": "حسناً، كأي شخص عادي.",
+        "approved": true
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:28,400",
+        "endTime": "00:00:32,800",
+        "startSeconds": 28.4,
+        "endSeconds": 32.8,
+        "japaneseText": "さて、料理をするならいつまでも隠しちゃおけないか。",
+        "englishText": "Well, if I'm going to cook, I suppose I can't keep it hidden forever.",
+        "arabicText": "حسناً، بما أنني سأطهو، فلا يمكنني إبقاء الأمر سراً إلى الأبد.",
+        "approved": true
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:32,800",
+        "endTime": "00:00:37,700",
+        "startSeconds": 32.8,
+        "endSeconds": 37.7,
+        "japaneseText": "これが私のもう一つのスキル、モーターハウスのモーちゃんです！",
+        "englishText": "This is my other skill, Motorhome Mo-chan!",
+        "arabicText": "هذه هي مهارتي الأخرى، المنزل المتنقل مو-تشان!",
+        "approved": true
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:37,700",
+        "endTime": "00:00:43,400",
+        "startSeconds": 37.7,
+        "endSeconds": 43.4,
+        "japaneseText": "テレビアニメ「捨てられ聖女の異世界ごはん旅 隠れスキルでキャンピングカーを召喚しました」",
+        "englishText": "TV Anime: \"The Abandoned Saint's Wandering Food Journey in Another World: I Summoned a Camping Car with My Hidden Skill\"",
+        "arabicText": "الأنمي المتلفز: \"رحلة طعام القديسة المهجورة في العالم الآخر: لقد استدعيت عربة تخييم بمهارتي الخفية\"",
+        "approved": true
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:43,500",
+        "endTime": "00:00:48,000",
+        "startSeconds": 43.5,
+        "endSeconds": 48,
+        "japaneseText": "2026年7月放送開始！",
+        "englishText": "Broadcasting begins July 2026!",
+        "arabicText": "يبدأ البث في يوليو 2026!",
+        "approved": true
+      }
+    ],
+    "createdAt": "2026-08-15T22:10:28.888Z",
+    "updatedAt": "2026-08-15T22:12:41.346Z"
   }
 }
