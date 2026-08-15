@@ -37,16 +37,16 @@
 .theme-light .glitter-title {
   background: linear-gradient(
     135deg,
-    #6b21a8 0%,
-    #9333ea 25%,
-    #db2777 50%,
-    #4f46e5 75%,
-    #6b21a8 100%
+    #581c87 0%,
+    #7e22ce 25%,
+    #be185d 50%,
+    #4338ca 75%,
+    #581c87 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 12px rgba(147, 51, 234, 0.25));
+  filter: drop-shadow(0 2px 10px rgba(126, 34, 206, 0.2));
 }
 
 @keyframes shine {
@@ -55,29 +55,26 @@
   }
 }
 
-/* Cloud Shape Mask for Video Preview */
-.cloud-mask-container {
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 300'%3E%3Cpath d='M 120 220 C 60 220 20 180 20 130 C 20 85 55 50 100 50 C 120 25 155 10 195 10 C 250 10 295 40 315 85 C 335 75 360 70 385 70 C 440 70 480 110 480 165 C 480 215 440 250 385 250 L 120 250 Z' fill='%23000'/%3E%3C/svg%3E");
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 300'%3E%3Cpath d='M 120 220 C 60 220 20 180 20 130 C 20 85 55 50 100 50 C 120 25 155 10 195 10 C 250 10 295 40 315 85 C 335 75 360 70 385 70 C 440 70 480 110 480 165 C 480 215 440 250 385 250 L 120 250 Z' fill='%23000'/%3E%3C/svg%3E");
-  mask-size: contain;
-  -webkit-mask-size: contain;
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-position: center;
+/* Organic Cloud Frame Styling */
+.cloud-frame-shadow {
+  filter: drop-shadow(0 15px 35px rgba(139, 92, 246, 0.25));
+}
+
+.theme-light .cloud-frame-shadow {
+  filter: drop-shadow(0 15px 35px rgba(168, 85, 247, 0.2));
 }
 
 /* Floating Cloud Upload Motion */
 @keyframes floatCloudUp {
-  0% { transform: translateY(0px) scale(1); }
-  50% { transform: translateY(-14px) scale(1.04); }
-  100% { transform: translateY(0px) scale(1); }
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
 }
 
 @keyframes uploadFileToCloud {
-  0% { transform: translateY(40px) scale(0.6); opacity: 0; }
+  0% { transform: translateY(35px) scale(0.6); opacity: 0; }
   50% { opacity: 1; }
-  100% { transform: translateY(-40px) scale(1.1); opacity: 0; }
+  100% { transform: translateY(-35px) scale(1.1); opacity: 0; }
 }
 
 .animate-cloud-float {
@@ -97,13 +94,6 @@
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
-.theme-light .glass-panel {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border-color: rgba(203, 213, 225, 0.8) !important;
-  box-shadow: 0 10px 25px -5px rgba(148, 163, 184, 0.2) !important;
-  color: #0f172a !important;
-}
-
 .glass-panel-glow {
   background: rgba(23, 15, 38, 0.8);
   backdrop-filter: blur(20px);
@@ -111,17 +101,38 @@
   box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
 }
 
-.theme-light .glass-panel-glow {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(168, 85, 247, 0.4) !important;
-  box-shadow: 0 10px 30px rgba(147, 51, 234, 0.12) !important;
-  color: #0f172a !important;
-}
-
-/* Light Theme Global Text Adjustments */
+/* HIGH-CONTRAST JOYFUL LIGHT MANGA THEME OVERRIDES */
 .theme-light {
   background-color: #f8fafc !important;
   color: #0f172a !important;
+}
+
+.theme-light .glass-panel {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 10px 30px -5px rgba(148, 163, 184, 0.25) !important;
+  color: #0f172a !important;
+}
+
+.theme-light .glass-panel-glow {
+  background: #ffffff !important;
+  border-color: rgba(168, 85, 247, 0.4) !important;
+  box-shadow: 0 12px 35px rgba(147, 51, 234, 0.15) !important;
+  color: #0f172a !important;
+}
+
+.theme-light h1,
+.theme-light h2,
+.theme-light h3,
+.theme-light h4,
+.theme-light h5,
+.theme-light h6 {
+  color: #0f172a !important;
+}
+
+.theme-light p,
+.theme-light span:not(.glitter-title) {
+  color: #334155;
 }
 
 .theme-light input,
@@ -130,6 +141,11 @@
   background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.theme-light input::placeholder {
+  color: #94a3b8 !important;
 }
 
 /* Custom Animated Progress Bar */
