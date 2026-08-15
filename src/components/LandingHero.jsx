@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wand2, Sparkles, Film, ArrowRight, Languages, CheckCircle2, Cloud } from 'lucide-react';
+import { Wand2, Sparkles, ArrowRight, ArrowLeft, Languages, Cloud } from 'lucide-react';
 
 export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' }) {
   const [hoveredCloud, setHoveredCloud] = useState(false);
@@ -25,42 +25,46 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
         {/* HERO TOP: Clean Title & Redesigned Cloud Frame Video */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           
-          {/* Left Column: Clean Title & Action */}
-          <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
+          {/* Left / Right Column based on RTL: Clean Title & Action */}
+          <div className={`lg:col-span-6 space-y-6 text-center ${isAr ? 'lg:text-right' : 'lg:text-left'}`}>
             
-            <div className="inline-flex items-center space-x-2 bg-purple-950/60 theme-light:bg-purple-600 theme-light:text-white px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-slate-900 text-purple-300 text-xs font-extrabold shadow-sm">
+            <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950/80 theme-light:bg-purple-700 theme-light:text-white px-4 py-2 rounded-full border border-purple-500/40 theme-light:border-slate-900 text-purple-200 text-xs sm:text-sm font-extrabold shadow-md">
               <Sparkles className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
               <span>{isAr ? '第1章 • منصة ترجمة الأنمي المانغا' : '第1章 • Anime Manga Fansub Hub'}</span>
             </div>
 
             {/* Clean Title */}
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white theme-light:text-slate-900 leading-tight">
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white theme-light:text-slate-950 leading-tight">
               {isAr ? (
-                <>ترجمة الأنمي <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400">بذكاء وسرعة</span></>
+                <>ترجمة الأنمي <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-600">بذكاء وسرعة</span></>
               ) : (
-                <>Collaborative <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500">Anime Fansubbing</span></>
+                <>Collaborative <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-600">Anime Fansubbing</span></>
               )}
             </h1>
 
-            <p className="text-sm sm:text-base text-slate-300 theme-light:text-slate-600 max-w-xl mx-auto lg:mx-0 leading-relaxed font-normal">
+            <p className={`text-sm sm:text-base text-slate-300 theme-light:text-slate-800 max-w-xl mx-auto ${isAr ? 'lg:mr-0 lg:ml-auto text-right' : 'lg:ml-0 lg:mr-auto text-left'} leading-relaxed font-semibold`}>
               {isAr
                 ? 'استخرج ترجمات الأنمي اليابانية بدقة عالية، وقم بتحرير الترجمة الإنجليزية والعربية جنباً إلى جنب مع فريقك.'
                 : 'Extract precise Japanese ASR speech timestamps, edit English & Arabic translations side-by-side, and collaborate with your fansub team.'}
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
+            <div className={`flex flex-col sm:flex-row items-center justify-center ${isAr ? 'lg:justify-start' : 'lg:justify-start'} gap-4 pt-2`}>
               <button
                 onClick={onStartWizard}
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 transition-all text-white font-bold text-sm sm:text-base shadow-xl shadow-purple-500/25 flex items-center justify-center space-x-2 group"
+                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 transition-all text-white font-extrabold text-sm sm:text-base shadow-xl shadow-purple-500/25 flex items-center justify-center space-x-2 rtl:space-x-reverse group"
               >
                 <Wand2 className="w-5 h-5 text-pink-200" />
                 <span>{isAr ? 'ابدأ ترجمة الفيديو الآن' : 'Subtie Your Video Now'}</span>
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+                {isAr ? (
+                  <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition" />
+                ) : (
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+                )}
               </button>
             </div>
           </div>
 
-          {/* Right Column: Redesigned Organic Cloud Frame Video Player */}
+          {/* Right / Left Column: Organic Cloud Frame Video Player */}
           <div className="lg:col-span-6 flex justify-center">
             <div
               className="relative w-full max-w-md cursor-pointer group"
@@ -88,14 +92,14 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
                   />
 
                   {/* Interactive Floating Anime Subtitle Banner */}
-                  <div className="absolute bottom-4 left-4 right-4 z-30 p-3 rounded-2xl bg-slate-950/90 theme-light:bg-white/95 backdrop-blur-md border border-purple-500/40 shadow-2xl transition-all duration-300 transform group-hover:-translate-y-1">
+                  <div className="absolute bottom-4 left-4 right-4 z-30 p-3.5 rounded-2xl bg-slate-950/95 theme-light:bg-white/95 backdrop-blur-md border border-purple-500/40 shadow-2xl transition-all duration-300 transform group-hover:-translate-y-1">
                     
-                    <div className="flex items-center justify-between mb-1 text-[10px] font-bold uppercase tracking-wider">
-                      <span className="flex items-center space-x-1 text-purple-400 theme-light:text-purple-700">
-                        <Languages className="w-3.5 h-3.5 text-pink-400" />
+                    <div className="flex items-center justify-between mb-1.5 text-[11px] font-extrabold uppercase tracking-wider">
+                      <span className="flex items-center space-x-1.5 rtl:space-x-reverse text-purple-300 theme-light:text-purple-900 font-bold">
+                        <Languages className="w-4 h-4 text-pink-400" />
                         <span>{hoveredCloud ? (isAr ? '🇸🇦 الترجمة العربية' : '🇸🇦 Arabic Translation') : (isAr ? '🇯🇵 الصوت الياباني' : '🇯🇵 Original Japanese')}</span>
                       </span>
-                      <span className="text-pink-400 text-[9px] bg-pink-950/60 theme-light:bg-pink-100 theme-light:text-pink-700 px-2 py-0.5 rounded-full font-semibold">
+                      <span className="text-pink-300 theme-light:text-pink-900 text-[10px] bg-pink-950/80 theme-light:bg-pink-100 px-2.5 py-0.5 rounded-full font-black border border-pink-500/30">
                         {hoveredCloud ? (isAr ? 'مُترجم' : 'Translated') : (isAr ? 'مرر للترجمة' : 'Hover to Translate')}
                       </span>
                     </div>
@@ -103,11 +107,11 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
                     {/* Interactive Subtitle Line Transformation */}
                     <div className="min-h-[2.5rem] flex items-center justify-center text-center">
                       {hoveredCloud ? (
-                        <p className="text-xs font-bold text-emerald-400 theme-light:text-emerald-700 font-tahoma-arabic leading-normal animate-fade-in" dir="rtl">
+                        <p className="text-sm font-black text-emerald-300 theme-light:text-emerald-900 font-tahoma-arabic leading-normal animate-fade-in" dir="rtl">
                           «سأصبح الرجل الذي ينال لقب ملك القراصنة!»
                         </p>
                       ) : (
-                        <p className="text-xs font-bold text-purple-200 theme-light:text-purple-900 font-mono leading-normal animate-fade-in">
+                        <p className="text-sm font-black text-purple-200 theme-light:text-purple-950 font-mono leading-normal animate-fade-in">
                           海賊王に、俺はなる！
                         </p>
                       )}
@@ -124,18 +128,18 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
         </div>
 
         {/* KNOWLEDGE DASHBOARD STATS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-          <div className="glass-panel p-5 rounded-3xl border border-purple-500/20 text-center space-y-1">
-            <span className="text-xs text-purple-400 theme-light:text-purple-700 font-semibold">{isAr ? 'إجمالي المشاريع' : 'Total Fansub Projects'}</span>
-            <h4 className="text-3xl font-extrabold text-white theme-light:text-slate-900">{stats.totalProjects}</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-4">
+          <div className="glass-panel p-6 rounded-3xl border border-purple-500/20 text-center space-y-2">
+            <span className="text-sm font-extrabold text-purple-400 theme-light:text-purple-900">{isAr ? 'إجمالي المشاريع' : 'Total Fansub Projects'}</span>
+            <h4 className="text-4xl font-black text-white theme-light:text-slate-950">{stats.totalProjects}</h4>
           </div>
-          <div className="glass-panel p-5 rounded-3xl border border-purple-500/20 text-center space-y-1">
-            <span className="text-xs text-pink-400 theme-light:text-pink-700 font-semibold">{isAr ? 'أسطر الترجمة المستخرجة' : 'Extracted Subtitle Lines'}</span>
-            <h4 className="text-3xl font-extrabold text-white theme-light:text-slate-900">{stats.totalTranslatedLines}</h4>
+          <div className="glass-panel p-6 rounded-3xl border border-purple-500/20 text-center space-y-2">
+            <span className="text-sm font-extrabold text-pink-400 theme-light:text-pink-900">{isAr ? 'أسطر الترجمة المستخرجة' : 'Extracted Subtitle Lines'}</span>
+            <h4 className="text-4xl font-black text-white theme-light:text-slate-950">{stats.totalTranslatedLines}</h4>
           </div>
-          <div className="glass-panel p-5 rounded-3xl border border-purple-500/20 text-center space-y-1">
-            <span className="text-xs text-emerald-400 theme-light:text-emerald-700 font-semibold">{isAr ? 'الأسطر المعتمدة' : 'Approved Human Check Lines'}</span>
-            <h4 className="text-3xl font-extrabold text-emerald-400 theme-light:text-emerald-600">{stats.approvedLines}</h4>
+          <div className="glass-panel p-6 rounded-3xl border border-purple-500/20 text-center space-y-2">
+            <span className="text-sm font-extrabold text-emerald-400 theme-light:text-emerald-900">{isAr ? 'الأسطر المعتمدة' : 'Approved Human Check Lines'}</span>
+            <h4 className="text-4xl font-black text-emerald-400 theme-light:text-emerald-800">{stats.approvedLines}</h4>
           </div>
         </div>
 

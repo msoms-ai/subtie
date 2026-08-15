@@ -88,7 +88,7 @@
 
 /* 3. Manga Header & Input Adjustments */
 .theme-light header {
-  background: rgba(255, 253, 250, 0.92) !important;
+  background: rgba(255, 253, 250, 0.95) !important;
   border-bottom: 2.5px solid #0f172a !important;
 }
 
@@ -105,6 +105,27 @@
 .theme-light p,
 .theme-light label {
   color: #1e293b !important;
+}
+
+/* High Contrast Light Theme Color Overrides */
+.theme-light .text-purple-400,
+.theme-light .text-purple-300 {
+  color: #581c87 !important; /* Rich Dark Purple */
+}
+
+.theme-light .text-pink-400,
+.theme-light .text-pink-300 {
+  color: #9d174d !important; /* Rich Dark Pink */
+}
+
+.theme-light .text-emerald-400,
+.theme-light .text-emerald-300 {
+  color: #047857 !important; /* Rich Dark Emerald */
+}
+
+.theme-light .text-slate-300,
+.theme-light .text-slate-400 {
+  color: #1e293b !important; /* Deep Slate Ink */
 }
 
 .theme-light input,
