@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,15 +8,15 @@
   :root {
     --color-primary: #8b5cf6;
     --color-accent: #ec4899;
-    --font-arabic: 'Tahoma', 'Tajawal', sans-serif;
+    --font-arabic: 'Dubai', 'Cairo', 'Tajawal', -apple-system, sans-serif;
   }
 }
 
-/* Custom RTL Tahoma font class */
-.font-tahoma-arabic {
-  font-family: 'Tahoma', 'Tajawal', sans-serif;
-  direction: rtl;
-  text-align: right;
+/* Custom Arabic Font Family Class ("Dubai" Font Stack) */
+[dir="rtl"],
+.font-tahoma-arabic,
+.font-arabic {
+  font-family: 'Dubai', 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
 /* Universal Subtitle Overlay Text Style (ALWAYS 100% Crisp Bold White on Artwork Images) */

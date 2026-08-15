@@ -145,11 +145,11 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
             return (
               <div
                 key={p.id}
-                className="glass-panel p-6 rounded-3xl border border-slate-800 theme-light:border-purple-600 hover:border-purple-500/60 transition shadow-xl flex flex-col justify-between space-y-5 group"
+                className="glass-panel p-6 rounded-3xl border border-slate-800 theme-light:border-purple-600 hover:border-purple-500/60 transition shadow-xl flex flex-col justify-between space-y-5 text-center items-center group"
               >
-                <div>
+                <div className="w-full">
                   {/* Top Badge & Delete Icon */}
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-4 w-full">
                     <span className="text-[10px] font-black uppercase tracking-wider text-purple-200 theme-light:text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-800 shadow-sm">
                       {p.projectType || 'Episode'}
                     </span>
@@ -162,31 +162,33 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
                     </button>
                   </div>
 
-                  {/* Project Titles */}
-                  <h3 className="text-lg font-extrabold text-white theme-light:text-slate-950 group-hover:text-purple-400 theme-light:group-hover:text-purple-700 transition truncate">
-                    {p.projectName}
-                  </h3>
-                  <p className="text-xs text-slate-400 theme-light:text-slate-600 font-medium truncate mt-1">
-                    {p.mediaTitle}
-                  </p>
+                  {/* Project Titles (Centered) */}
+                  <div className="text-center my-3">
+                    <h3 className="text-xl font-black text-white theme-light:text-purple-950 group-hover:text-purple-400 theme-light:group-hover:text-purple-700 transition truncate">
+                      {p.projectName}
+                    </h3>
+                    <p className="text-xs text-slate-400 theme-light:text-purple-800 font-bold truncate mt-1">
+                      {p.mediaTitle}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Subtitle Stats */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/80 theme-light:border-purple-200 text-xs">
-                  <div className="bg-slate-900/80 theme-light:bg-purple-50 p-3 rounded-2xl border border-slate-800 theme-light:border-purple-200 shadow-sm">
-                    <span className="text-[10px] text-slate-400 theme-light:text-purple-900 font-extrabold block mb-0.5">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
-                    <span className="font-extrabold text-white theme-light:text-slate-950 text-sm">{lineCount} {isAr ? 'سطر' : 'lines'}</span>
+                {/* Subtitle Stats Boxes: Highly Readable & Centered */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/80 theme-light:border-purple-200 w-full">
+                  <div className="bg-purple-950/60 theme-light:bg-purple-100/90 p-3.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm flex flex-col items-center justify-center text-center">
+                    <span className="text-xs text-purple-300 theme-light:text-purple-950 font-bold block mb-1 text-center">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
+                    <span className="font-black text-white theme-light:text-purple-950 text-base text-center block">{lineCount} {isAr ? 'سطر' : 'lines'}</span>
                   </div>
-                  <div className="bg-slate-900/80 theme-light:bg-purple-50 p-3 rounded-2xl border border-slate-800 theme-light:border-purple-200 shadow-sm">
-                    <span className="text-[10px] text-slate-400 theme-light:text-purple-900 font-extrabold block mb-0.5">{isAr ? 'المعتمدة' : 'Approved'}</span>
-                    <span className="font-extrabold text-emerald-400 theme-light:text-emerald-700 text-sm">{approvedCount}/{lineCount}</span>
+                  <div className="bg-purple-950/60 theme-light:bg-purple-100/90 p-3.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm flex flex-col items-center justify-center text-center">
+                    <span className="text-xs text-purple-300 theme-light:text-purple-950 font-bold block mb-1 text-center">{isAr ? 'المعتمدة' : 'Approved'}</span>
+                    <span className="font-black text-emerald-400 theme-light:text-emerald-700 text-base text-center block">{approvedCount}/{lineCount}</span>
                   </div>
                 </div>
 
                 {/* Action Button: Vibrant Gradient Pill */}
                 <button
                   onClick={() => onEditProject(p)}
-                  className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-extrabold text-xs rounded-2xl transition shadow-md shadow-purple-500/20 flex items-center justify-center space-x-2 rtl:space-x-reverse"
+                  className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-black text-xs rounded-2xl transition shadow-md shadow-purple-500/20 flex items-center justify-center space-x-2 rtl:space-x-reverse"
                 >
                   <Edit3 className="w-4 h-4 text-pink-200" />
                   <span>{isAr ? 'فتح المحرر والترجمة' : 'Open Editor & Worktable'}</span>
