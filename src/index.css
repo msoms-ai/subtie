@@ -32,6 +32,21 @@
      0 4px 14px rgba(0, 0, 0, 0.95) !important;
 }
 
+/* Guaranteed 100% Crisp White & Bright Yellow Text for Footer Branding Pill */
+.footer-white-text,
+.footer-white-text p,
+.theme-light .footer-white-text,
+.theme-light .footer-white-text p {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+.footer-white-text span,
+.theme-light .footer-white-text span {
+  color: #fde047 !important; /* Bright Yellow */
+  font-weight: 900 !important;
+}
+
 /* Glittering Title Effect */
 .glitter-title {
   background: linear-gradient(
@@ -117,7 +132,7 @@
   font-weight: 800 !important;
 }
 
-.theme-light p:not(.anime-subtitle-overlay),
+.theme-light p:not(.anime-subtitle-overlay):not(.footer-white-text p),
 .theme-light label {
   color: #1e293b !important;
 }
