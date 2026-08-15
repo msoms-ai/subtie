@@ -247,5 +247,152 @@
     ],
     "createdAt": "2026-08-12T19:08:45.991Z",
     "updatedAt": "2026-08-12T19:08:45.991Z"
+  },
+  "subtie_1786821665538_2veno": {
+    "id": "subtie_1786821665538_2veno",
+    "projectName": "Trailer 1",
+    "projectType": "Trailer",
+    "mediaTitle": "Trailer 1",
+    "videoUrl": "/uploads/subtie_1786821665538_2veno/video.mp4",
+    "audioUrl": "/uploads/subtie_1786821665538_2veno/audio.mp3",
+    "srtUrl": "/uploads/subtie_1786821665538_2veno/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:07,500",
+        "endTime": "00:00:11,200",
+        "startSeconds": 7.5,
+        "endSeconds": 11.2,
+        "japaneseText": "涙で渡る血の大河",
+        "englishText": "Crossing a river of blood with tears,",
+        "arabicText": "نعبر نهرًا من الدماء بالدموع،",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:11,200",
+        "endTime": "00:00:18,500",
+        "startSeconds": 11.2,
+        "endSeconds": 18.5,
+        "japaneseText": "夢見て走る死の荒野",
+        "englishText": "Running through the wilderness of death with dreams in mind!",
+        "arabicText": "نركض عبر قفار الموت حالمين!",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-15T19:21:16.558Z",
+    "updatedAt": "2026-08-15T19:23:01.257Z"
+  },
+  "subtie_1786821873772_7diep": {
+    "id": "subtie_1786821873772_7diep",
+    "projectName": "2",
+    "projectType": "Trailer",
+    "mediaTitle": "2",
+    "videoUrl": "/uploads/subtie_1786821873772_7diep/video.mp4",
+    "audioUrl": "/uploads/subtie_1786821873772_7diep/audio.mp3",
+    "srtUrl": "/uploads/subtie_1786821873772_7diep/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:10,000",
+        "endTime": "00:00:12,500",
+        "startSeconds": 10,
+        "endSeconds": 12.5,
+        "japaneseText": "ガイコツ騎士様",
+        "englishText": "Skeleton Knight...",
+        "arabicText": "أيها الفارس الهيكل العظمي...",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:22,200",
+        "endTime": "00:00:24,000",
+        "startSeconds": 22.2,
+        "endSeconds": 24,
+        "japaneseText": "いざ、参る！",
+        "englishText": "Now, here I come!",
+        "arabicText": "والآن، ها أنا ذاهب!",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:26,200",
+        "endTime": "00:00:29,200",
+        "startSeconds": 26.2,
+        "endSeconds": 29.2,
+        "japaneseText": "悪を見過ごせぬあの男が",
+        "englishText": "That man who cannot stand idle in the face of evil...",
+        "arabicText": "ذلك الرجل الذي لا يمكنه التغاضي عن الشر...",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:33,000",
+        "endTime": "00:00:36,400",
+        "startSeconds": 33,
+        "endSeconds": 36.4,
+        "japaneseText": "この世界で涙する人のため",
+        "englishText": "For the sake of those who shed tears in this world...",
+        "arabicText": "من أجل أولئك الذين يذرفون الدموع في هذا العالم...",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:37,400",
+        "endTime": "00:00:40,500",
+        "startSeconds": 37.4,
+        "endSeconds": 40.5,
+        "japaneseText": "再び帰ってきた！",
+        "englishText": "Has returned once again!",
+        "arabicText": "قد عاد مجددًا!",
+        "approved": false
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:43,400",
+        "endTime": "00:00:45,900",
+        "startSeconds": 43.4,
+        "endSeconds": 45.9,
+        "japaneseText": "上級職、聖騎士！",
+        "englishText": "High Class: Paladin!",
+        "arabicText": "الفئة المتقدمة: الفارس المقدس!",
+        "approved": false
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:45,900",
+        "endTime": "00:00:48,900",
+        "startSeconds": 45.9,
+        "endSeconds": 48.9,
+        "japaneseText": "奥義スキル、ジャッジメント！",
+        "englishText": "Secret Skill: Judgment!",
+        "arabicText": "المهارة السرية: الحكم!",
+        "approved": false
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:49,300",
+        "endTime": "00:00:54,000",
+        "startSeconds": 49.3,
+        "endSeconds": 54,
+        "japaneseText": "ガイコツ騎士様、只今異世界へお出掛け中",
+        "englishText": "Skeleton Knight in Another World",
+        "arabicText": "الفارس الهيكل العظمي في رحلة إلى عالم آخر حاليًا",
+        "approved": false
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:54,000",
+        "endTime": "00:00:57,000",
+        "startSeconds": 54,
+        "endSeconds": 57,
+        "japaneseText": "7月より放送開始！",
+        "englishText": "Broadcasting begins this July!",
+        "arabicText": "يبدأ البث في شهر يوليو!",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-15T19:24:49.356Z",
+    "updatedAt": "2026-08-15T19:25:59.152Z"
   }
 }

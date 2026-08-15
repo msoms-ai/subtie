@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw } from 'lucide-react';
-import StickFigureFightAnimation from './StickFigureFightAnimation.jsx';
+import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -360,7 +360,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel }) {
             </p>
           </div>
 
-          <StickFigureFightAnimation />
+          <CloudUploadAnimation />
 
           <div className="max-w-md mx-auto space-y-3">
             <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">

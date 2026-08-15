@@ -144,8 +144,9 @@ You are an expert anime subtitle translator and ASR system.
 Listen carefully to the provided audio track.
 
 Tasks:
-1. Transcribe every spoken Japanese line/sentence accurately with exact start and end timestamps (formatted as HH:MM:SS,mmm and start/end seconds).
-2. For each spoken line, provide:
+1. Transcribe every spoken Japanese line/sentence accurately with HIGH-PRECISION EXACT start and end timestamps (formatted as HH:MM:SS,mmm and startSeconds / endSeconds) matching the exact voice activity in the audio track.
+2. Ensure there are no overlapping timestamps and each spoken phrase aligns precisely with speech onset and offset.
+3. For each spoken line, provide:
    - "japaneseText": Original spoken Japanese dialogue in kanji/kana.
    - "englishText": Accurate, natural English translation of the Japanese line.
    - "arabicText": High-quality natural Arabic translation (العربية) of the Japanese line.
@@ -400,6 +401,36 @@ app.get('/api/project/:id/export', (req, res) => {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(srt);
+});
+
+// 8. Delete Project & All Related Files (video, audio, srt)
+app.delete('/api/project/:id', (req, res) => {
+  const { id } = req.params;
+  const projects = readProjects();
+
+  if (!projects[id]) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  // Delete project files on disk recursively
+  const projectDir = path.join(UPLOADS_DIR, id);
+  if (fs.existsSync(projectDir)) {
+    try {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      console.log(`[Project Deletion] Deleted project directory: ${projectDir}`);
+    } catch (err) {
+      console.error(`[Project Deletion Error] Failed to delete ${projectDir}:`, err);
+    }
+  }
+
+  // Remove from JSON store
+  delete projects[id];
+  writeProjects(projects);
+
+  return res.json({
+    success: true,
+    message: 'Deletion completed successfully. All project files deleted.'
+  });
 });
 
 app.listen(PORT, () => {
