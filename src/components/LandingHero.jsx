@@ -1,9 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Wand2, Sparkles, ArrowRight, ArrowLeft, Languages, Cloud, Compass } from 'lucide-react';
+import { Wand2, Sparkles, ArrowRight, ArrowLeft, Cloud } from 'lucide-react';
+
+const MANGA_HERO_SLIDES = [
+  {
+    id: 'balloon-flight',
+    imageUrl: 'https://images2.alphacoders.com/114/thumb-1920-1141246.jpg',
+    japaneseText: '空を飛ぶ夢を、絶対に諦めない！',
+    arabicText: '«لا تستسلم أبدًا عن حلم التحليق في أفق السماء!»'
+  },
+  {
+    id: 'floating-island',
+    imageUrl: 'https://cdn.leonardo.ai/users/b9f7e234-4521-44ad-ab5f-b002a673e324/generations/1f17823f-0d9c-6c70-924a-95e12802bae6/lucid-origin_a_cinematic_photo_of_A_brave_adventurer_embarks_on_his_journey_into_the_unknown_-0.jpg',
+    japaneseText: 'この世界には、まだ見ぬ秘宝が眠っている。',
+    arabicText: '«في هذا العالم الشاسع، لا تزال هناك أسرار وأسطورة تنتظر من يكتشفها!»'
+  },
+  {
+    id: 'adventurer-view',
+    imageUrl: 'https://cdn.leonardo.ai/users/b9f7e234-4521-44ad-ab5f-b002a673e324/generations/1f17823f-0d9c-6c70-924a-95e12802bae6/lucid-origin_a_cinematic_photo_of_A_brave_adventurer_embarks_on_his_journey_into_the_unknown_-1.jpg',
+    japaneseText: '真実を確かめるために、俺たちは突き進む！',
+    arabicText: '«من أجل الوصول إلى الحقيقة، سنستمر في التقدم إلى الأمام دون تردد!»'
+  }
+];
 
 export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' }) {
   const [hoveredCloud, setHoveredCloud] = useState(false);
   const [stats, setStats] = useState({ totalProjects: 0, totalTranslatedLines: 0, approvedLines: 0 });
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  // Randomly select hero slide on mount or manual click
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * MANGA_HERO_SLIDES.length);
+    setCurrentSlideIndex(randomIndex);
+  }, []);
 
   useEffect(() => {
     fetch('/api/dashboard-stats')
@@ -12,6 +40,7 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
       .catch(err => console.error('Dashboard stats fetch failed:', err));
   }, []);
 
+  const currentSlide = MANGA_HERO_SLIDES[currentSlideIndex];
   const isAr = lang === 'ar';
 
   return (
@@ -83,40 +112,29 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
               <div className="relative p-3 rounded-[3.5rem] rounded-tr-[1.5rem] rounded-bl-[1.5rem] bg-gradient-to-tr from-sky-400 via-purple-500 to-pink-500 shadow-2xl cloud-frame-shadow transition-all duration-500 group-hover:rotate-1 group-hover:scale-[1.02]">
                 
                 <div className="relative rounded-[3rem] rounded-tr-[1rem] rounded-bl-[1rem] overflow-hidden bg-slate-950 border-2 border-slate-900 shadow-inner">
-                  {/* High Quality Anime Sky Image */}
+                  {/* High Quality Random Anime Image */}
                   <img
-                    src="https://images2.alphacoders.com/114/thumb-1920-1141246.jpg"
-                    alt="Anime Sky Balloon Flight"
+                    src={currentSlide.imageUrl}
+                    alt="Anime Fantasy Scene"
                     className="w-full aspect-[16/10] object-cover transition-transform duration-700 group-hover:scale-105"
                   />
 
-                  {/* FANCY INTERACTIVE SPEECH BUBBLE SUBTITLE BANNER */}
-                  <div className="absolute bottom-4 left-4 right-4 z-30 p-4 rounded-3xl bg-slate-950/95 theme-light:bg-white/95 backdrop-blur-md border-2 border-purple-500/40 theme-light:border-purple-800 shadow-2xl transition-all duration-300 transform group-hover:-translate-y-1">
-                    
-                    <div className="flex items-center justify-between mb-1.5 text-[11px] font-black uppercase tracking-wider">
-                      <span className="flex items-center space-x-1.5 rtl:space-x-reverse text-purple-300 theme-light:text-purple-900 font-extrabold">
-                        <Languages className="w-4 h-4 text-sky-400" />
-                        <span>{hoveredCloud ? (isAr ? '🇸🇦 الترجمة العربية' : '🇸🇦 Arabic Subtitle') : (isAr ? '🇯🇵 النص الياباني الأصلي' : '🇯🇵 Japanese ASR Speech')}</span>
-                      </span>
-                      
-                      <span className="text-pink-300 theme-light:text-pink-900 text-[10px] bg-pink-950/80 theme-light:bg-pink-100 px-3 py-0.5 rounded-full font-black border border-pink-500/30">
-                        {hoveredCloud ? (isAr ? 'مُترجم' : 'Translated') : (isAr ? 'مرر الماوس للترجمة' : 'Hover to Translate')}
-                      </span>
-                    </div>
-
-                    {/* Interactive Subtitle Line Transformation */}
-                    <div className="min-h-[2.5rem] flex items-center justify-center text-center">
-                      {hoveredCloud ? (
-                        <p className="text-sm font-black text-emerald-300 theme-light:text-emerald-900 font-tahoma-arabic leading-normal animate-fade-in" dir="rtl">
-                          «لا تستسلم أبدًا عن حلم التحليق في أفق السماء!»
-                        </p>
-                      ) : (
-                        <p className="text-sm font-black text-purple-200 theme-light:text-purple-950 font-mono leading-normal animate-fade-in">
-                          空を飛ぶ夢を、絶対に諦めない！
-                        </p>
-                      )}
-                    </div>
-
+                  {/* BOLD WHITE SUBTITLE OVERLAY DIRECTLY ON IMAGE WITHOUT BLACK BOX */}
+                  <div className="absolute bottom-6 left-4 right-4 z-30 flex items-center justify-center text-center px-2 pointer-events-none">
+                    {hoveredCloud ? (
+                      <p
+                        className="text-base sm:text-lg font-black text-white font-tahoma-arabic leading-snug drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] stroke-black tracking-wide"
+                        dir="rtl"
+                      >
+                        {currentSlide.arabicText}
+                      </p>
+                    ) : (
+                      <p
+                        className="text-base sm:text-lg font-black text-white font-mono leading-snug drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] tracking-wider"
+                      >
+                        {currentSlide.japaneseText}
+                      </p>
+                    )}
                   </div>
 
                 </div>
