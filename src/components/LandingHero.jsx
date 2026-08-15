@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wand2, Sparkles, ArrowRight, ArrowLeft, Languages, Cloud } from 'lucide-react';
+import { Wand2, Sparkles, ArrowRight, ArrowLeft, Languages, Cloud, Compass } from 'lucide-react';
 
 export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' }) {
   const [hoveredCloud, setHoveredCloud] = useState(false);
@@ -18,11 +18,11 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
     <div className="relative overflow-hidden py-8 sm:py-14">
       
       {/* Background Decorative Manga Accents */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-purple-500/10 via-pink-500/5 to-transparent pointer-events-none blur-3xl" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-sky-500/10 via-purple-500/10 to-transparent pointer-events-none blur-3xl" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
         
-        {/* HERO TOP: Clean Title & Redesigned Cloud Frame Video */}
+        {/* HERO TOP: Clean Title & Fancy Anime Sky Display */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           
           {/* Left / Right Column based on RTL: Clean Title & Action */}
@@ -36,9 +36,9 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
             {/* Clean Title */}
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white theme-light:text-slate-950 leading-tight">
               {isAr ? (
-                <>ترجمة الأنمي <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-600">بذكاء وسرعة</span></>
+                <>ترجمة الأنمي <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-purple-500 to-pink-500">بذكاء وسرعة</span></>
               ) : (
-                <>Collaborative <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-600">Anime Fansubbing</span></>
+                <>Collaborative <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 via-purple-500 to-pink-500">Anime Fansubbing</span></>
               )}
             </h1>
 
@@ -64,43 +64,43 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
             </div>
           </div>
 
-          {/* Right / Left Column: Organic Cloud Frame Video Player */}
+          {/* Right / Left Column: Fancy Non-Rectangular Anime Sky Frame */}
           <div className="lg:col-span-6 flex justify-center">
             <div
-              className="relative w-full max-w-md cursor-pointer group"
+              className="relative w-full max-w-lg cursor-pointer group"
               onMouseEnter={() => setHoveredCloud(true)}
               onMouseLeave={() => setHoveredCloud(false)}
             >
-              {/* Outer Cloud Decorative Floating Bubbles */}
-              <div className="absolute -top-6 -left-6 z-20 text-purple-400/80 animate-cloud-float pointer-events-none">
-                <Cloud className="w-16 h-16 fill-purple-500/20 stroke-purple-400/60" />
+              {/* Outer Decorative Floating Cloud Elements */}
+              <div className="absolute -top-7 -left-7 z-20 text-sky-400 animate-cloud-float pointer-events-none">
+                <Cloud className="w-20 h-20 fill-sky-400/20 stroke-sky-400/70" />
               </div>
-              <div className="absolute -bottom-6 -right-6 z-20 text-pink-400/80 animate-cloud-float pointer-events-none" style={{ animationDelay: '1.5s' }}>
-                <Cloud className="w-14 h-14 fill-pink-500/20 stroke-pink-400/60" />
+              <div className="absolute -bottom-6 -right-6 z-20 text-pink-400 animate-cloud-float pointer-events-none" style={{ animationDelay: '1.8s' }}>
+                <Cloud className="w-16 h-16 fill-pink-500/20 stroke-pink-400/70" />
               </div>
 
-              {/* Cloud Card Container */}
-              <div className="relative rounded-[2.5rem] bg-gradient-to-tr from-purple-600/30 via-pink-500/20 to-indigo-600/30 p-2 shadow-2xl cloud-frame-shadow border border-purple-500/30">
-                <div className="relative rounded-[2rem] overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                  <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
-                    className="w-full aspect-video object-cover transition-transform duration-700 group-hover:scale-105"
+              {/* FANCY ASYMMETRICAL CLOUD MANGA FRAME */}
+              <div className="relative p-3 rounded-[3.5rem] rounded-tr-[1.5rem] rounded-bl-[1.5rem] bg-gradient-to-tr from-sky-400 via-purple-500 to-pink-500 shadow-2xl cloud-frame-shadow transition-all duration-500 group-hover:rotate-1 group-hover:scale-[1.02]">
+                
+                <div className="relative rounded-[3rem] rounded-tr-[1rem] rounded-bl-[1rem] overflow-hidden bg-slate-950 border-2 border-slate-900 shadow-inner">
+                  {/* High Quality Anime Sky Image */}
+                  <img
+                    src="https://images2.alphacoders.com/114/thumb-1920-1141246.jpg"
+                    alt="Anime Sky Balloon Flight"
+                    className="w-full aspect-[16/10] object-cover transition-transform duration-700 group-hover:scale-105"
                   />
 
-                  {/* Interactive Floating Anime Subtitle Banner */}
-                  <div className="absolute bottom-4 left-4 right-4 z-30 p-3.5 rounded-2xl bg-slate-950/95 theme-light:bg-white/95 backdrop-blur-md border border-purple-500/40 shadow-2xl transition-all duration-300 transform group-hover:-translate-y-1">
+                  {/* FANCY INTERACTIVE SPEECH BUBBLE SUBTITLE BANNER */}
+                  <div className="absolute bottom-4 left-4 right-4 z-30 p-4 rounded-3xl bg-slate-950/95 theme-light:bg-white/95 backdrop-blur-md border-2 border-purple-500/40 theme-light:border-purple-800 shadow-2xl transition-all duration-300 transform group-hover:-translate-y-1">
                     
-                    <div className="flex items-center justify-between mb-1.5 text-[11px] font-extrabold uppercase tracking-wider">
-                      <span className="flex items-center space-x-1.5 rtl:space-x-reverse text-purple-300 theme-light:text-purple-900 font-bold">
-                        <Languages className="w-4 h-4 text-pink-400" />
-                        <span>{hoveredCloud ? (isAr ? '🇸🇦 الترجمة العربية' : '🇸🇦 Arabic Translation') : (isAr ? '🇯🇵 الصوت الياباني' : '🇯🇵 Original Japanese')}</span>
+                    <div className="flex items-center justify-between mb-1.5 text-[11px] font-black uppercase tracking-wider">
+                      <span className="flex items-center space-x-1.5 rtl:space-x-reverse text-purple-300 theme-light:text-purple-900 font-extrabold">
+                        <Languages className="w-4 h-4 text-sky-400" />
+                        <span>{hoveredCloud ? (isAr ? '🇸🇦 الترجمة العربية' : '🇸🇦 Arabic Subtitle') : (isAr ? '🇯🇵 النص الياباني الأصلي' : '🇯🇵 Japanese ASR Speech')}</span>
                       </span>
-                      <span className="text-pink-300 theme-light:text-pink-900 text-[10px] bg-pink-950/80 theme-light:bg-pink-100 px-2.5 py-0.5 rounded-full font-black border border-pink-500/30">
-                        {hoveredCloud ? (isAr ? 'مُترجم' : 'Translated') : (isAr ? 'مرر للترجمة' : 'Hover to Translate')}
+                      
+                      <span className="text-pink-300 theme-light:text-pink-900 text-[10px] bg-pink-950/80 theme-light:bg-pink-100 px-3 py-0.5 rounded-full font-black border border-pink-500/30">
+                        {hoveredCloud ? (isAr ? 'مُترجم' : 'Translated') : (isAr ? 'مرر الماوس للترجمة' : 'Hover to Translate')}
                       </span>
                     </div>
 
@@ -108,11 +108,11 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
                     <div className="min-h-[2.5rem] flex items-center justify-center text-center">
                       {hoveredCloud ? (
                         <p className="text-sm font-black text-emerald-300 theme-light:text-emerald-900 font-tahoma-arabic leading-normal animate-fade-in" dir="rtl">
-                          «سأصبح الرجل الذي ينال لقب ملك القراصنة!»
+                          «لا تستسلم أبدًا عن حلم التحليق في أفق السماء!»
                         </p>
                       ) : (
                         <p className="text-sm font-black text-purple-200 theme-light:text-purple-950 font-mono leading-normal animate-fade-in">
-                          海賊王に、俺はなる！
+                          空を飛ぶ夢を、絶対に諦めない！
                         </p>
                       )}
                     </div>
