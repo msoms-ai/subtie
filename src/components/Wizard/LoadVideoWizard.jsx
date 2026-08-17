@@ -158,12 +158,12 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={onCancel}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse text-xs font-black text-slate-300 theme-light:text-slate-900 bg-slate-900 theme-light:bg-white px-3.5 py-2 rounded-xl border border-slate-700 theme-light:border-purple-300 shadow-sm transition hover:scale-105"
+            className="flex items-center space-x-1.5 rtl:space-x-reverse text-xs font-black text-white bg-purple-950 theme-light:bg-purple-700 px-4 py-2 rounded-xl border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105 wizard-white-text"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 text-white" />
             <span>{isAr ? 'العودة للرئيسية' : 'Back to Home'}</span>
           </button>
-          <span className="text-xs font-black text-purple-300 theme-light:text-white uppercase tracking-widest bg-purple-950 theme-light:bg-purple-700 px-4 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 shadow-sm">
+          <span className="text-xs font-black text-white uppercase tracking-widest bg-purple-950 theme-light:bg-purple-700 px-4 py-1.5 rounded-full border border-purple-500/40 theme-light:border-purple-800 shadow-md wizard-white-text">
             {isAr ? `الخطوة ${currentStep} من 6` : `Step ${currentStep} of 6`}
           </span>
         </div>
@@ -181,7 +181,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                     isDone ? 'bg-gradient-to-r from-purple-600 to-pink-600' : isActive ? 'bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse' : 'bg-slate-800 theme-light:bg-slate-300'
                   }`}
                 />
-                <span className={`text-[10px] font-black mt-1.5 hidden sm:inline truncate max-w-full ${isActive ? 'text-purple-300 theme-light:text-purple-950' : 'text-slate-500 theme-light:text-slate-700'}`}>
+                <span className={`text-[10px] font-black mt-1.5 hidden sm:inline truncate max-w-full ${isActive ? 'text-purple-300 theme-light:text-purple-950 font-black' : 'text-slate-400 theme-light:text-purple-900 font-extrabold'}`}>
                   {label}
                 </span>
               </div>
@@ -197,7 +197,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
               {isAr ? 'الخطوة 1: إعداد المشروع' : 'Step 1: Project Setup'}
             </h3>
-            <p className="text-xs text-slate-400 theme-light:text-slate-700 font-semibold">
+            <p className="text-xs text-slate-300 theme-light:text-purple-950 font-bold">
               {isAr ? 'أدخل اسم مشروع الترجمة واختر نوع الوسائط.' : 'Enter your project name and select the type of media project you are creating.'}
             </p>
           </div>
@@ -212,7 +212,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
               placeholder={isAr ? 'مثال: مشروع ترجمة ون بيس - أرك وانو' : 'e.g. One Piece Wano Fansub Project'}
-              className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+              className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
             />
           </div>
 
@@ -220,22 +220,22 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-2">
               {isAr ? 'نوع المشروع' : 'Project Type'}
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {projectTypes.map(t => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setProjectType(t.id)}
-                  className={`p-4 rounded-2xl border text-left rtl:text-right transition flex items-start space-x-3 rtl:space-x-reverse ${
+                  className={`p-4.5 rounded-2xl transition flex items-start space-x-3 rtl:space-x-reverse text-left rtl:text-right ${
                     projectType === t.id
-                      ? 'bg-purple-950/80 theme-light:bg-purple-700 text-white border-2 border-purple-500 theme-light:border-purple-800 shadow-lg shadow-purple-500/20'
-                      : 'bg-slate-900/80 theme-light:bg-white text-slate-400 theme-light:text-slate-900 border border-slate-800 theme-light:border-purple-300 hover:border-purple-500 shadow-sm'
+                      ? 'wizard-selected-card shadow-lg'
+                      : 'wizard-unselected-card hover:scale-[1.01]'
                   }`}
                 >
-                  <Layers className={`w-5 h-5 shrink-0 mt-0.5 ${projectType === t.id ? 'text-pink-400 theme-light:text-yellow-300' : 'text-slate-500 theme-light:text-purple-700'}`} />
+                  <Layers className={`w-5 h-5 shrink-0 mt-0.5 ${projectType === t.id ? 'text-yellow-300' : 'text-purple-600'}`} />
                   <div>
-                    <h4 className={`text-sm font-black ${projectType === t.id ? 'text-white' : 'text-slate-200 theme-light:text-slate-950'}`}>{t.label}</h4>
-                    <p className={`text-xs mt-0.5 font-semibold ${projectType === t.id ? 'text-purple-200 theme-light:text-purple-100' : 'text-slate-400 theme-light:text-slate-600'}`}>{t.desc}</p>
+                    <h4 className="text-sm font-black mb-0.5">{t.label}</h4>
+                    <p className="text-xs font-bold leading-relaxed">{t.desc}</p>
                   </div>
                 </button>
               ))}
@@ -246,7 +246,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <button
               disabled={!projectName.trim()}
               onClick={() => setCurrentStep(2)}
-              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30"
+              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
             >
               <span>{isAr ? 'التالي: تفاصيل الفيديو' : 'Next: Media Details'}</span>
               <ArrowRight className="w-4 h-4 text-white" />
@@ -262,7 +262,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
               {isAr ? 'الخطوة 2: تفاصيل الفيديو' : 'Step 2: Video Details'}
             </h3>
-            <p className="text-xs text-slate-400 theme-light:text-slate-700 font-semibold">
+            <p className="text-xs text-slate-300 theme-light:text-purple-950 font-bold">
               {isAr ? `حدد عنوان مقطع الفيديو (${projectType}) لمشروع ${projectName}` : `Specify the title of the video (${projectType}) for ${projectName}.`}
             </p>
           </div>
@@ -290,21 +290,21 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               value={mediaTitle}
               onChange={(e) => setMediaTitle(e.target.value)}
               placeholder={isAr ? 'مثال: الحلقة 1071 - توقظ المحرك الخامس' : `e.g. Episode 1071: Gear 5 Awakens`}
-              className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+              className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
             />
           </div>
 
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-6 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-800 text-white font-black text-sm border border-slate-700 hover:bg-slate-700 transition shadow-md"
+              className="px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
             >
               {isAr ? 'السابق' : 'Back'}
             </button>
             <button
               disabled={!mediaTitle.trim()}
               onClick={() => setCurrentStep(3)}
-              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30"
+              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
             >
               <span>{isAr ? 'التالي: رفع الملف' : 'Next: Upload File'}</span>
               <ArrowRight className="w-4 h-4 text-white" />
@@ -320,18 +320,18 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
               {isAr ? 'الخطوة 3: اختيار ملف الفيديو' : 'Step 3: Select Video File'}
             </h3>
-            <p className="text-xs text-slate-400 theme-light:text-slate-700 font-semibold">
+            <p className="text-xs text-slate-300 theme-light:text-purple-950 font-bold">
               {isAr ? 'اختر ملف الفيديو بصيغة (.mp4) من جهازك ثم اضغط رفع.' : 'Select your video file from your local drive (.mp4 format) and click Upload.'}
             </p>
           </div>
 
-          <div className="border-2 border-dashed border-purple-500/40 theme-light:border-purple-600 hover:border-purple-400 bg-purple-950/20 theme-light:bg-purple-50 rounded-3xl p-8 flex flex-col items-center justify-center text-center transition">
+          <div className="border-3 border-dashed border-purple-500/50 theme-light:border-purple-600 hover:border-purple-400 bg-purple-950/20 theme-light:bg-purple-50 rounded-3xl p-8 flex flex-col items-center justify-center text-center transition">
             <div className="w-16 h-16 rounded-2xl bg-purple-600/20 theme-light:bg-purple-200 border border-purple-500/30 flex items-center justify-center text-purple-400 theme-light:text-purple-800 mb-4">
               <Upload className="w-8 h-8 animate-bounce" />
             </div>
             
             {videoFile ? (
-              <div className="flex items-center space-x-3 rtl:space-x-reverse bg-slate-900 theme-light:bg-white px-5 py-3.5 rounded-2xl border border-slate-700 theme-light:border-purple-400 shadow-md">
+              <div className="flex items-center space-x-3 rtl:space-x-reverse bg-slate-900 theme-light:bg-white px-5 py-3.5 rounded-2xl border-2 border-slate-700 theme-light:border-purple-400 shadow-md">
                 <FileVideo className="w-6 h-6 text-pink-400 theme-light:text-purple-700" />
                 <div className="text-left rtl:text-right">
                   <p className="text-sm font-black text-white theme-light:text-slate-950">{videoFile.name}</p>
@@ -341,14 +341,14 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               </div>
             ) : (
               <>
-                <p className="text-sm font-black text-slate-200 theme-light:text-slate-950">
+                <p className="text-sm font-black text-slate-200 theme-light:text-purple-950">
                   {isAr ? 'اختر ملف فيديو MP4 من الجهاز' : 'Select MP4 video from local drive'}
                 </p>
                 <input
                   type="file"
                   accept="video/mp4"
                   onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
-                  className="mt-4 cursor-pointer file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-purple-600 file:text-white hover:file:bg-purple-500 text-xs text-slate-400 theme-light:text-slate-700"
+                  className="mt-4 cursor-pointer file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-purple-600 file:text-white hover:file:bg-purple-500 text-xs text-slate-300 theme-light:text-slate-900 font-bold"
                 />
               </>
             )}
@@ -357,14 +357,14 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setCurrentStep(2)}
-              className="px-6 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-800 text-white font-black text-sm border border-slate-700 hover:bg-slate-700 transition shadow-md"
+              className="px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
             >
               {isAr ? 'السابق' : 'Back'}
             </button>
             <button
               disabled={!videoFile}
               onClick={handleUploadClick}
-              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30"
+              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
             >
               <Upload className="w-4 h-4 text-white" />
               <span>{isAr ? 'رفع الفيديو' : 'Upload Video'}</span>
@@ -380,7 +380,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
               {isAr ? 'جاري رفع الفيديو إلى السيرفر' : 'Uploading Video to Server'}
             </h3>
-            <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold">
+            <p className="text-xs text-purple-300 theme-light:text-purple-950 font-extrabold">
               {isAr ? 'يرجى الانتظار بينما يتم نقل الفيديو للسيرفر...' : 'Please wait while your video file is being uploaded...'}
             </p>
           </div>
@@ -395,9 +395,9 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs font-bold">
-              <span className="text-slate-400 theme-light:text-slate-800">{videoFile?.name}</span>
-              <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30">
+            <div className="flex items-center justify-between text-xs font-extrabold">
+              <span className="text-slate-300 theme-light:text-slate-950">{videoFile?.name}</span>
+              <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30 wizard-white-text">
                 {uploadProgress}%
               </span>
             </div>
@@ -416,10 +416,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl sm:text-3xl font-black text-white theme-light:text-slate-950 mb-2">
               {isAr ? 'تم رفع الفيديو بنجاح واكتمال!' : 'Upload Successful and Completed!'}
             </h3>
-            <p className="text-sm text-slate-300 theme-light:text-slate-800 max-w-md mx-auto font-semibold">
+            <p className="text-sm text-slate-300 theme-light:text-slate-800 max-w-md mx-auto font-bold">
               {isAr ? 'تم حفظ ملف الفيديو في مجلد المشروع الخاص بك على السيرفر:' : 'Your video file has been saved in a unique project directory on the server:'}
               <br />
-              <code className="text-xs text-purple-300 theme-light:text-purple-900 bg-slate-900 theme-light:bg-purple-100 px-3 py-1 rounded-xl border border-slate-800 theme-light:border-purple-300 mt-2 inline-block font-bold">
+              <code className="text-xs text-purple-300 theme-light:text-purple-950 bg-slate-900 theme-light:bg-purple-100 px-3 py-1 rounded-xl border border-slate-800 theme-light:border-purple-400 mt-2 inline-block font-black">
                 server/uploads/{projectId}/video.mp4
               </code>
             </p>
@@ -428,7 +428,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
           <div className="pt-4">
             <button
               onClick={startAIProcessing}
-              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all"
+              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white font-black text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all wizard-white-text border-2 border-purple-400"
             >
               <Cpu className="w-5 h-5 text-pink-200" />
               <span>{isAr ? 'استخراج الصوت ومعالجة الترجمة بـ Gemini AI' : 'Extract Audio & Process with Gemini AI'}</span>
@@ -448,12 +448,12 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                 <AlertCircle className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-black text-white theme-light:text-slate-950">{isAr ? 'خطأ في المعالجة' : 'Audio / AI Processing Error'}</h3>
-              <p className="text-sm text-rose-300 theme-light:text-rose-700 max-w-md mx-auto leading-relaxed font-semibold">{errorMessage}</p>
+              <p className="text-sm text-rose-300 theme-light:text-rose-700 max-w-md mx-auto leading-relaxed font-extrabold">{errorMessage}</p>
               
               <div className="pt-4 flex justify-center space-x-4">
                 <button
                   onClick={startAIProcessing}
-                  className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-sm transition shadow-lg shadow-purple-500/30"
+                  className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 to-pink-600 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
                 >
                   <RefreshCw className="w-4 h-4 text-white" />
                   <span>{isAr ? 'إعادة المحاولة' : 'Retry Audio Extraction & Gemini AI'}</span>
@@ -472,7 +472,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                 <h3 className="text-2xl sm:text-3xl font-black text-white theme-light:text-slate-950 mb-2">
                   {isAr ? 'جاري استخراج الصوت والمعالجة بالذكاء الاصطناعي' : 'Extracting Audio & Gemini AI Processing'}
                 </h3>
-                <p className="text-sm text-purple-300 theme-light:text-purple-900 font-bold max-w-md mx-auto">
+                <p className="text-sm text-purple-300 theme-light:text-purple-950 font-extrabold max-w-md mx-auto">
                   {isAr ? 'استخراج الملف الصوتي محلياً، رفعه للـ AI، تفريغ الصوت الياباني بدقة، وترجمته للإنجليزية والعربية.' : 'Extracting audio track locally, uploading MP3 to Gemini API, transcribing Japanese speech timestamps, and translating to English & Arabic.'}
                 </p>
               </div>
@@ -485,9 +485,9 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-purple-400 theme-light:text-purple-900">{processStatusMsg}</span>
-                  <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30">
+                <div className="flex items-center justify-between text-xs font-black">
+                  <span className="text-purple-400 theme-light:text-purple-950">{processStatusMsg}</span>
+                  <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30 wizard-white-text">
                     {processProgress}%
                   </span>
                 </div>

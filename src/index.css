@@ -47,6 +47,53 @@
   font-weight: 900 !important;
 }
 
+/* Universal Wizard White Text & High-Contrast Card Overrides */
+.wizard-white-text,
+.wizard-white-text h4,
+.wizard-white-text p,
+.wizard-white-text span,
+.theme-light .wizard-white-text,
+.theme-light .wizard-white-text h4,
+.theme-light .wizard-white-text p,
+.theme-light .wizard-white-text span {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+.wizard-unselected-card,
+.theme-light .wizard-unselected-card {
+  background-color: #ffffff !important;
+  border: 2.5px solid #a855f7 !important;
+  box-shadow: 4px 4px 0px rgba(168, 85, 247, 0.25) !important;
+}
+
+.wizard-unselected-card h4,
+.theme-light .wizard-unselected-card h4 {
+  color: #3b0764 !important; /* Deep Purple */
+  font-weight: 900 !important;
+}
+
+.wizard-unselected-card p,
+.theme-light .wizard-unselected-card p {
+  color: #6b21a8 !important; /* Vivid Purple Slate */
+  font-weight: 700 !important;
+}
+
+.wizard-selected-card,
+.theme-light .wizard-selected-card {
+  background-color: #6b21a8 !important; /* Solid Vibrant Royal Purple */
+  border: 3px solid #4c1d95 !important;
+  box-shadow: 6px 6px 0px #ec4899 !important;
+}
+
+.wizard-selected-card h4,
+.wizard-selected-card p,
+.theme-light .wizard-selected-card h4,
+.theme-light .wizard-selected-card p {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
 /* Glittering Title Effect */
 .glitter-title {
   background: linear-gradient(
@@ -132,7 +179,7 @@
   font-weight: 800 !important;
 }
 
-.theme-light p:not(.anime-subtitle-overlay):not(.footer-white-text p),
+.theme-light p:not(.anime-subtitle-overlay):not(.footer-white-text p):not(.wizard-white-text p):not(.wizard-white-text),
 .theme-light label {
   color: #1e293b !important;
 }
@@ -163,9 +210,9 @@
 .theme-light textarea {
   background-color: #ffffff !important;
   color: #0f172a !important;
-  border: 2px solid #6b21a8 !important;
+  border: 2.5px solid #6b21a8 !important;
   box-shadow: 3px 3px 0px rgba(168, 85, 247, 0.25) !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
 }
 
 .theme-light input:focus,
