@@ -299,8 +299,18 @@ app.get('/api/dashboard-stats', (req, res) => {
 
   let totalLines = 0;
   let approvedLines = 0;
+  let totalEpisodes = 0;
+  let totalMovies = 0;
+  let totalTrailers = 0;
+  let totalClips = 0;
 
   projectsList.forEach(proj => {
+    const pType = proj.projectType || 'Episode';
+    if (pType === 'Episode') totalEpisodes++;
+    else if (pType === 'Movie') totalMovies++;
+    else if (pType === 'Trailer') totalTrailers++;
+    else if (pType === 'Clip') totalClips++;
+
     if (proj.subtitles && Array.isArray(proj.subtitles)) {
       totalLines += proj.subtitles.length;
       approvedLines += proj.subtitles.filter(s => s.approved).length;
@@ -310,9 +320,14 @@ app.get('/api/dashboard-stats', (req, res) => {
   res.json({
     success: true,
     stats: {
+      totalEpisodes,
       totalProjects: projectsList.length,
+      totalMovies,
+      totalTrailers,
+      totalClips,
+      totalLines,
       totalTranslatedLines: totalLines,
-      approvedLines: approvedLines
+      approvedLines
     }
   });
 });
