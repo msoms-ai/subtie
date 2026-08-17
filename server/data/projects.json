@@ -613,5 +613,205 @@
     ],
     "createdAt": "2026-08-17T21:51:47.675Z",
     "updatedAt": "2026-08-17T21:51:47.675Z"
+  },
+  "subtie_1787004638701_s3s1c": {
+    "id": "subtie_1787004638701_s3s1c",
+    "projectName": "Trailer 2",
+    "projectType": "Trailer",
+    "mediaTitle": "2026",
+    "videoUrl": "/uploads/subtie_1787004638701_s3s1c/video.mp4",
+    "audioUrl": "/uploads/subtie_1787004638701_s3s1c/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787004638701_s3s1c/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:00,100",
+        "endTime": "00:00:02,000",
+        "startSeconds": 0.1,
+        "endSeconds": 2,
+        "japaneseText": "あんたは俺が斬る",
+        "englishText": "I will defeat you.",
+        "arabicText": "أنا من سيقضي عليك.",
+        "approved": true
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:02,000",
+        "endTime": "00:00:04,500",
+        "startSeconds": 2,
+        "endSeconds": 4.5,
+        "japaneseText": "黒崎くんの心は、きっと…",
+        "englishText": "Kurosaki-kun's heart, surely...",
+        "arabicText": "قلب كوروساكي-كون، بالتأكيد...",
+        "approved": true
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:04,500",
+        "endTime": "00:00:06,800",
+        "startSeconds": 4.5,
+        "endSeconds": 6.8,
+        "japaneseText": "不遜だな、一護。",
+        "englishText": "How arrogant, Ichigo.",
+        "arabicText": "ما أشد غطرستك، يا إيتشيغو.",
+        "approved": true
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:06,800",
+        "endTime": "00:00:10,200",
+        "startSeconds": 6.8,
+        "endSeconds": 10.2,
+        "japaneseText": "それは世界を斬ると同義だぞ。",
+        "englishText": "That is synonymous with cutting down the world itself.",
+        "arabicText": "هذا يرادف القضاء على العالم نفسه.",
+        "approved": true
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:10,200",
+        "endTime": "00:00:13,600",
+        "startSeconds": 10.2,
+        "endSeconds": 13.6,
+        "japaneseText": "力の全てを吐き出し尽くして死ね！",
+        "englishText": "Exhaust all your power and die!",
+        "arabicText": "استنفد كل قوتك ومت!",
+        "approved": true
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:13,600",
+        "endTime": "00:00:15,300",
+        "startSeconds": 13.6,
+        "endSeconds": 15.3,
+        "japaneseText": "一護！",
+        "englishText": "Ichigo!",
+        "arabicText": "إيتشيغو!",
+        "approved": true
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:20,000",
+        "endTime": "00:00:24,200",
+        "startSeconds": 20,
+        "endSeconds": 24.2,
+        "japaneseText": "光栄だけど買い被りっすよ、ねえ、夜一さん",
+        "englishText": "I'm honored, but you're overestimating me, right, Yoruichi-san?",
+        "arabicText": "هذا شرف لي، لكنك تبالغين في تقديري، أليس كذلك، يورويتشي-سان؟",
+        "approved": true
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:24,200",
+        "endTime": "00:00:26,000",
+        "startSeconds": 24.2,
+        "endSeconds": 26,
+        "japaneseText": "嘘だろ！？",
+        "englishText": "You've got to be kidding me!",
+        "arabicText": "أهذا مزاح؟!",
+        "approved": true
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:26,000",
+        "endTime": "00:00:30,200",
+        "startSeconds": 26,
+        "endSeconds": 30.2,
+        "japaneseText": "ゴチャゴチャうるせえな！一発で頭を割るって言ってんだろ！",
+        "englishText": "Shut the hell up! I said I'll split your head open in one blow!",
+        "arabicText": "اخرس فحسب! لقد قلت إنني سأشق رأسك بضربة واحدة!",
+        "approved": true
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:30,200",
+        "endTime": "00:00:32,500",
+        "startSeconds": 30.2,
+        "endSeconds": 32.5,
+        "japaneseText": "厄介なのが来たな",
+        "englishText": "Someone troublesome has arrived.",
+        "arabicText": "لقد وصل شخص مزعج.",
+        "approved": true
+      },
+      {
+        "id": 11,
+        "startTime": "00:00:32,500",
+        "endTime": "00:00:35,200",
+        "startSeconds": 32.5,
+        "endSeconds": 35.2,
+        "japaneseText": "我を出し抜けるなどと思うな！",
+        "englishText": "Don't think you can outsmart me!",
+        "arabicText": "لا تظن أنك قادر على خداعي!",
+        "approved": true
+      },
+      {
+        "id": 12,
+        "startTime": "00:00:35,200",
+        "endTime": "00:00:38,200",
+        "startSeconds": 35.2,
+        "endSeconds": 38.2,
+        "japaneseText": "裏切り者の処分も、私の役目だ",
+        "englishText": "Disposing of traitors is also my duty.",
+        "arabicText": "التخلص من الخونة هو من واجبي أيضًا.",
+        "approved": true
+      },
+      {
+        "id": 13,
+        "startTime": "00:00:38,200",
+        "endTime": "00:00:41,200",
+        "startSeconds": 38.2,
+        "endSeconds": 41.2,
+        "japaneseText": "やってみろ。お前の剣が届くなら。",
+        "englishText": "Give it a try. If your sword can reach me.",
+        "arabicText": "حاول إذًا. إن كان بإمكان سيفك أن يطالني.",
+        "approved": true
+      },
+      {
+        "id": 14,
+        "startTime": "00:00:41,200",
+        "endTime": "00:00:43,400",
+        "startSeconds": 41.2,
+        "endSeconds": 43.4,
+        "japaneseText": "絶望してくれるな一護。",
+        "englishText": "Do not despair, Ichigo.",
+        "arabicText": "لا تيأس يا إيتشيغو.",
+        "approved": true
+      },
+      {
+        "id": 15,
+        "startTime": "00:00:43,400",
+        "endTime": "00:00:47,000",
+        "startSeconds": 43.4,
+        "endSeconds": 47,
+        "japaneseText": "絶望がなんだって？よく知ってるぜ。",
+        "englishText": "What's despair? I know it all too well.",
+        "arabicText": "ما شأن اليأس؟ أعرفه جيدًا.",
+        "approved": true
+      },
+      {
+        "id": 16,
+        "startTime": "00:00:47,000",
+        "endTime": "00:00:51,200",
+        "startSeconds": 47,
+        "endSeconds": 51.2,
+        "japaneseText": "今まで何度も乗り越えてきたんだからな！",
+        "englishText": "Because I've overcome it time and time again!",
+        "arabicText": "لأنني تغلبت عليه مرارًا وتكرارًا حتى الآن!",
+        "approved": true
+      },
+      {
+        "id": 17,
+        "startTime": "00:00:51,200",
+        "endTime": "00:00:53,500",
+        "startSeconds": 51.2,
+        "endSeconds": 53.5,
+        "japaneseText": "卍解！",
+        "englishText": "Bankai!",
+        "arabicText": "بانكاي!",
+        "approved": true
+      }
+    ],
+    "createdAt": "2026-08-17T22:11:04.102Z",
+    "updatedAt": "2026-08-17T22:13:22.191Z"
   }
 }

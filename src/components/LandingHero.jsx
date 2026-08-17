@@ -25,11 +25,11 @@ const MANGA_HERO_SLIDES = [
 export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' }) {
   const [hoveredCloud, setHoveredCloud] = useState(false);
   const [stats, setStats] = useState({
-    totalEpisodes: 0,
     totalProjects: 0,
+    totalClips: 0,
+    totalEpisodes: 0,
     totalMovies: 0,
     totalTrailers: 0,
-    totalClips: 0,
     totalLines: 0
   });
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -40,8 +40,9 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
     setCurrentSlideIndex(randomIndex);
   }, []);
 
+  // Fetch fresh real-time dashboard statistics
   useEffect(() => {
-    fetch('/api/dashboard-stats')
+    fetch('/api/dashboard-stats', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => data.success && setStats(data.stats))
       .catch(err => console.error('Dashboard stats fetch failed:', err));
@@ -152,81 +153,81 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
 
         </div>
 
-        {/* KNOWLEDGE DASHBOARD STATS: 6 Tiles in One Line */}
+        {/* KNOWLEDGE DASHBOARD STATS: 6 Tiles in One Line in Exact Requested Order */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 pt-6 border-t border-purple-500/20">
           
-          {/* Tile 1: Total Episodes Translated */}
-          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-purple-500/50 hover:scale-105 shadow-md">
-            <div className="w-10 h-10 rounded-2xl bg-purple-600/20 theme-light:bg-purple-200 border border-purple-500/30 flex items-center justify-center text-purple-400 theme-light:text-purple-800">
-              <Tv className="w-5 h-5" />
-            </div>
-            <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 block truncate w-full">
-              {isAr ? 'الحلقات المترجمة' : 'Total Episodes'}
-            </span>
-            <h4 className="text-3xl font-black text-white theme-light:text-purple-950">
-              {stats.totalEpisodes || 0}
-            </h4>
-          </div>
-
-          {/* Tile 2: Total Projects */}
+          {/* Tile 1: Total Projects Created */}
           <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-sky-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-sky-500/50 hover:scale-105 shadow-md">
             <div className="w-10 h-10 rounded-2xl bg-sky-600/20 theme-light:bg-sky-200 border border-sky-500/30 flex items-center justify-center text-sky-400 theme-light:text-sky-800">
               <FolderKanban className="w-5 h-5" />
             </div>
             <span className="text-xs font-black text-sky-300 theme-light:text-sky-950 block truncate w-full">
-              {isAr ? 'إجمالي المشاريع' : 'Total Projects'}
+              {isAr ? 'إجمالي المشاريع المنشأة' : 'Total Projects Created'}
             </span>
             <h4 className="text-3xl font-black text-white theme-light:text-sky-950">
               {stats.totalProjects || 0}
             </h4>
           </div>
 
-          {/* Tile 3: Total Movies */}
-          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-pink-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-pink-500/50 hover:scale-105 shadow-md">
-            <div className="w-10 h-10 rounded-2xl bg-pink-600/20 theme-light:bg-pink-200 border border-pink-500/30 flex items-center justify-center text-pink-400 theme-light:text-pink-800">
-              <Video className="w-5 h-5" />
-            </div>
-            <span className="text-xs font-black text-pink-300 theme-light:text-pink-950 block truncate w-full">
-              {isAr ? 'إجمالي الأفلام' : 'Total Movies'}
-            </span>
-            <h4 className="text-3xl font-black text-white theme-light:text-pink-950">
-              {stats.totalMovies || 0}
-            </h4>
-          </div>
-
-          {/* Tile 4: Total Trailers */}
-          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-amber-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-amber-500/50 hover:scale-105 shadow-md">
-            <div className="w-10 h-10 rounded-2xl bg-amber-600/20 theme-light:bg-amber-200 border border-amber-500/30 flex items-center justify-center text-amber-400 theme-light:text-amber-800">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <span className="text-xs font-black text-amber-300 theme-light:text-amber-950 block truncate w-full">
-              {isAr ? 'العروض الترويجية' : 'Total Trailers'}
-            </span>
-            <h4 className="text-3xl font-black text-white theme-light:text-amber-950">
-              {stats.totalTrailers || 0}
-            </h4>
-          </div>
-
-          {/* Tile 5: Total Video Clips */}
+          {/* Tile 2: Total Translated Video Clips */}
           <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-indigo-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-indigo-500/50 hover:scale-105 shadow-md">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 theme-light:bg-indigo-200 border border-indigo-500/30 flex items-center justify-center text-indigo-400 theme-light:text-indigo-800">
               <Layers className="w-5 h-5" />
             </div>
             <span className="text-xs font-black text-indigo-300 theme-light:text-indigo-950 block truncate w-full">
-              {isAr ? 'مقاطع الفيديو' : 'Total Video Clips'}
+              {isAr ? 'مقاطع الفيديو المترجمة' : 'Total Video Clips'}
             </span>
             <h4 className="text-3xl font-black text-white theme-light:text-indigo-950">
               {stats.totalClips || 0}
             </h4>
           </div>
 
-          {/* Tile 6: Total Lines */}
+          {/* Tile 3: Total Translated Anime Episodes */}
+          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-purple-500/50 hover:scale-105 shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-purple-600/20 theme-light:bg-purple-200 border border-purple-500/30 flex items-center justify-center text-purple-400 theme-light:text-purple-800">
+              <Tv className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 block truncate w-full">
+              {isAr ? 'حلقات الأنمي المترجمة' : 'Total Anime Episodes'}
+            </span>
+            <h4 className="text-3xl font-black text-white theme-light:text-purple-950">
+              {stats.totalEpisodes || 0}
+            </h4>
+          </div>
+
+          {/* Tile 4: Total Translated Anime Movies */}
+          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-pink-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-pink-500/50 hover:scale-105 shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-pink-600/20 theme-light:bg-pink-200 border border-pink-500/30 flex items-center justify-center text-pink-400 theme-light:text-pink-800">
+              <Video className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-black text-pink-300 theme-light:text-pink-950 block truncate w-full">
+              {isAr ? 'أفلام الأنمي المترجمة' : 'Total Anime Movies'}
+            </span>
+            <h4 className="text-3xl font-black text-white theme-light:text-pink-950">
+              {stats.totalMovies || 0}
+            </h4>
+          </div>
+
+          {/* Tile 5: Total Translated Anime Trailers */}
+          <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-amber-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-amber-500/50 hover:scale-105 shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-amber-600/20 theme-light:bg-amber-200 border border-amber-500/30 flex items-center justify-center text-amber-400 theme-light:text-amber-800">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-black text-amber-300 theme-light:text-amber-950 block truncate w-full">
+              {isAr ? 'تريلرات الأنمي المترجمة' : 'Total Anime Trailers'}
+            </span>
+            <h4 className="text-3xl font-black text-white theme-light:text-amber-950">
+              {stats.totalTrailers || 0}
+            </h4>
+          </div>
+
+          {/* Tile 6: Total Translated Lines */}
           <div className="glass-panel p-4 sm:p-5 rounded-3xl border border-emerald-500/20 text-center space-y-2 flex flex-col items-center justify-center transition hover:border-emerald-500/50 hover:scale-105 shadow-md">
             <div className="w-10 h-10 rounded-2xl bg-emerald-600/20 theme-light:bg-emerald-200 border border-emerald-500/30 flex items-center justify-center text-emerald-400 theme-light:text-emerald-800">
               <FileText className="w-5 h-5" />
             </div>
             <span className="text-xs font-black text-emerald-300 theme-light:text-emerald-950 block truncate w-full">
-              {isAr ? 'إجمالي الأسطر' : 'Total Subtitle Lines'}
+              {isAr ? 'إجمالي الأسطر المترجمة' : 'Total Translated Lines'}
             </span>
             <h4 className="text-3xl font-black text-emerald-400 theme-light:text-emerald-800">
               {stats.totalLines ?? stats.totalTranslatedLines ?? 0}

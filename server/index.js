@@ -336,6 +336,8 @@ app.get('/api/projects', (req, res) => {
 
 // 4. Get Knowledge Dashboard Statistics
 app.get('/api/dashboard-stats', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
   const projectsMap = readProjects();
   const projectsList = Object.values(projectsMap);
 
@@ -347,11 +349,12 @@ app.get('/api/dashboard-stats', (req, res) => {
   let totalClips = 0;
 
   projectsList.forEach(proj => {
-    const pType = proj.projectType || 'Episode';
-    if (pType === 'Episode') totalEpisodes++;
-    else if (pType === 'Movie') totalMovies++;
-    else if (pType === 'Trailer') totalTrailers++;
-    else if (pType === 'Clip') totalClips++;
+    const pType = String(proj.projectType || 'Episode').toLowerCase();
+    if (pType.includes('episode')) totalEpisodes++;
+    else if (pType.includes('movie')) totalMovies++;
+    else if (pType.includes('trailer')) totalTrailers++;
+    else if (pType.includes('clip')) totalClips++;
+    else totalEpisodes++;
 
     if (proj.subtitles && Array.isArray(proj.subtitles)) {
       totalLines += proj.subtitles.length;
@@ -362,11 +365,11 @@ app.get('/api/dashboard-stats', (req, res) => {
   res.json({
     success: true,
     stats: {
-      totalEpisodes,
       totalProjects: projectsList.length,
+      totalClips,
+      totalEpisodes,
       totalMovies,
       totalTrailers,
-      totalClips,
       totalLines,
       totalTranslatedLines: totalLines,
       approvedLines
