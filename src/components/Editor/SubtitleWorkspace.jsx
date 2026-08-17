@@ -388,36 +388,36 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   {/* Compact 3 Fields with Same-Line Labels */}
                   <div className="space-y-2 text-xs">
                     
-                    {/* Field 1: Japanese (Inline) */}
+                    {/* Field 1: Japanese (Inline - ALWAYS LTR) */}
                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                       <span className={`w-24 shrink-0 font-black uppercase text-purple-400 theme-light:text-purple-950 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
                         {isAr ? 'اليابانية:' : 'Japanese:'}
                       </span>
                       <input
                         type="text"
-                        dir={isAr ? 'rtl' : 'ltr'}
+                        dir="ltr"
                         value={sub.japaneseText || ''}
                         onChange={(e) => handleJapaneseChange(sub.id, e.target.value)}
-                        className={`flex-1 bg-slate-950 theme-light:bg-white border border-purple-500/40 theme-light:border-purple-400 rounded-xl px-3 py-2 text-xs text-purple-200 theme-light:text-slate-950 font-bold outline-none focus:border-purple-500 transition shadow-sm ${isAr ? 'font-tahoma-arabic text-right' : 'text-left'}`}
+                        className="flex-1 bg-slate-950 theme-light:bg-white border border-purple-500/40 theme-light:border-purple-400 rounded-xl px-3 py-2 text-xs text-purple-200 theme-light:text-slate-950 font-bold outline-none focus:border-purple-500 transition shadow-sm text-left font-sans"
                       />
                     </div>
 
-                    {/* Field 2: English (Inline) */}
+                    {/* Field 2: English (Inline - ALWAYS LTR) */}
                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                       <span className={`w-24 shrink-0 font-black uppercase text-slate-300 theme-light:text-purple-950 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
                         {isAr ? 'الإنجليزية:' : 'English:'}
                       </span>
                       <input
                         type="text"
-                        dir={isAr ? 'rtl' : 'ltr'}
+                        dir="ltr"
                         value={sub.englishText || ''}
                         onChange={(e) => handleEnglishChange(sub.id, e.target.value)}
                         placeholder={isAr ? 'أدخل الترجمة الإنجليزية...' : 'Enter English translation...'}
-                        className={`flex-1 bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 rounded-xl px-3 py-2 text-xs text-white theme-light:text-slate-950 font-bold outline-none focus:border-purple-500 transition shadow-sm ${isAr ? 'text-right' : 'text-left'}`}
+                        className="flex-1 bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 rounded-xl px-3 py-2 text-xs text-white theme-light:text-slate-950 font-bold outline-none focus:border-purple-500 transition shadow-sm text-left font-sans"
                       />
                     </div>
 
-                    {/* Field 3: Arabic (Inline RTL Tahoma) */}
+                    {/* Field 3: Arabic (Inline - ALWAYS RTL) */}
                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                       <span className={`w-24 shrink-0 font-black uppercase text-pink-400 theme-light:text-purple-950 text-[11px] ${isAr ? 'text-right font-tahoma-arabic' : 'text-left'}`}>
                         {isAr ? 'العربية:' : 'Arabic:'}

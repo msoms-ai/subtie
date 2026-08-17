@@ -160,7 +160,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             onClick={onCancel}
             className="flex items-center space-x-1.5 rtl:space-x-reverse text-xs font-black text-white bg-purple-950 theme-light:bg-purple-700 px-4 py-2 rounded-xl border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105 wizard-white-text"
           >
-            <ArrowLeft className="w-4 h-4 text-white" />
+            {isAr ? <ArrowRight className="w-4 h-4 text-white" /> : <ArrowLeft className="w-4 h-4 text-white" />}
             <span>{isAr ? 'العودة للرئيسية' : 'Back to Home'}</span>
           </button>
           <span className="text-xs font-black text-white uppercase tracking-widest bg-purple-950 theme-light:bg-purple-700 px-4 py-1.5 rounded-full border border-purple-500/40 theme-light:border-purple-800 shadow-md wizard-white-text">
@@ -249,7 +249,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
             >
               <span>{isAr ? 'التالي: تفاصيل الفيديو' : 'Next: Media Details'}</span>
-              <ArrowRight className="w-4 h-4 text-white" />
+              {isAr ? <ArrowLeft className="w-4 h-4 text-white" /> : <ArrowRight className="w-4 h-4 text-white" />}
             </button>
           </div>
         </div>
@@ -297,9 +297,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
+              className="flex items-center space-x-1.5 rtl:space-x-reverse px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
             >
-              {isAr ? 'السابق' : 'Back'}
+              {isAr ? <ArrowRight className="w-4 h-4 text-white" /> : <ArrowLeft className="w-4 h-4 text-white" />}
+              <span>{isAr ? 'السابق' : 'Back'}</span>
             </button>
             <button
               disabled={!mediaTitle.trim()}
@@ -307,13 +308,13 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
             >
               <span>{isAr ? 'التالي: رفع الملف' : 'Next: Upload File'}</span>
-              <ArrowRight className="w-4 h-4 text-white" />
+              {isAr ? <ArrowLeft className="w-4 h-4 text-white" /> : <ArrowRight className="w-4 h-4 text-white" />}
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 3: Upload MP4 Video */}
+      {/* STEP 3: Upload MP4 Video Dropzone */}
       {currentStep === 3 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
@@ -325,31 +326,58 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             </p>
           </div>
 
-          <div className="border-3 border-dashed border-purple-500/50 theme-light:border-purple-600 hover:border-purple-400 bg-purple-950/20 theme-light:bg-purple-50 rounded-3xl p-8 flex flex-col items-center justify-center text-center transition">
-            <div className="w-16 h-16 rounded-2xl bg-purple-600/20 theme-light:bg-purple-200 border border-purple-500/30 flex items-center justify-center text-purple-400 theme-light:text-purple-800 mb-4">
-              <Upload className="w-8 h-8 animate-bounce" />
+          <div
+            onClick={() => document.getElementById('hidden-video-input')?.click()}
+            className="border-3 border-dashed border-purple-500/60 theme-light:border-purple-600 hover:border-pink-500 bg-purple-950/40 theme-light:bg-purple-100/90 rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center text-center transition cursor-pointer group shadow-inner"
+          >
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+              <div className="w-full h-full bg-slate-950 theme-light:bg-purple-900 rounded-[22px] flex items-center justify-center">
+                <Upload className="w-8 h-8 text-pink-300 animate-bounce" />
+              </div>
             </div>
-            
+
+            <input
+              id="hidden-video-input"
+              type="file"
+              accept="video/mp4"
+              onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
+              className="hidden"
+            />
+
             {videoFile ? (
-              <div className="flex items-center space-x-3 rtl:space-x-reverse bg-slate-900 theme-light:bg-white px-5 py-3.5 rounded-2xl border-2 border-slate-700 theme-light:border-purple-400 shadow-md">
-                <FileVideo className="w-6 h-6 text-pink-400 theme-light:text-purple-700" />
+              <div className="flex items-center space-x-4 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 px-6 py-4 rounded-2xl border-2 border-purple-500 theme-light:border-purple-800 shadow-xl wizard-white-text">
+                <FileVideo className="w-7 h-7 text-pink-300 shrink-0" />
                 <div className="text-left rtl:text-right">
-                  <p className="text-sm font-black text-white theme-light:text-slate-950">{videoFile.name}</p>
-                  <p className="text-xs text-slate-400 theme-light:text-slate-600 font-semibold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                  <p className="text-sm font-black text-white">{videoFile.name}</p>
+                  <p className="text-xs text-purple-200 font-bold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                 </div>
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 ml-2" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVideoFile(null);
+                  }}
+                  className="px-3 py-1 rounded-xl bg-purple-800 hover:bg-rose-600 text-white text-xs font-black transition ml-3"
+                >
+                  {isAr ? 'تغيير الملف' : 'Change'}
+                </button>
               </div>
             ) : (
               <>
-                <p className="text-sm font-black text-slate-200 theme-light:text-purple-950">
-                  {isAr ? 'اختر ملف فيديو MP4 من الجهاز' : 'Select MP4 video from local drive'}
+                <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
+                  {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
+                </h4>
+                <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
+                  {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
                 </p>
-                <input
-                  type="file"
-                  accept="video/mp4"
-                  onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
-                  className="mt-4 cursor-pointer file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-purple-600 file:text-white hover:file:bg-purple-500 text-xs text-slate-300 theme-light:text-slate-900 font-bold"
-                />
+
+                <button
+                  type="button"
+                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-purple-500/30 flex items-center space-x-2 rtl:space-x-reverse border border-purple-400/40 wizard-white-text hover:scale-105 transition"
+                >
+                  <Upload className="w-4 h-4 text-white" />
+                  <span>{isAr ? 'تصفح واختيار ملف من الجهاز' : 'Browse MP4 Video File'}</span>
+                </button>
               </>
             )}
           </div>
@@ -357,9 +385,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setCurrentStep(2)}
-              className="px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
+              className="flex items-center space-x-1.5 rtl:space-x-reverse px-7 py-3.5 rounded-2xl bg-slate-900 theme-light:bg-slate-900 text-white font-black text-sm border-2 border-slate-700 hover:bg-slate-800 transition shadow-md wizard-white-text"
             >
-              {isAr ? 'السابق' : 'Back'}
+              {isAr ? <ArrowRight className="w-4 h-4 text-white" /> : <ArrowLeft className="w-4 h-4 text-white" />}
+              <span>{isAr ? 'السابق' : 'Back'}</span>
             </button>
             <button
               disabled={!videoFile}
@@ -432,7 +461,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             >
               <Cpu className="w-5 h-5 text-pink-200" />
               <span>{isAr ? 'استخراج الصوت ومعالجة الترجمة بـ Gemini AI' : 'Extract Audio & Process with Gemini AI'}</span>
-              <ArrowRight className="w-5 h-5 text-white" />
+              {isAr ? <ArrowLeft className="w-5 h-5 text-white" /> : <ArrowRight className="w-5 h-5 text-white" />}
             </button>
           </div>
         </div>
