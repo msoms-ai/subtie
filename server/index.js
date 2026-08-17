@@ -217,6 +217,54 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   });
 });
 
+function formatSrtTimestamp(timeStr) {
+  if (!timeStr) return '00:00:00,000';
+  let clean = String(timeStr).trim().replace('.', ',');
+  if (/^\d{2}:\d{2}:\d{2},\d{3}$/.test(clean)) return clean;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(clean)) return `${clean},000`;
+  return clean;
+}
+
+function saveThreeSrtFiles(projectDir, subtitles) {
+  if (!subtitles || !Array.isArray(subtitles)) return;
+
+  // 1. Japanese SRT
+  let srtJa = '';
+  subtitles.forEach((sub, idx) => {
+    const start = formatSrtTimestamp(sub.startTime);
+    const end = formatSrtTimestamp(sub.endTime);
+    srtJa += `${idx + 1}\n${start} --> ${end}\n${sub.japaneseText || ''}\n\n`;
+  });
+  fs.writeFileSync(path.join(projectDir, 'subtitles_ja.srt'), srtJa, 'utf8');
+
+  // 2. English SRT
+  let srtEn = '';
+  subtitles.forEach((sub, idx) => {
+    const start = formatSrtTimestamp(sub.startTime);
+    const end = formatSrtTimestamp(sub.endTime);
+    srtEn += `${idx + 1}\n${start} --> ${end}\n${sub.englishText || ''}\n\n`;
+  });
+  fs.writeFileSync(path.join(projectDir, 'subtitles_en.srt'), srtEn, 'utf8');
+
+  // 3. Arabic SRT
+  let srtAr = '';
+  subtitles.forEach((sub, idx) => {
+    const start = formatSrtTimestamp(sub.startTime);
+    const end = formatSrtTimestamp(sub.endTime);
+    srtAr += `${idx + 1}\n${start} --> ${end}\n${sub.arabicText || ''}\n\n`;
+  });
+  fs.writeFileSync(path.join(projectDir, 'subtitles_ar.srt'), srtAr, 'utf8');
+
+  // Combined/Default subtitle.srt
+  let srtCombined = '';
+  subtitles.forEach((sub, idx) => {
+    const start = formatSrtTimestamp(sub.startTime);
+    const end = formatSrtTimestamp(sub.endTime);
+    srtCombined += `${idx + 1}\n${start} --> ${end}\n${sub.japaneseText || ''}\n${sub.englishText || ''}\n${sub.arabicText || ''}\n\n`;
+  });
+  fs.writeFileSync(path.join(projectDir, 'subtitle.srt'), srtCombined, 'utf8');
+}
+
 // 2. AI Audio Extraction & Gemini Processing Endpoint
 app.post('/api/process', async (req, res) => {
   const { projectId, projectName, projectType, mediaTitle, apiKey } = req.body;
@@ -242,14 +290,8 @@ app.post('/api/process', async (req, res) => {
     // Step B: Upload Extracted Audio to Gemini & Transcribe/Translate
     const subtitles = await processAudioWithGemini(audioPath, apiKey);
 
-    // Save SRT content to disk
-    let srtContent = '';
-    subtitles.forEach((sub, idx) => {
-      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.japaneseText}\n${sub.englishText}\n${sub.arabicText}\n\n`;
-    });
-
-    const srtPath = path.join(projectDir, 'subtitle.srt');
-    fs.writeFileSync(srtPath, srtContent, 'utf8');
+    // Save 3 SRT files (Japanese, English, Arabic) locally in project folder
+    saveThreeSrtFiles(projectDir, subtitles);
 
     const projectState = {
       id: projectId,
@@ -354,14 +396,10 @@ app.post('/api/project/:id/save', (req, res) => {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  // Update SRT file on disk
+  // Update 3 SRT files (Japanese, English, Arabic) on disk
   if (subtitles && Array.isArray(subtitles)) {
     const projectDir = path.join(UPLOADS_DIR, id);
-    let srtContent = '';
-    subtitles.forEach((sub, idx) => {
-      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.japaneseText}\n${sub.englishText}\n${sub.arabicText}\n\n`;
-    });
-    fs.writeFileSync(path.join(projectDir, 'subtitle.srt'), srtContent, 'utf8');
+    saveThreeSrtFiles(projectDir, subtitles);
   }
 
   projects[id] = {

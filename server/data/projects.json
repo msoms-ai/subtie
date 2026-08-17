@@ -424,5 +424,194 @@
     ],
     "createdAt": "2026-08-15T22:10:28.888Z",
     "updatedAt": "2026-08-15T22:12:41.346Z"
+  },
+  "subtie_1787003476026_5v0vq": {
+    "id": "subtie_1787003476026_5v0vq",
+    "projectName": "عرض يارا",
+    "projectType": "Trailer",
+    "mediaTitle": "تريلر ٢٠٢٦",
+    "videoUrl": "/uploads/subtie_1787003476026_5v0vq/video.mp4",
+    "audioUrl": "/uploads/subtie_1787003476026_5v0vq/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787003476026_5v0vq/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:00,000",
+        "endTime": "00:00:01,200",
+        "startSeconds": 0,
+        "endSeconds": 1.2,
+        "japaneseText": "マリって変ね",
+        "englishText": "Mari, you're strange, aren't you?",
+        "arabicText": "ماري، أنتِ غريبة الأطوار.",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:01,200",
+        "endTime": "00:00:03,200",
+        "startSeconds": 1.2,
+        "endSeconds": 3.2,
+        "japaneseText": "あんたも変な人形やろ",
+        "englishText": "You're a strange doll too, aren't you?",
+        "arabicText": "وأنتِ أيضاً دمية غريبة، أليس كذلك؟",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:03,200",
+        "endTime": "00:00:08,200",
+        "startSeconds": 3.2,
+        "endSeconds": 8.2,
+        "japaneseText": "わからないの、本当に、人間って醜い生き物なの？",
+        "englishText": "I don't know... Are humans really ugly creatures?",
+        "arabicText": "لا أدري... هل البشر حقاً مخلوقات قبيحة؟",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:11,500",
+        "endTime": "00:00:14,800",
+        "startSeconds": 11.5,
+        "endSeconds": 14.8,
+        "japaneseText": "この薬を飲めば、お前は人間になれる",
+        "englishText": "If you drink this medicine, you can become human.",
+        "arabicText": "إذا تجرعتِ هذا الدواء، ستصبحين بشرية.",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:14,800",
+        "endTime": "00:00:18,000",
+        "startSeconds": 14.8,
+        "endSeconds": 18,
+        "japaneseText": "私、死んだんじゃなかったっけ？",
+        "englishText": "Wait, didn't I die?",
+        "arabicText": "لحظة، ألم أكن قد متّ؟",
+        "approved": false
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:18,000",
+        "endTime": "00:00:20,000",
+        "startSeconds": 18,
+        "endSeconds": 20,
+        "japaneseText": "何がプリンセスや",
+        "englishText": "What do you mean, \"princess\"?",
+        "arabicText": "أي أميرة هذه؟",
+        "approved": false
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:20,000",
+        "endTime": "00:00:23,100",
+        "startSeconds": 20,
+        "endSeconds": 23.1,
+        "japaneseText": "とにかく私、本当の愛を見つけたいの",
+        "englishText": "Anyway, I want to find true love.",
+        "arabicText": "على أي حال، أريد أن أجد الحب الحقيقي.",
+        "approved": false
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:23,100",
+        "endTime": "00:00:24,900",
+        "startSeconds": 23.1,
+        "endSeconds": 24.9,
+        "japaneseText": "そんなもん探すな",
+        "englishText": "Don't look for such a thing.",
+        "arabicText": "لا تبحثي عن شيء كهذا.",
+        "approved": false
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:24,900",
+        "endTime": "00:00:25,900",
+        "startSeconds": 24.9,
+        "endSeconds": 25.9,
+        "japaneseText": "そんなもん？",
+        "englishText": "Such a thing?",
+        "arabicText": "شيء كهذا؟",
+        "approved": false
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:26,000",
+        "endTime": "00:00:27,500",
+        "startSeconds": 26,
+        "endSeconds": 27.5,
+        "japaneseText": "王子様って何？",
+        "englishText": "What is a prince?",
+        "arabicText": "ما هو الأمير؟",
+        "approved": false
+      },
+      {
+        "id": 11,
+        "startTime": "00:00:27,500",
+        "endTime": "00:00:30,000",
+        "startSeconds": 27.5,
+        "endSeconds": 30,
+        "japaneseText": "透き通るような目",
+        "englishText": "Clear, transparent eyes...",
+        "arabicText": "عينان صافيتان كالبلور...",
+        "approved": false
+      },
+      {
+        "id": 12,
+        "startTime": "00:00:30,000",
+        "endTime": "00:00:34,500",
+        "startSeconds": 30,
+        "endSeconds": 34.5,
+        "japaneseText": "はっ、王子様って言えば獣のような目やろ",
+        "englishText": "Hmph, speaking of a prince, wouldn't he have eyes like a beast?",
+        "arabicText": "تشه، إن تحدثنا عن الأمير، فستكون عيناه كعيني وحش.",
+        "approved": false
+      },
+      {
+        "id": 13,
+        "startTime": "00:00:36,500",
+        "endTime": "00:00:38,500",
+        "startSeconds": 36.5,
+        "endSeconds": 38.5,
+        "japaneseText": "見つかると思う？",
+        "englishText": "Do you think I can find it?",
+        "arabicText": "هل تعتقد أنني سأجده؟",
+        "approved": false
+      },
+      {
+        "id": 14,
+        "startTime": "00:00:38,500",
+        "endTime": "00:00:41,200",
+        "startSeconds": 38.5,
+        "endSeconds": 41.2,
+        "japaneseText": "この詩画でなら",
+        "englishText": "In this storybook world...",
+        "arabicText": "في هذا العالم المصور...",
+        "approved": false
+      },
+      {
+        "id": 15,
+        "startTime": "00:00:41,200",
+        "endTime": "00:00:44,500",
+        "startSeconds": 41.2,
+        "endSeconds": 44.5,
+        "japaneseText": "本当の愛が",
+        "englishText": "True love...",
+        "arabicText": "الحب الحقيقي...",
+        "approved": false
+      },
+      {
+        "id": 16,
+        "startTime": "00:00:46,500",
+        "endTime": "00:00:48,500",
+        "startSeconds": 46.5,
+        "endSeconds": 48.5,
+        "japaneseText": "俺、ルカ",
+        "englishText": "I'm Luca.",
+        "arabicText": "أنا لوكا.",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-17T21:51:47.675Z",
+    "updatedAt": "2026-08-17T21:51:47.675Z"
   }
 }
