@@ -114,67 +114,70 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   // Generate & Download Subtitle File (.srt or .ass) cleanly on client side
   const handleTriggerExport = (e) => {
     if (e) {
-      e.preventDefault();
-      e.stopPropagation();
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
     }
 
-    const BOM = '\uFEFF';
-    let content = BOM;
-
-    if (exportFormat === 'ass') {
-      content += `[Script Info]\nTitle: ${project.projectName || 'Subtie Fansub'}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
-      subtitles.forEach((sub) => {
-        const text = exportLang === 'en' ? (sub.englishText || '') : exportLang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
-        const rawStart = String(sub.startTime || '00:00:00,000').trim().replace('.', ',');
-        const rawEnd = String(sub.endTime || '00:00:05,000').trim().replace('.', ',');
-        const start = rawStart.replace(',', '.').substring(0, 10);
-        const end = rawEnd.replace(',', '.').substring(0, 10);
-        content += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
-      });
-    } else {
-      // Default: SRT format
-      subtitles.forEach((sub, idx) => {
-        const text = exportLang === 'en' ? (sub.englishText || '') : exportLang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
-        let start = String(sub.startTime || '00:00:00,000').trim().replace('.', ',');
-        let end = String(sub.endTime || '00:00:05,000').trim().replace('.', ',');
-        if (start.length === 8) start += ',000';
-        if (end.length === 8) end += ',000';
-        content += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
-      });
-    }
-
-    // Use application/octet-stream to force native browser file download (never opens inline in tab)
-    const blob = new Blob([content], { type: 'application/octet-stream;charset=utf-8' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const cleanName = String(project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
-    const fileName = `${cleanName}_${exportLang}.${exportFormat}`;
-
-    link.style.display = 'none';
-    link.href = url;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-
-    setTimeout(() => {
-      window.URL.revokeObjectURL(url);
-      if (document.body.contains(link)) {
-        document.body.removeChild(link);
-      }
-    }, 500);
-
-    // Save project state to server in background
     try {
-      fetch(`/api/project/${project.id}/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subtitles })
-      });
-    } catch (err) {
-      console.error('Background save failed:', err);
-    }
+      const BOM = '\uFEFF';
+      let content = BOM;
 
-    setShowExportModal(false);
+      const safeSubs = Array.isArray(subtitles) ? subtitles : [];
+
+      if (exportFormat === 'ass') {
+        content += `[Script Info]\nTitle: ${project?.projectName || 'Subtie Fansub'}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+        safeSubs.forEach((sub) => {
+          const text = exportLang === 'en' ? (sub?.englishText || '') : exportLang === 'ja' ? (sub?.japaneseText || '') : (sub?.arabicText || '');
+          const rawStart = String(sub?.startTime || '00:00:00,000').trim().replace('.', ',');
+          const rawEnd = String(sub?.endTime || '00:00:05,000').trim().replace('.', ',');
+          const start = rawStart.replace(',', '.').substring(0, 10);
+          const end = rawEnd.replace(',', '.').substring(0, 10);
+          content += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
+        });
+      } else {
+        // Default: SRT format
+        safeSubs.forEach((sub, idx) => {
+          const text = exportLang === 'en' ? (sub?.englishText || '') : exportLang === 'ja' ? (sub?.japaneseText || '') : (sub?.arabicText || '');
+          let start = String(sub?.startTime || '00:00:00,000').trim().replace('.', ',');
+          let end = String(sub?.endTime || '00:00:05,000').trim().replace('.', ',');
+          if (start.length === 8) start += ',000';
+          if (end.length === 8) end += ',000';
+          content += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
+        });
+      }
+
+      const cleanName = String(project?.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+      const fileName = `${cleanName}_${exportLang}.${exportFormat}`;
+
+      // 1. Data URI Download (100% synchronous & instant across all browsers)
+      const dataUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+      const link = document.createElement('a');
+      link.setAttribute('href', dataUri);
+      link.setAttribute('download', fileName);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+
+      setTimeout(() => {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
+      }, 300);
+
+      // Save project state to server in background
+      if (project?.id) {
+        fetch(`/api/project/${project.id}/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtitles: safeSubs })
+        }).catch(err => console.error('Background save failed:', err));
+      }
+
+      setShowExportModal(false);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert(isAr ? 'حدث خطأ أثناء إنشاء ملف الترجمة: ' + err.message : 'Error generating subtitle file: ' + err.message);
+    }
   };
 
   const totalLines = subtitles.length;
