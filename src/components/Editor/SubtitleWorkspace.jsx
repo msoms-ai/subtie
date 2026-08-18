@@ -556,27 +556,35 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
 
       {/* EXPORT MODAL */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-3xl border border-purple-500/30 space-y-6 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white theme-light:text-slate-950">
-                {isAr ? 'تصدير ملف الترجمة' : 'Export Subtitle File'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-3xl border border-purple-500/40 space-y-6 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="flex items-center justify-between border-b border-purple-500/20 pb-4">
+              <h3 className="text-xl font-black text-white theme-light:text-slate-950">
+                {isAr ? 'تصدير وتنزيل ملف الترجمة' : 'Export Subtitle File'}
               </h3>
-              <button onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-slate-300 hover:text-white bg-purple-950 theme-light:bg-purple-800 p-2 rounded-full border border-purple-500/40 transition shadow-md"
+              >
+                <X className="w-5 h-5 text-white" />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs font-semibold">
+            <div className="space-y-5 text-xs font-bold">
               <div>
-                <label className="block text-slate-300 theme-light:text-slate-900 mb-1.5">{isAr ? 'لغة الملف' : 'Subtitle Language'}</label>
-                <div className="grid grid-cols-3 gap-2">
+                <label className="block text-purple-200 theme-light:text-purple-950 font-black mb-2">
+                  {isAr ? '1. اختر لغة الملف' : '1. Select Subtitle Language'}
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
                   {['ar', 'en', 'ja'].map(l => (
                     <button
                       key={l}
+                      type="button"
                       onClick={() => setExportLang(l)}
-                      className={`py-2 rounded-xl border text-center transition ${
-                        exportLang === l ? 'bg-purple-600 text-white border-purple-500 font-bold wizard-white-text' : 'bg-slate-900 theme-light:bg-white text-slate-400 theme-light:text-slate-900 border-slate-800'
+                      className={`py-3 px-2 rounded-2xl border-2 text-center font-black text-xs transition shadow-md wizard-white-text ${
+                        exportLang === l
+                          ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white border-purple-300 scale-[1.03] shadow-purple-500/30'
+                          : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-400/80 hover:bg-purple-900'
                       }`}
                     >
                       {l === 'ar' ? (isAr ? 'العربية' : 'Arabic') : l === 'en' ? (isAr ? 'الإنجليزية' : 'English') : (isAr ? 'اليابانية' : 'Japanese')}
@@ -586,14 +594,19 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
               </div>
 
               <div>
-                <label className="block text-slate-300 theme-light:text-slate-900 mb-1.5">{isAr ? 'صيغة الملف' : 'Export Format'}</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-purple-200 theme-light:text-purple-950 font-black mb-2">
+                  {isAr ? '2. اختر صيغة الملف' : '2. Select Export Format'}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
                   {['srt', 'ass'].map(f => (
                     <button
                       key={f}
+                      type="button"
                       onClick={() => setExportFormat(f)}
-                      className={`py-2 rounded-xl border text-center font-bold uppercase transition ${
-                        exportFormat === f ? 'bg-purple-600 text-white border-purple-500 wizard-white-text' : 'bg-slate-900 theme-light:bg-white text-slate-400 theme-light:text-slate-900 border-slate-800'
+                      className={`py-3 rounded-2xl border-2 text-center font-black uppercase text-xs sm:text-sm transition shadow-md wizard-white-text ${
+                        exportFormat === f
+                          ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white border-purple-300 scale-[1.03] shadow-purple-500/30'
+                          : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-400/80 hover:bg-purple-900'
                       }`}
                     >
                       .{f}
@@ -603,11 +616,11 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 rtl:space-x-reverse pt-2">
+            <div className="flex items-center justify-end space-x-3 rtl:space-x-reverse pt-4 border-t border-purple-500/20">
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-slate-100 text-slate-300 theme-light:text-slate-800 border border-slate-700 text-xs font-semibold"
+                className="px-6 py-3 rounded-2xl bg-purple-950 theme-light:bg-purple-800 text-white font-black text-xs border-2 border-purple-400/80 hover:bg-purple-900 transition shadow-md wizard-white-text"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
@@ -618,7 +631,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   e.stopPropagation();
                   handleTriggerExport(e);
                 }}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs shadow-lg wizard-white-text"
+                className="px-7 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 border border-purple-400/40 transition wizard-white-text"
               >
                 {isAr ? 'تحميل الملف الآن' : 'Download File Now'}
               </button>
