@@ -112,9 +112,39 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   };
 
   // Export subtitle file as .srt or .ass in selected language
-  const handleTriggerExport = () => {
+  const handleTriggerExport = async () => {
+    // 1. Auto-save current in-memory subtitle edits to server first
+    try {
+      await fetch(`/api/project/${project.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtitles })
+      });
+    } catch (err) {
+      console.error('Pre-export save failed:', err);
+    }
+
+    // 2. Fetch export file blob & trigger browser file download
     const exportUrl = `/api/project/${project.id}/export?format=${exportFormat}&lang=${exportLang}`;
-    window.location.href = exportUrl;
+    try {
+      const res = await fetch(exportUrl);
+      if (!res.ok) throw new Error('Export server error');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      const cleanName = (project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+      a.download = `${cleanName}_${exportLang}.${exportFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Export download error, using direct navigation fallback:', err);
+      window.location.href = exportUrl;
+    }
+
     setShowExportModal(false);
   };
 

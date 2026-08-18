@@ -432,30 +432,39 @@ app.get('/api/project/:id/export', (req, res) => {
     return res.status(404).send('Project not found');
   }
 
-  const filename = `${project.projectName.replace(/[^a-z0-9]/gi, '_')}_${lang}.${format}`;
+  const cleanProjectName = (project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+  const filename = `${cleanProjectName}_${lang}.${format}`;
+  const encodedFilename = encodeURIComponent(filename);
+
+  // UTF-8 BOM prefix for Windows & media player compatibility
+  const BOM = '\uFEFF';
 
   if (format === 'ass') {
-    let ass = `[Script Info]\nTitle: ${project.projectName}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+    let ass = `${BOM}[Script Info]\nTitle: ${project.projectName}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
     project.subtitles.forEach((sub) => {
-      const text = lang === 'en' ? sub.englishText : lang === 'ja' ? sub.japaneseText : sub.arabicText;
-      const start = sub.startTime.replace(',', '.').substring(0, 10);
-      const end = sub.endTime.replace(',', '.').substring(0, 10);
+      const text = lang === 'en' ? (sub.englishText || '') : lang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
+      const rawStart = formatSrtTimestamp(sub.startTime || '00:00:00,000');
+      const rawEnd = formatSrtTimestamp(sub.endTime || '00:00:05,000');
+      const start = rawStart.replace(',', '.').substring(0, 10);
+      const end = rawEnd.replace(',', '.').substring(0, 10);
       ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
     });
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
     return res.send(ass);
   }
 
-  let srt = '';
+  let srt = `${BOM}`;
   project.subtitles.forEach((sub, idx) => {
-    const text = lang === 'en' ? sub.englishText : lang === 'ja' ? sub.japaneseText : sub.arabicText;
-    srt += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${text}\n\n`;
+    const text = lang === 'en' ? (sub.englishText || '') : lang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
+    const start = formatSrtTimestamp(sub.startTime || '00:00:00,000');
+    const end = formatSrtTimestamp(sub.endTime || '00:00:05,000');
+    srt += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
   });
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
   res.send(srt);
 });
 

@@ -969,5 +969,185 @@
     ],
     "createdAt": "2026-08-18T18:47:13.042Z",
     "updatedAt": "2026-08-18T18:47:13.043Z"
+  },
+  "subtie_1787088073791_jd3j2": {
+    "id": "subtie_1787088073791_jd3j2",
+    "projectName": "١١١",
+    "projectType": "Trailer",
+    "mediaTitle": "١١١١",
+    "videoUrl": "/uploads/subtie_1787088073791_jd3j2/video.mp4",
+    "audioUrl": "/uploads/subtie_1787088073791_jd3j2/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787088073791_jd3j2/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:06,800",
+        "endTime": "00:00:08,000",
+        "startSeconds": 6.8,
+        "endSeconds": 8,
+        "japaneseText": "ハイヤッ！",
+        "englishText": "Hyah!",
+        "arabicText": "هيا!",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:10,500",
+        "endTime": "00:00:13,000",
+        "startSeconds": 10.5,
+        "endSeconds": 13,
+        "japaneseText": "骸骨騎士様",
+        "englishText": "Skeleton Knight...",
+        "arabicText": "الفارس الهيكل العظمي...",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:21,800",
+        "endTime": "00:00:23,800",
+        "startSeconds": 21.8,
+        "endSeconds": 23.8,
+        "japaneseText": "いざ、参る！",
+        "englishText": "Here I come!",
+        "arabicText": "والآن، ها أنا قادم!",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:26,800",
+        "endTime": "00:00:30,200",
+        "startSeconds": 26.8,
+        "endSeconds": 30.2,
+        "japaneseText": "悪を見過ごせぬあの男が",
+        "englishText": "That man, who cannot overlook evil,",
+        "arabicText": "ذاك الرجل، الذي لا يمكنه التغاضي عن الشر،",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:33,000",
+        "endTime": "00:00:36,500",
+        "startSeconds": 33,
+        "endSeconds": 36.5,
+        "japaneseText": "この世界で涙する人のため",
+        "englishText": "for the sake of those who weep in this world,",
+        "arabicText": "من أجل أولئك الذين يذرفون الدموع في هذا العالم،",
+        "approved": false
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:38,000",
+        "endTime": "00:00:40,600",
+        "startSeconds": 38,
+        "endSeconds": 40.6,
+        "japaneseText": "再び帰ってきた！",
+        "englishText": "has returned once again!",
+        "arabicText": "قد عاد من جديد!",
+        "approved": false
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:42,800",
+        "endTime": "00:00:45,200",
+        "startSeconds": 42.8,
+        "endSeconds": 45.2,
+        "japaneseText": "上級職、聖騎士！",
+        "englishText": "Advanced Class: Paladin!",
+        "arabicText": "الفئة المتقدمة: الفارس المقدس!",
+        "approved": false
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:45,400",
+        "endTime": "00:00:49,000",
+        "startSeconds": 45.4,
+        "endSeconds": 49,
+        "japaneseText": "戦技スキル、ジャッジメント！",
+        "englishText": "Combat Skill: Judgement!",
+        "arabicText": "المهارة القتالية: الحُكم!",
+        "approved": false
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:49,800",
+        "endTime": "00:00:53,600",
+        "startSeconds": 49.8,
+        "endSeconds": 53.6,
+        "japaneseText": "骸骨騎士様、只今異世界へお出掛け中 II",
+        "englishText": "Skeleton Knight in Another World II",
+        "arabicText": "الفارس الهيكل العظمي في عالم آخر 2",
+        "approved": false
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:53,800",
+        "endTime": "00:00:56,500",
+        "startSeconds": 53.8,
+        "endSeconds": 56.5,
+        "japaneseText": "7月より放送開始！",
+        "englishText": "Broadcast begins in July!",
+        "arabicText": "يبدأ البث في شهر يوليو!",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-18T21:28:42.075Z",
+    "updatedAt": "2026-08-18T21:28:42.077Z"
+  },
+  "subtie_1787088843016_41jwy": {
+    "id": "subtie_1787088843016_41jwy",
+    "projectName": "天は赤い河のほとり」ティザ",
+    "projectType": "Trailer",
+    "mediaTitle": "Trailer 2026",
+    "videoUrl": "/uploads/subtie_1787088843016_41jwy/video.mp4",
+    "audioUrl": "/uploads/subtie_1787088843016_41jwy/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787088843016_41jwy/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:15,500",
+        "endTime": "00:00:21,700",
+        "startSeconds": 15.5,
+        "endSeconds": 21.7,
+        "japaneseText": "ここはハットゥシャ。紀元前14世紀、ヒッタイト帝国の首都である。",
+        "englishText": "This is Hattusa. The 14th century BC capital of the Hittite Empire.",
+        "arabicText": "هذه حاتوشا. عاصمة الإمبراطورية الحيثية في القرن الرابع عشر قبل الميلاد.",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:21,800",
+        "endTime": "00:00:25,500",
+        "startSeconds": 21.8,
+        "endSeconds": 25.5,
+        "japaneseText": "逃げちゃいけない。あたしには諦めるなんてできない！",
+        "englishText": "I must not run away. Giving up is not an option for me!",
+        "arabicText": "لا يجب أن أهرب. الاستسلام ليس خيارًا بالنسبة لي!",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:25,900",
+        "endTime": "00:00:29,600",
+        "startSeconds": 25.9,
+        "endSeconds": 29.6,
+        "japaneseText": "私を信じられるなら一緒に来い。ユーリ！",
+        "englishText": "If you can trust me, come with me, Yuri!",
+        "arabicText": "إن كنتِ تثقين بي، فتعالي معي يا يوري!",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:34,300",
+        "endTime": "00:00:44,500",
+        "startSeconds": 34.3,
+        "endSeconds": 44.5,
+        "japaneseText": "この物語は、アナトリアの大地を熱い風と共に駆け抜けた、一人の少女の物語。",
+        "englishText": "This is the story of a young girl who dashed through the land of Anatolia like a fiery wind.",
+        "arabicText": "هذه قصة فتاة عبرت أرض الأناضول كالرياح العاتية.",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-18T21:34:17.094Z",
+    "updatedAt": "2026-08-18T21:34:17.094Z"
   }
 }
