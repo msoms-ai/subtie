@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'en' }) {
@@ -25,10 +25,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
   const [errorMessage, setErrorMessage] = useState(null);
 
   const projectTypes = [
-    { id: 'Episode', label: isAr ? 'حلقة أنمي' : 'Anime Episode', desc: isAr ? 'حلقة كاملة من مسلسل أنمي' : 'Full anime series episode' },
-    { id: 'Movie', label: isAr ? 'فيلم سينمائي' : 'Feature Movie', desc: isAr ? 'فيلم أنمي طويل' : 'Full length animated movie' },
-    { id: 'Trailer', label: isAr ? 'عروض ترويجية (تريلر)' : 'Teaser / Trailer', desc: isAr ? 'فيديو ترويجي أو تشويقي' : 'Promotional trailer video' },
-    { id: 'Clip', label: isAr ? 'مقطع فيديو قصير' : 'Short Video Clip', desc: isAr ? 'مقطع قصير أو مشهد مميز' : 'Short scene or highlights clip' }
+    { id: 'Episode', label: isAr ? 'حلقة أنمي' : 'Anime Episode', desc: isAr ? 'حلقة كاملة من مسلسل أنمي متلفز' : 'Full anime series episode' },
+    { id: 'Movie', label: isAr ? 'فيلم سينمائي' : 'Feature Movie', desc: isAr ? 'فيلم أنمي سينمائي طويل' : 'Full length animated feature movie' },
+    { id: 'Trailer', label: isAr ? 'عروض ترويجية (تريلر)' : 'Teaser / Trailer', desc: isAr ? 'فيديو ترويجي أو إعلان تشويقي' : 'Promotional teaser or trailer video' },
+    { id: 'Clip', label: isAr ? 'مقطع فيديو قصير' : 'Short Video Clip', desc: isAr ? 'مقطع قصير أو مشهد حماسي مقتطع' : 'Short scene or highlight clip' }
   ];
 
   const stepLabels = isAr ? [
@@ -217,25 +217,26 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
           </div>
 
           <div>
-            <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-2">
-              {isAr ? 'نوع المشروع' : 'Project Type'}
+            <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-3">
+              {isAr ? 'نوع المشروع (اختر الفئة)' : 'Select Media Category'}
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* ENLARGED CATEGORY CARDS WITH HIGH CONTRAST SOLID PURPLE BACKGROUND & WHITE TEXT */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {projectTypes.map(t => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setProjectType(t.id)}
-                  className={`p-4.5 rounded-2xl transition flex items-start space-x-3 rtl:space-x-reverse text-left rtl:text-right ${
+                  className={`p-6 sm:p-7 rounded-3xl transition flex items-start space-x-4 rtl:space-x-reverse text-left rtl:text-right ${
                     projectType === t.id
-                      ? 'wizard-selected-card shadow-lg'
-                      : 'wizard-unselected-card hover:scale-[1.01]'
+                      ? 'wizard-selected-card shadow-xl scale-[1.02]'
+                      : 'wizard-unselected-card hover:scale-[1.02]'
                   }`}
                 >
-                  <Layers className={`w-5 h-5 shrink-0 mt-0.5 ${projectType === t.id ? 'text-yellow-300' : 'text-purple-600'}`} />
+                  <Layers className={`w-8 h-8 shrink-0 mt-1 ${projectType === t.id ? 'text-yellow-300' : 'text-purple-300'}`} />
                   <div>
-                    <h4 className="text-sm font-black mb-0.5">{t.label}</h4>
-                    <p className="text-xs font-bold leading-relaxed">{t.desc}</p>
+                    <h4 className="text-lg sm:text-xl font-black text-white mb-1.5">{t.label}</h4>
+                    <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">{t.desc}</p>
                   </div>
                 </button>
               ))}
@@ -344,11 +345,12 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               className="hidden"
             />
 
+            {/* SOLID PURPLE CARD WITH PURE WHITE BOLD TEXT FOR SELECTED FILE (LTR) */}
             {videoFile ? (
-              <div className="flex items-center space-x-4 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 px-6 py-4 rounded-2xl border-2 border-purple-500 theme-light:border-purple-800 shadow-xl wizard-white-text">
+              <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
                 <FileVideo className="w-7 h-7 text-pink-300 shrink-0" />
-                <div className="text-left rtl:text-right">
-                  <p className="text-sm font-black text-white">{videoFile.name}</p>
+                <div className="text-left">
+                  <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{videoFile.name}</p>
                   <p className="text-xs text-purple-200 font-bold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                 </div>
                 <button
@@ -357,7 +359,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                     e.stopPropagation();
                     setVideoFile(null);
                   }}
-                  className="px-3 py-1 rounded-xl bg-purple-800 hover:bg-rose-600 text-white text-xs font-black transition ml-3"
+                  className="px-3 py-1 rounded-xl bg-purple-900 hover:bg-rose-600 text-white text-xs font-black transition ml-auto"
                 >
                   {isAr ? 'تغيير الملف' : 'Change'}
                 </button>
@@ -402,7 +404,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
         </div>
       )}
 
-      {/* STEP 4: Uploading Progress with Cloud Motion */}
+      {/* STEP 4: Uploading Progress with Cloud Motion & LTR File Name */}
       {currentStep === 4 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-10 border border-purple-500/30 text-center space-y-6">
           <div>
@@ -424,9 +426,12 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs font-extrabold">
-              <span className="text-slate-300 theme-light:text-slate-950">{videoFile?.name}</span>
-              <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30 wizard-white-text">
+            {/* FILE NAME IN PURE BOLD WHITE TEXT (LTR) */}
+            <div className="flex items-center justify-between text-xs font-extrabold" dir="ltr">
+              <span className="text-white font-black bg-purple-950 theme-light:bg-purple-800 px-4 py-1 rounded-xl border border-purple-400 shadow-sm text-left truncate max-w-xs">
+                {videoFile?.name}
+              </span>
+              <span className="text-white bg-purple-950 theme-light:bg-purple-800 px-3 py-1 rounded-full border border-purple-400 wizard-white-text">
                 {uploadProgress}%
               </span>
             </div>
@@ -434,7 +439,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
         </div>
       )}
 
-      {/* STEP 5: Upload Successful Confirmation */}
+      {/* STEP 5: Upload Successful Confirmation with LTR White File Path */}
       {currentStep === 5 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-emerald-500/30 text-center space-y-6">
           <div className="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/20">
@@ -445,13 +450,15 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <h3 className="text-2xl sm:text-3xl font-black text-white theme-light:text-slate-950 mb-2">
               {isAr ? 'تم رفع الفيديو بنجاح واكتمال!' : 'Upload Successful and Completed!'}
             </h3>
-            <p className="text-sm text-slate-300 theme-light:text-slate-800 max-w-md mx-auto font-bold">
-              {isAr ? 'تم حفظ ملف الفيديو في مجلد المشروع الخاص بك على السيرفر:' : 'Your video file has been saved in a unique project directory on the server:'}
-              <br />
-              <code className="text-xs text-purple-300 theme-light:text-purple-950 bg-slate-900 theme-light:bg-purple-100 px-3 py-1 rounded-xl border border-slate-800 theme-light:border-purple-400 mt-2 inline-block font-black">
+            
+            {/* FILE NAME & PATH CONTAINER: SOLID PURPLE WITH BOLD WHITE TEXT (LTR) */}
+            <div className="bg-purple-950 theme-light:bg-purple-800 p-4.5 rounded-2xl border-2 border-purple-400 max-w-md mx-auto shadow-xl text-center space-y-1.5 wizard-white-text my-3" dir="ltr">
+              <span className="text-xs text-purple-200 font-bold block">{isAr ? 'مسار وتفاصيل الملف المرفوع:' : 'Uploaded File Directory:'}</span>
+              <p className="text-sm font-extrabold text-white text-left truncate">{videoFile?.name}</p>
+              <code className="text-xs font-mono font-black text-pink-300 text-left block">
                 server/uploads/{projectId}/video.mp4
               </code>
-            </p>
+            </div>
           </div>
 
           <div className="pt-4">
@@ -467,7 +474,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
         </div>
       )}
 
-      {/* STEP 6: Audio Extraction & Real Gemini AI Video Processing */}
+      {/* STEP 6: Audio Extraction & Dedicated Video Subbing AI Processing Animation */}
       {currentStep === 6 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-12 border border-purple-500/30 text-center space-y-8">
           
@@ -491,18 +498,28 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             </div>
           ) : (
             <>
-              <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center">
-                <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
-                  <Sparkles className="w-10 h-10 text-purple-400 animate-spin" />
+              {/* MEANINGFUL VIDEO SUBBING AI ANIMATION GRAPHIC */}
+              <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+                {/* Rotating Outer Subtitle Ring */}
+                <div className="absolute inset-0 rounded-full border-4 border-dashed border-purple-500/50 animate-spin" style={{ animationDuration: '8s' }} />
+                <div className="absolute inset-2 rounded-full border-2 border-pink-500/40 animate-ping" style={{ animationDuration: '3s' }} />
+                
+                {/* Center Video Subbing Core Badge */}
+                <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-700 via-pink-600 to-indigo-600 p-0.5 shadow-2xl shadow-purple-500/40 flex items-center justify-center relative z-10">
+                  <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center relative overflow-hidden">
+                    <Film className="w-8 h-8 text-pink-400 animate-pulse" />
+                    <Sparkles className="w-5 h-5 text-yellow-300 absolute top-1 right-1 animate-spin" />
+                    <MessageSquare className="w-4 h-4 text-sky-400 absolute bottom-1.5 left-1.5" />
+                  </div>
                 </div>
               </div>
 
               <div>
                 <h3 className="text-2xl sm:text-3xl font-black text-white theme-light:text-slate-950 mb-2">
-                  {isAr ? 'جاري استخراج الصوت والمعالجة بالذكاء الاصطناعي' : 'Extracting Audio & Gemini AI Processing'}
+                  {isAr ? 'معالجة وتفريغ ترجمة الفيديو بالذكاء الاصطناعي' : 'Extracting & AI Subtitling Video Track'}
                 </h3>
                 <p className="text-sm text-purple-300 theme-light:text-purple-950 font-extrabold max-w-md mx-auto">
-                  {isAr ? 'استخراج الملف الصوتي محلياً، رفعه للـ AI، تفريغ الصوت الياباني بدقة، وترجمته للإنجليزية والعربية.' : 'Extracting audio track locally, uploading MP3 to Gemini API, transcribing Japanese speech timestamps, and translating to English & Arabic.'}
+                  {isAr ? 'استخراج الملف الصوتي، تحليل التزامن، تفريغ الصوت الياباني بالملي ثانية، وتوليد الترجمة الإنجليزية والعربية.' : 'Extracting audio, analyzing timestamps with millisecond accuracy, transcribing Japanese speech, and building English & Arabic subtitle files.'}
                 </p>
               </div>
 

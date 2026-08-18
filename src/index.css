@@ -62,27 +62,23 @@
 
 .wizard-unselected-card,
 .theme-light .wizard-unselected-card {
-  background-color: #ffffff !important;
-  border: 2.5px solid #a855f7 !important;
-  box-shadow: 4px 4px 0px rgba(168, 85, 247, 0.25) !important;
+  background-color: #4c1d95 !important; /* Solid Deep Purple */
+  border: 3px solid #8b5cf6 !important;
+  box-shadow: 4px 4px 0px rgba(139, 92, 246, 0.4) !important;
 }
 
 .wizard-unselected-card h4,
-.theme-light .wizard-unselected-card h4 {
-  color: #3b0764 !important; /* Deep Purple */
-  font-weight: 900 !important;
-}
-
 .wizard-unselected-card p,
+.theme-light .wizard-unselected-card h4,
 .theme-light .wizard-unselected-card p {
-  color: #6b21a8 !important; /* Vivid Purple Slate */
-  font-weight: 700 !important;
+  color: #ffffff !important; /* Pure Bold White Text */
+  font-weight: 900 !important;
 }
 
 .wizard-selected-card,
 .theme-light .wizard-selected-card {
   background-color: #6b21a8 !important; /* Solid Vibrant Royal Purple */
-  border: 3px solid #4c1d95 !important;
+  border: 3.5px solid #ec4899 !important;
   box-shadow: 6px 6px 0px #ec4899 !important;
 }
 

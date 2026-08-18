@@ -252,10 +252,10 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2 rounded-xl border cursor-pointer transition ${
+              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2.5 rounded-xl border-2 cursor-pointer transition ${
                 activeSrtLang === 'ja'
-                  ? 'bg-purple-900 theme-light:bg-purple-700 text-white border-purple-500 font-black shadow-sm wizard-white-text'
-                  : 'bg-slate-900 theme-light:bg-white text-slate-400 theme-light:text-purple-900 border-slate-800 theme-light:border-purple-300 font-bold'
+                  ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 font-black shadow-md wizard-white-text'
+                  : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 font-black wizard-white-text hover:bg-purple-800'
               }`}>
                 <input
                   type="radio"
@@ -265,13 +265,13 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   onChange={() => setActiveSrtLang('ja')}
                   className="accent-pink-500 cursor-pointer hidden"
                 />
-                <span className="text-xs">{isAr ? 'اليابانية' : 'Japanese'}</span>
+                <span className="text-xs text-white font-black">{isAr ? 'اليابانية' : 'Japanese'}</span>
               </label>
 
-              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2 rounded-xl border cursor-pointer transition ${
+              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2.5 rounded-xl border-2 cursor-pointer transition ${
                 activeSrtLang === 'en'
-                  ? 'bg-purple-900 theme-light:bg-purple-700 text-white border-purple-500 font-black shadow-sm wizard-white-text'
-                  : 'bg-slate-900 theme-light:bg-white text-slate-400 theme-light:text-purple-900 border-slate-800 theme-light:border-purple-300 font-bold'
+                  ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 font-black shadow-md wizard-white-text'
+                  : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 font-black wizard-white-text hover:bg-purple-800'
               }`}>
                 <input
                   type="radio"
@@ -281,13 +281,13 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   onChange={() => setActiveSrtLang('en')}
                   className="accent-pink-500 cursor-pointer hidden"
                 />
-                <span className="text-xs">{isAr ? 'الإنجليزية' : 'English'}</span>
+                <span className="text-xs text-white font-black">{isAr ? 'الإنجليزية' : 'English'}</span>
               </label>
 
-              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2 rounded-xl border cursor-pointer transition ${
+              <label className={`flex items-center justify-center space-x-1.5 rtl:space-x-reverse p-2.5 rounded-xl border-2 cursor-pointer transition ${
                 activeSrtLang === 'ar'
-                  ? 'bg-purple-900 theme-light:bg-purple-700 text-white border-purple-500 font-black shadow-sm wizard-white-text'
-                  : 'bg-slate-900 theme-light:bg-white text-slate-400 theme-light:text-purple-900 border-slate-800 theme-light:border-purple-300 font-bold'
+                  ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 font-black shadow-md wizard-white-text'
+                  : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 font-black wizard-white-text hover:bg-purple-800'
               }`}>
                 <input
                   type="radio"
@@ -297,7 +297,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                   onChange={() => setActiveSrtLang('ar')}
                   className="accent-pink-500 cursor-pointer hidden"
                 />
-                <span className="text-xs">{isAr ? 'العربية' : 'Arabic'}</span>
+                <span className="text-xs text-white font-black">{isAr ? 'العربية' : 'Arabic'}</span>
               </label>
             </div>
           </div>
@@ -362,24 +362,24 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
                       <span>{sub.startTime} → {sub.endTime}</span>
                     </button>
 
-                    {/* Arabic Localized Approved Button */}
+                    {/* Arabic Localized Approved Button with PURE WHITE CIRCLE ICON */}
                     <button
                       onClick={() => handleToggleApproved(sub.id)}
-                      className={`inline-flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-1.5 rounded-full text-xs font-black transition shadow-sm ${
+                      className={`inline-flex items-center space-x-1.5 rtl:space-x-reverse px-4 py-1.5 rounded-full text-xs font-black transition shadow-md wizard-white-text ${
                         sub.approved
-                          ? 'bg-emerald-600 text-white border border-emerald-500 wizard-white-text'
-                          : 'bg-slate-900 theme-light:bg-purple-700 text-white border border-slate-700 theme-light:border-purple-800 wizard-white-text'
+                          ? 'bg-emerald-600 text-white border-2 border-emerald-400'
+                          : 'bg-purple-950 theme-light:bg-purple-800 text-white border-2 border-purple-400/60 hover:bg-purple-800'
                       }`}
                     >
                       {sub.approved ? (
                         <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                          <span>{isAr ? 'معتمدة' : 'Approved'}</span>
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          <span className="text-white font-black">{isAr ? 'معتمدة' : 'Approved'}</span>
                         </>
                       ) : (
                         <>
-                          <Circle className="w-3.5 h-3.5 text-slate-400 theme-light:text-purple-200" />
-                          <span>{isAr ? 'اعتماد الترجمة' : 'Human Check'}</span>
+                          <Circle className="w-4 h-4 text-white stroke-[2.5]" />
+                          <span className="text-white font-black">{isAr ? 'اعتماد الترجمة' : 'Human Check'}</span>
                         </>
                       )}
                     </button>

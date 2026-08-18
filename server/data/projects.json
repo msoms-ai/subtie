@@ -813,5 +813,161 @@
     ],
     "createdAt": "2026-08-17T22:11:04.102Z",
     "updatedAt": "2026-08-17T22:13:22.191Z"
+  },
+  "subtie_1787078527583_597mq": {
+    "id": "subtie_1787078527583_597mq",
+    "projectName": "Trailer 3",
+    "projectType": "Trailer",
+    "mediaTitle": "New Movie",
+    "videoUrl": "/uploads/subtie_1787078527583_597mq/video.mp4",
+    "audioUrl": "/uploads/subtie_1787078527583_597mq/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787078527583_597mq/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:00,700",
+        "endTime": "00:00:05,900",
+        "startSeconds": 0.7,
+        "endSeconds": 5.9,
+        "japaneseText": "我が学園は軍事利用可能な超常現象を収集・研究する機関なり。",
+        "englishText": "Our academy is an institution that collects and researches supernatural phenomena capable of military use.",
+        "arabicText": "أكاديميتنا هي مؤسسة تجمع وتبحث في الظواهر الخارقة الصالحة للاستخدام العسكري.",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:05,900",
+        "endTime": "00:00:08,700",
+        "startSeconds": 5.9,
+        "endSeconds": 8.7,
+        "japaneseText": "必ず成果を上げたし。",
+        "englishText": "I must achieve results.",
+        "arabicText": "يجب أن أُحقّق نتائج.",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:15,400",
+        "endTime": "00:00:17,400",
+        "startSeconds": 15.4,
+        "endSeconds": 17.4,
+        "japaneseText": "黒い雪…",
+        "englishText": "Black snow...",
+        "arabicText": "ثلج أسود...",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:17,400",
+        "endTime": "00:00:19,600",
+        "startSeconds": 17.4,
+        "endSeconds": 19.6,
+        "japaneseText": "やはり噂は本当だった。",
+        "englishText": "So, the rumors were true.",
+        "arabicText": "إذن، الشائعات كانت حقيقية.",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:19,600",
+        "endTime": "00:00:20,900",
+        "startSeconds": 19.6,
+        "endSeconds": 20.9,
+        "japaneseText": "人間の仕業ですよ。",
+        "englishText": "It's the work of humans.",
+        "arabicText": "هذا من فعل البشر.",
+        "approved": false
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:20,900",
+        "endTime": "00:00:23,500",
+        "startSeconds": 20.9,
+        "endSeconds": 23.5,
+        "japaneseText": "それをまじないとする術師というものがいる。",
+        "englishText": "There are sorcerers who use this as a spell.",
+        "arabicText": "هناك مشعوذون يستخدمون هذا كتعويذة.",
+        "approved": false
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:23,500",
+        "endTime": "00:00:26,000",
+        "startSeconds": 23.5,
+        "endSeconds": 26,
+        "japaneseText": "さあな。軍事利用には向かないかもね。",
+        "englishText": "Who knows? It might not be suitable for military use.",
+        "arabicText": "من يعلم؟ قد لا يكون مناسبًا للاستخدام العسكري.",
+        "approved": false
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:26,000",
+        "endTime": "00:00:27,500",
+        "startSeconds": 26,
+        "endSeconds": 27.5,
+        "japaneseText": "相手は、もしや…",
+        "englishText": "Could the opponent be...",
+        "arabicText": "هل يعقل أن الخصم...",
+        "approved": false
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:27,500",
+        "endTime": "00:00:29,200",
+        "startSeconds": 27.5,
+        "endSeconds": 29.2,
+        "japaneseText": "人間だからこそ…",
+        "englishText": "Precisely because they are human...",
+        "arabicText": "بالتحديد لأنهم بشر...",
+        "approved": false
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:29,200",
+        "endTime": "00:00:32,000",
+        "startSeconds": 29.2,
+        "endSeconds": 32,
+        "japaneseText": "僕らは同志を探す旅に出るのでしょう？",
+        "englishText": "We are going on a journey to find allies, aren't we?",
+        "arabicText": "سنذهب في رحلة للبحث عن حلفاء، أليس كذلك؟",
+        "approved": false
+      },
+      {
+        "id": 11,
+        "startTime": "00:00:32,000",
+        "endTime": "00:00:35,200",
+        "startSeconds": 32,
+        "endSeconds": 35.2,
+        "japaneseText": "それがこの岩本の使命だと思っている。",
+        "englishText": "I believe that is Iwamoto's mission.",
+        "arabicText": "أعتقد أن هذه هي مهمة (إيواموتو).",
+        "approved": false
+      },
+      {
+        "id": 12,
+        "startTime": "00:00:35,200",
+        "endTime": "00:00:38,500",
+        "startSeconds": 35.2,
+        "endSeconds": 38.5,
+        "japaneseText": "受け取れ。我が学園の推薦状だ。",
+        "englishText": "Take this. It's a letter of recommendation from our academy.",
+        "arabicText": "خذ هذه. إنها رسالة توصية من أكاديميتنا.",
+        "approved": false
+      },
+      {
+        "id": 13,
+        "startTime": "00:00:43,400",
+        "endTime": "00:00:46,200",
+        "startSeconds": 43.4,
+        "endSeconds": 46.2,
+        "japaneseText": "俺が先輩になってやる。",
+        "englishText": "I'll be your senior.",
+        "arabicText": "سأكون زميلك الأكبر.",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-18T18:47:13.042Z",
+    "updatedAt": "2026-08-18T18:47:13.043Z"
   }
 }
