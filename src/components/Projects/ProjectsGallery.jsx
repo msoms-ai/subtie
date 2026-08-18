@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle } from 'lucide-react';
+import { Search, Trash2, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter } from 'lucide-react';
 
 export default function ProjectsGallery({ onEditProject, onStartWizard, lang = 'en' }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all'); // 'all', 'episode', 'movie', 'trailer', 'clip'
   
   // Deletion modal states
   const [deletingProjectId, setDeletingProjectId] = useState(null);
@@ -14,7 +15,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects', { cache: 'no-store' });
       const data = await res.json();
       if (data.success) {
         setProjects(data.projects || []);
@@ -56,12 +57,42 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
     }
   };
 
-  const filteredProjects = projects.filter(p =>
-    (p.projectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.mediaTitle || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const isAr = lang === 'ar';
+
+  // Arabic category translation helper
+  const getCategoryLabel = (type) => {
+    const t = String(type || 'Episode').toLowerCase();
+    if (t.includes('movie') || t.includes('فيلم')) return isAr ? 'فيلم سينمائي' : 'Feature Movie';
+    if (t.includes('trailer') || t.includes('تريلر') || t.includes('عرض')) return isAr ? 'تريلر ترويجي' : 'Teaser / Trailer';
+    if (t.includes('clip') || t.includes('مقطع')) return isAr ? 'مقطع فيديو' : 'Short Video Clip';
+    return isAr ? 'حلقة أنمي' : 'Anime Episode';
+  };
+
+  // Category Icon helper
+  const getCategoryIcon = (type) => {
+    const t = String(type || 'Episode').toLowerCase();
+    if (t.includes('movie') || t.includes('فيلم')) return <Video className="w-4 h-4 text-pink-300" />;
+    if (t.includes('trailer') || t.includes('تريلر') || t.includes('عرض')) return <Sparkles className="w-4 h-4 text-amber-300" />;
+    if (t.includes('clip') || t.includes('مقطع')) return <Layers className="w-4 h-4 text-indigo-300" />;
+    return <Tv className="w-4 h-4 text-purple-300" />;
+  };
+
+  // Filter projects by category & search query
+  const filteredProjects = projects.filter(p => {
+    const matchesSearch =
+      (p.projectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.mediaTitle || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    if (activeCategoryFilter === 'all') return true;
+
+    const pType = String(p.projectType || 'Episode').toLowerCase();
+    if (activeCategoryFilter === 'episode') return pType.includes('episode') || pType.includes('حلقة');
+    if (activeCategoryFilter === 'movie') return pType.includes('movie') || pType.includes('فيلم');
+    if (activeCategoryFilter === 'trailer') return pType.includes('trailer') || pType.includes('تريلر') || pType.includes('عرض');
+    if (activeCategoryFilter === 'clip') return pType.includes('clip') || pType.includes('مقطع');
+    return true;
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -74,22 +105,23 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
         </div>
       )}
 
-      {/* Page Title & Search Bar Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-purple-500/20 pb-6">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-purple-500/20 pb-6" dir={isAr ? 'rtl' : 'ltr'}>
         <div>
-          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950/80 theme-light:bg-purple-700 text-purple-200 theme-light:text-white px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 text-xs font-black shadow-sm mb-2">
+          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 text-white px-3.5 py-1.5 rounded-full border border-purple-500/40 theme-light:border-purple-800 text-xs font-black shadow-sm mb-2 wizard-white-text">
             <Film className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
-            <span>{isAr ? 'معرض المشاريع الترجمية' : 'Fansub Subtitle Projects Gallery'}</span>
+            <span>{isAr ? 'معرض المشاريع الترجمية' : 'Anime Subtitle Projects Gallery'}</span>
           </div>
-          <h2 className="text-3xl font-extrabold text-white theme-light:text-slate-950">
+          <h2 className="text-3xl font-black text-white theme-light:text-slate-950">
             {isAr ? 'جميع مشاريع الترجمة' : 'All Subtitle Projects'}
           </h2>
-          <p className="text-xs text-slate-400 theme-light:text-slate-700 mt-1 font-semibold">
-            {isAr ? 'إدارة وتحرير وحذف جميع مقاطع الفيديو والملفات الترجمية' : 'Manage, edit, export, and delete all saved fansub projects and media files.'}
+          <p className="text-xs sm:text-sm text-purple-300 theme-light:text-purple-950 mt-1 font-bold">
+            {isAr ? 'إدارة وتصفح وتحرير جميع مقاطع الفيديو والملفات الترجمية الخاصة بك' : 'Manage, edit, export, and delete all saved anime fansub projects and media files.'}
           </p>
         </div>
 
         <div className="flex items-center space-x-3 rtl:space-x-reverse w-full md:w-auto">
+          {/* Search Input */}
           <div className="relative flex-1 md:w-72">
             <Search className={`w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 ${isAr ? 'right-3' : 'left-3'}`} />
             <input
@@ -97,43 +129,74 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
               dir={isAr ? 'rtl' : 'ltr'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isAr ? 'بحث في المشاريع...' : 'Search projects...'}
-              className={`w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl text-xs text-white theme-light:text-slate-900 outline-none transition ${isAr ? 'pr-9 pl-4' : 'pl-9 pr-4'} py-2.5`}
+              placeholder={isAr ? 'بحث باسم المشروع أو الفيديو...' : 'Search projects or video title...'}
+              className={`w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl text-xs text-white theme-light:text-slate-950 font-bold outline-none transition ${isAr ? 'pr-9 pl-4' : 'pl-9 pr-4'} py-3 shadow-sm`}
             />
           </div>
 
+          {/* Create New Project Button */}
           <button
             onClick={onStartWizard}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-extrabold text-xs shadow-lg shadow-purple-500/20 shrink-0 transition"
+            className="flex items-center space-x-2 rtl:space-x-reverse px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 shrink-0 transition wizard-white-text border border-purple-400/40"
           >
-            <PlusCircle className="w-4 h-4 text-pink-200" />
+            <PlusCircle className="w-4.5 h-4.5 text-pink-200" />
             <span>{isAr ? 'مشروع جديد' : 'New Project'}</span>
           </button>
         </div>
       </div>
 
-      {/* Projects Grid */}
+      {/* CATEGORY FILTER TABS BAR (RTL Localized) */}
+      <div className="flex items-center space-x-2 rtl:space-x-reverse overflow-x-auto pb-2" dir={isAr ? 'rtl' : 'ltr'}>
+        <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 flex items-center space-x-1 rtl:space-x-reverse shrink-0 px-2">
+          <Filter className="w-3.5 h-3.5 text-pink-400 theme-light:text-purple-700" />
+          <span>{isAr ? 'التصفية حسب الفئة:' : 'Filter by Category:'}</span>
+        </span>
+
+        {[
+          { id: 'all', labelAr: 'جميع المشاريع', labelEn: 'All Projects' },
+          { id: 'episode', labelAr: 'حلقات الأنمي', labelEn: 'Anime Episodes' },
+          { id: 'movie', labelAr: 'الأفلام السينمائية', labelEn: 'Feature Movies' },
+          { id: 'trailer', labelAr: 'العروض الترويجية', labelEn: 'Teasers & Trailers' },
+          { id: 'clip', labelAr: 'مقاطع الفيديو', labelEn: 'Short Clips' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveCategoryFilter(tab.id)}
+            className={`px-4 py-2 rounded-2xl text-xs font-black transition shrink-0 border ${
+              activeCategoryFilter === tab.id
+                ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 shadow-md wizard-white-text'
+                : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 hover:bg-purple-800 wizard-white-text'
+            }`}
+          >
+            {isAr ? tab.labelAr : tab.labelEn}
+          </button>
+        ))}
+      </div>
+
+      {/* Projects Grid Layout */}
       {loading ? (
-        <div className="text-center py-16 text-purple-300">
-          <Sparkles className="w-8 h-8 animate-spin mx-auto mb-2 text-purple-400" />
-          <p className="text-xs font-semibold">{isAr ? 'جاري تحميل المشاريع...' : 'Loading saved projects...'}</p>
+        <div className="text-center py-20 text-purple-300">
+          <Sparkles className="w-10 h-10 animate-spin mx-auto mb-3 text-purple-400" />
+          <p className="text-sm font-black text-white theme-light:text-slate-950">{isAr ? 'جاري تحميل قائمة مشاريعك...' : 'Loading project gallery...'}</p>
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="glass-panel p-12 rounded-3xl text-center border border-slate-800 space-y-4 max-w-lg mx-auto">
-          <Film className="w-12 h-12 text-slate-500 mx-auto" />
-          <h3 className="text-lg font-bold text-white theme-light:text-slate-950">
+        <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 space-y-5 max-w-lg mx-auto shadow-2xl">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 flex items-center justify-center text-pink-300">
+            <Film className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-black text-white theme-light:text-slate-950">
             {isAr ? 'لا توجد مشاريع حتى الآن' : 'No Subtitle Projects Found'}
           </h3>
-          <p className="text-xs text-slate-400 theme-light:text-slate-700">
+          <p className="text-xs text-purple-300 theme-light:text-purple-950 font-extrabold leading-relaxed">
             {searchQuery
-              ? (isAr ? 'لم يتم العثور على نتائج تطابق البحث' : 'No projects match your search query.')
-              : (isAr ? 'ابدأ بإنشاء أول مشروع ترجمة فيديو الآن!' : 'Get started by creating your first video fansub project!')}
+              ? (isAr ? 'لم يتم العثور على نتائج تطابق البحث المدخل' : 'No projects match your search query.')
+              : (isAr ? 'ابدأ بإنشاء أول مشروع ترجمة أنمي الآن وافتح محرر التزامن المتقدم!' : 'Get started by creating your first video fansub project!')}
           </p>
           <button
             onClick={onStartWizard}
-            className="px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg"
+            className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xs sm:text-sm shadow-xl wizard-white-text border border-purple-400/40"
           >
-            {isAr ? 'إنشاء مشروع الآن' : 'Create Project Now'}
+            {isAr ? 'إنشاء مشروع جديد الآن' : 'Create Project Now'}
           </button>
         </div>
       ) : (
@@ -141,57 +204,77 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
           {filteredProjects.map((p) => {
             const lineCount = p.subtitles?.length || 0;
             const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
+            const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
 
             return (
               <div
                 key={p.id}
-                className="glass-panel p-6 rounded-3xl border border-slate-800 theme-light:border-purple-600 hover:border-purple-500/60 transition shadow-xl flex flex-col justify-between space-y-5 text-center items-center group"
+                className="glass-panel-glow p-6 rounded-3xl border border-purple-500/30 hover:border-purple-400 transition-all duration-300 shadow-xl flex flex-col justify-between space-y-5 text-center items-center group relative overflow-hidden"
               >
-                <div className="w-full">
-                  {/* Top Badge & Delete Icon */}
-                  <div className="flex items-center justify-between mb-4 w-full">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-200 theme-light:text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-800 shadow-sm">
-                      {p.projectType || 'Episode'}
-                    </span>
+                <div className="w-full space-y-3">
+                  
+                  {/* Top Badge (ARABIC CATEGORY TRANSLATION) & Delete Icon */}
+                  <div className="flex items-center justify-between w-full" dir={isAr ? 'rtl' : 'ltr'}>
+                    <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-800 px-3.5 py-1.5 rounded-full border-2 border-purple-400 shadow-sm text-xs font-black text-white wizard-white-text">
+                      {getCategoryIcon(p.projectType)}
+                      <span>{getCategoryLabel(p.projectType)}</span>
+                    </div>
+
                     <button
                       onClick={() => setDeletingProjectId(p.id)}
-                      className="p-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
+                      className="p-2 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 text-white border border-rose-500/40 hover:scale-110 transition shadow-sm wizard-white-text"
                       title={isAr ? 'حذف المشروع' : 'Delete Project'}
                     >
-                      <Trash2 className="w-4 h-4 text-rose-400" />
+                      <Trash2 className="w-4 h-4 text-white" />
                     </button>
                   </div>
 
-                  {/* Project Titles (Centered) */}
-                  <div className="text-center my-3">
-                    <h3 className="text-xl font-black text-white theme-light:text-purple-950 group-hover:text-purple-400 theme-light:group-hover:text-purple-700 transition truncate">
+                  {/* Project Titles */}
+                  <div className="text-center pt-2" dir={isAr ? 'rtl' : 'ltr'}>
+                    <h3 className="text-xl font-black text-white theme-light:text-slate-950 group-hover:text-pink-300 theme-light:group-hover:text-purple-700 transition truncate">
                       {p.projectName}
                     </h3>
-                    <p className="text-xs text-slate-400 theme-light:text-purple-800 font-bold truncate mt-1">
+                    <p className="text-xs font-extrabold text-purple-300 theme-light:text-purple-950 truncate mt-1">
                       {p.mediaTitle}
                     </p>
                   </div>
+
+                  {/* Approved Lines Progress Bar */}
+                  <div className="space-y-1.5 pt-2" dir={isAr ? 'rtl' : 'ltr'}>
+                    <div className="flex items-center justify-between text-[11px] font-black text-purple-300 theme-light:text-purple-950">
+                      <span>{isAr ? 'نسبة اعتماد الترجمة:' : 'Approved Translation:'}</span>
+                      <span className="text-emerald-400 theme-light:text-emerald-800 font-mono font-black">{progressPercent}%</span>
+                    </div>
+                    <div className="w-full bg-slate-950 theme-light:bg-purple-200 h-2.5 rounded-full overflow-hidden border border-purple-500/30">
+                      <div
+                        className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* Subtitle Stats Boxes: Highly Readable & Centered */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/80 theme-light:border-purple-200 w-full">
-                  <div className="bg-purple-950/60 theme-light:bg-purple-100/90 p-3.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm flex flex-col items-center justify-center text-center">
-                    <span className="text-xs text-purple-300 theme-light:text-purple-950 font-bold block mb-1 text-center">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
-                    <span className="font-black text-white theme-light:text-purple-950 text-base text-center block">{lineCount} {isAr ? 'سطر' : 'lines'}</span>
+                {/* Subtitle Stats Boxes with Solid Purple & White Text */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-purple-500/20 w-full" dir={isAr ? 'rtl' : 'ltr'}>
+                  <div className="bg-purple-950 theme-light:bg-purple-800 p-3 rounded-2xl border-2 border-purple-400/80 shadow-md flex flex-col items-center justify-center text-center wizard-white-text">
+                    <span className="text-[11px] text-purple-200 font-bold block mb-0.5 text-center">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
+                    <span className="font-mono text-sm font-black text-white text-center block">{lineCount} {isAr ? 'سطر' : 'lines'}</span>
                   </div>
-                  <div className="bg-purple-950/60 theme-light:bg-purple-100/90 p-3.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm flex flex-col items-center justify-center text-center">
-                    <span className="text-xs text-purple-300 theme-light:text-purple-950 font-bold block mb-1 text-center">{isAr ? 'المعتمدة' : 'Approved'}</span>
-                    <span className="font-black text-emerald-400 theme-light:text-emerald-700 text-base text-center block">{approvedCount}/{lineCount}</span>
+                  
+                  <div className="bg-purple-950 theme-light:bg-purple-800 p-3 rounded-2xl border-2 border-purple-400/80 shadow-md flex flex-col items-center justify-center text-center wizard-white-text">
+                    <span className="text-[11px] text-purple-200 font-bold block mb-0.5 text-center">{isAr ? 'أسطر معتمدة' : 'Approved'}</span>
+                    <span className="font-mono text-sm font-black text-emerald-300 text-center block">{approvedCount}/{lineCount}</span>
                   </div>
                 </div>
 
                 {/* Action Button: Vibrant Gradient Pill */}
                 <button
                   onClick={() => onEditProject(p)}
-                  className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-black text-xs rounded-2xl transition shadow-md shadow-purple-500/20 flex items-center justify-center space-x-2 rtl:space-x-reverse"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-[1.02] text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center space-x-2 rtl:space-x-reverse transition wizard-white-text border border-purple-400/40"
                 >
                   <Edit3 className="w-4 h-4 text-pink-200" />
-                  <span>{isAr ? 'فتح المحرر والترجمة' : 'Open Editor & Worktable'}</span>
+                  <span>{isAr ? 'فتح المحرر ومساحة العمل' : 'Open Subtitle Workspace'}</span>
                 </button>
               </div>
             );
@@ -201,17 +284,17 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
 
       {/* DELETE CONFIRMATION MODAL */}
       {deletingProjectId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-3xl border border-rose-500/30 text-center space-y-5 shadow-2xl animate-fade-in">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-3xl border border-rose-500/40 text-center space-y-5 shadow-2xl animate-fade-in">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400">
               <AlertTriangle className="w-8 h-8" />
             </div>
 
             <div>
-              <h3 className="text-xl font-bold text-white theme-light:text-slate-950">
+              <h3 className="text-xl font-black text-white theme-light:text-slate-950">
                 {isAr ? 'تأكيد حذف المشروع' : 'Confirm Project Deletion'}
               </h3>
-              <p className="text-xs text-rose-300 theme-light:text-rose-700 mt-2 leading-relaxed font-semibold">
+              <p className="text-xs text-rose-300 theme-light:text-rose-700 mt-2 leading-relaxed font-bold">
                 {isAr
                   ? 'هل أنت تأكد من أنك تريد حذف هذا المشروع؟ سيتم حذف جميع الملفات نهائياً بما في ذلك الفيديو والصوت وملف الترجمة.'
                   : 'Are you sure you want to delete this project? All associated media files (video, audio track, and SRT subtitles) will be permanently deleted from the server.'}
@@ -222,14 +305,14 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
               <button
                 disabled={isDeleting}
                 onClick={() => setDeletingProjectId(null)}
-                className="flex-1 py-3 bg-slate-900 theme-light:bg-slate-100 border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-800 rounded-xl text-xs font-semibold transition"
+                className="flex-1 py-3 bg-purple-950 theme-light:bg-slate-200 border border-purple-500/40 theme-light:border-slate-300 text-white theme-light:text-slate-900 rounded-xl text-xs font-black transition"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 disabled={isDeleting}
                 onClick={handleDeleteConfirm}
-                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/30 transition flex items-center justify-center space-x-1.5"
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-rose-500/30 transition flex items-center justify-center space-x-1.5 wizard-white-text"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>{isDeleting ? (isAr ? 'جاري الحذف...' : 'Deleting...') : (isAr ? 'حذف المشروع' : 'Delete Project')}</span>

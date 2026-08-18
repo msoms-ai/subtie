@@ -1,67 +1,98 @@
 import React from 'react';
-import { X, Info, Sparkles } from 'lucide-react';
+import { X, Info, Sparkles, Award, History, Cpu } from 'lucide-react';
 
 export default function AboutModal({ isOpen, onClose, lang = 'en' }) {
   if (!isOpen) return null;
   const isAr = lang === 'ar';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-xl glass-panel-glow rounded-3xl p-6 sm:p-8 text-slate-100 shadow-2xl border border-purple-500/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-2xl glass-panel-glow rounded-3xl p-6 sm:p-8 text-slate-100 shadow-2xl border border-purple-500/30">
         
         {/* Close Button */}
         <button
           onClick={onClose}
-          className={`absolute top-5 ${isAr ? 'left-5' : 'right-5'} text-slate-400 hover:text-white bg-slate-900/60 p-2 rounded-full border border-slate-800 transition`}
+          className={`absolute top-5 ${isAr ? 'left-5' : 'right-5'} text-slate-300 hover:text-white bg-purple-950 theme-light:bg-purple-800 p-2 rounded-full border border-purple-500/40 transition shadow-md`}
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5 text-white" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-center space-x-3 rtl:space-x-reverse mb-6" dir={isAr ? 'rtl' : 'ltr'}>
-          <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
-            <Info className="w-5 h-5" />
+        <div className="flex items-center space-x-3.5 rtl:space-x-reverse mb-6" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 border border-purple-400 flex items-center justify-center text-white shrink-0 shadow-lg">
+            <Award className="w-6 h-6 text-yellow-300" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white theme-light:text-slate-950">
-              {isAr ? 'عن منصة Subtie' : 'About Subtie Project'}
+            <h3 className="text-xl sm:text-2xl font-black text-white theme-light:text-slate-950">
+              {isAr ? 'عن منصة Subtie وإرث مسومس أنمي' : 'About Subtie & MSOMS-Anime Legacy'}
             </h3>
-            <p className="text-xs text-purple-300 theme-light:text-purple-900 font-semibold">
-              {isAr ? 'تمكين مجتمع مترجمي الأنمي والمانغا حول العالم' : 'Empowering Anime Fan Translators Worldwide'}
+            <p className="text-xs sm:text-sm text-purple-300 theme-light:text-purple-950 font-black">
+              {isAr ? 'امتداد لمسيرة رواد ترجمة الأنمي العربي منذ عام 2000' : 'Continuation of the Arabic Anime Subbing Leadership Since 2000'}
             </p>
           </div>
         </div>
 
-        {/* Content Body */}
-        <div className="space-y-4 text-sm text-slate-300 theme-light:text-slate-800 leading-relaxed font-normal" dir={isAr ? 'rtl' : 'ltr'}>
+        {/* Content Body with High-Contrast White Text */}
+        <div className="space-y-4 text-xs sm:text-sm text-white leading-relaxed font-bold max-h-[60vh] overflow-y-auto pr-1 pl-1" dir={isAr ? 'rtl' : 'ltr'}>
           {isAr ? (
             <>
-              <p>
-                نشأت منصة <strong className="text-purple-300 theme-light:text-purple-900">Subtie</strong> من شغف عميق بمجتمع ترجمة الأنمي والمانغا العربي والعالمي. لعقود طويلة، قضاها المترجمون في تفريغ الصوتيات وتوقيت التزامن يدوياً عبر أدوات متعددة ومعقدة.
-              </p>
-              <p>
-                تأتي Subtie لتغير هذا المفهوم كلياً عبر دمج تقنيات الذكاء الاصطناعي الحديثة لتفريغ الصوتيات اليابانية، والترجمة الأولية التلقائية، مع توقيت زمني دقيق في بيئة عمل تشاركية مصممة خصيصاً للترجمة العربية.
-              </p>
-              <div className="p-4 rounded-2xl bg-purple-950/40 theme-light:bg-purple-100 border border-purple-500/20 theme-light:border-purple-300 flex items-start space-x-3 rtl:space-x-reverse mt-4">
-                <Sparkles className="w-5 h-5 text-purple-400 theme-light:text-purple-700 shrink-0 mt-0.5" />
-                <p className="text-xs text-purple-200 theme-light:text-purple-950 font-semibold">
-                  هدفنا الرئيسي هو مساعدة فرق الترجمة على تقديم ترجمات عالية الجودة بسرعة وسلاسة مع الاحتفاظ بالتحكم البشري الكامل على الصياغة والدقة.
+              {/* Historical Legacy Highlight Banner */}
+              <div className="p-4 rounded-2xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 shadow-md space-y-2 wizard-white-text">
+                <div className="flex items-center space-x-2 rtl:space-x-reverse text-yellow-300">
+                  <History className="w-5 h-5 shrink-0" />
+                  <h4 className="text-sm sm:text-base font-black text-white">تاريخ وأصالة مسومس أنمي (MSOMS-Anime)</h4>
+                </div>
+                <p className="text-xs sm:text-sm text-white font-bold leading-relaxed">
+                  تأسست شبكة وفريق <strong className="text-yellow-300">مسومس أنمي (MSOMS-Anime)</strong> في عام <strong className="text-pink-300">2000م</strong>، لتكون الصرح الأب والريادي الأول الذي يقود حركة ترجمة الأنمي والمانغا في العالم العربي. على مدى أكثر من ربع قرن، أرست مسومس أعلى معايير الإتقان والجودة والفصاحة في ترجمة أشهر الأعمال العالمية مثل <em>المحقق كونان، ون بيس، وناروتو</em> وغيرها.
+                </p>
+              </div>
+
+              {/* Subtie Modern Continuation */}
+              <div className="p-4 rounded-2xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400/80 shadow-md space-y-2 wizard-white-text">
+                <div className="flex items-center space-x-2 rtl:space-x-reverse text-pink-300">
+                  <Cpu className="w-5 h-5 shrink-0" />
+                  <h4 className="text-sm sm:text-base font-black text-white">منصة Subtie • العصر الجديد للترجمة</h4>
+                </div>
+                <p className="text-xs sm:text-sm text-white font-bold leading-relaxed">
+                  تأتي منصة <strong className="text-pink-300">Subtie</strong> (من ابتكار فريق <strong className="text-sky-300">msoms.ai</strong>) كـ <strong>استمرار وتتويج حديث</strong> لهذا الإرث العريق. حيث تدمج بين الروح والخبرة التاريخية لمترجمي مسومس وبين أحدث تقنيات الذكاء الاصطناعي لتفريغ الصوت الياباني والتزامن بدقة الملي ثانية.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-900 to-indigo-900 border border-purple-400 flex items-start space-x-3 rtl:space-x-reverse shadow-md wizard-white-text">
+                <Sparkles className="w-5 h-5 text-yellow-300 shrink-0 mt-0.5" />
+                <p className="text-xs sm:text-sm text-white font-black leading-relaxed">
+                  رؤيتنا هي تمكين الفرق والمترجمين المستقلين من إنتاج ترجمات أنمي عربية فائقة الجودة بسرعة قياسية، مع الحفاظ الكامل على اللمسة البشرية والإبداع الفني الذي تميز به فريق مسومس منذ تأسيسه.
                 </p>
               </div>
             </>
           ) : (
             <>
-              <p>
-                <strong className="text-purple-300 theme-light:text-purple-900">Subtie</strong> was born out of a deep passion for the global Anime fansubbing community. For decades, dedicated fan translators painstakingly transcribed audio line-by-line, timestamped dialogues manually, and coordinated translations across separate tools.
-              </p>
-              <p>
-                Subtie revolutionizes this workflow by combining cutting-edge AI speech transcription, automated initial Arabic translations, and timestamp alignment with an interactive, collaborative workspace tailored for Arabic typography and fansub standards.
-              </p>
+              {/* Historical Legacy Banner (English) */}
+              <div className="p-4 rounded-2xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 shadow-md space-y-2 wizard-white-text">
+                <div className="flex items-center space-x-2 text-yellow-300">
+                  <History className="w-5 h-5 shrink-0" />
+                  <h4 className="text-sm sm:text-base font-black text-white">The Historic MSOMS-Anime Legacy (Since 2000)</h4>
+                </div>
+                <p className="text-xs sm:text-sm text-white font-bold leading-relaxed">
+                  Founded in <strong className="text-yellow-300">2000</strong>, <strong className="text-pink-300">MSOMS-Anime</strong> established itself as the undisputed founding titan and leader of the Arabic anime fansubbing movement. For over 25 years, MSOMS set the gold standard for linguistic precision and cultural authenticity across legendary series like <em>Detective Conan, One Piece, and Naruto</em>.
+                </p>
+              </div>
 
-              <div className="p-4 rounded-2xl bg-purple-950/40 theme-light:bg-purple-100 border border-purple-500/20 theme-light:border-purple-300 flex items-start space-x-3 mt-4">
-                <Sparkles className="w-5 h-5 text-purple-400 theme-light:text-purple-700 shrink-0 mt-0.5" />
-                <p className="text-xs text-purple-200 theme-light:text-purple-950 font-semibold">
-                  Our mission is to assist fansubbers in delivering high-quality, authentic translations faster than ever while preserving full human creative control over phrasing and nuance.
+              {/* Subtie Modern Evolution */}
+              <div className="p-4 rounded-2xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400/80 shadow-md space-y-2 wizard-white-text">
+                <div className="flex items-center space-x-2 text-pink-300">
+                  <Cpu className="w-5 h-5 shrink-0" />
+                  <h4 className="text-sm sm:text-base font-black text-white">Subtie • The AI-Powered Evolution</h4>
+                </div>
+                <p className="text-xs sm:text-sm text-white font-bold leading-relaxed">
+                  <strong className="text-pink-300">Subtie</strong> (created by <strong className="text-sky-300">msoms.ai</strong>) serves as the direct technological continuation and modern expansion of this 25-year fansubbing heritage. It bridges decades of MSOMS translation expertise with cutting-edge AI Japanese ASR transcription and millisecond timestamp precision.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-900 to-indigo-900 border border-purple-400 flex items-start space-x-3 shadow-md wizard-white-text">
+                <Sparkles className="w-5 h-5 text-yellow-300 shrink-0 mt-0.5" />
+                <p className="text-xs sm:text-sm text-white font-black leading-relaxed">
+                  Our mission is to empower anime fansubbers worldwide to produce authentic, broadcast-grade Arabic subtitles with lightning speed while preserving full human creative mastery over phrasing and nuance.
                 </p>
               </div>
             </>
@@ -69,10 +100,10 @@ export default function AboutModal({ isOpen, onClose, lang = 'en' }) {
         </div>
 
         {/* Modal Footer */}
-        <div className="mt-8 pt-4 border-t border-slate-800 theme-light:border-slate-300 flex justify-end">
+        <div className="mt-6 pt-4 border-t border-slate-800 theme-light:border-purple-300 flex justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-sm hover:opacity-90 transition shadow-lg shadow-purple-500/25"
+            className="px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs sm:text-sm shadow-xl wizard-white-text border border-purple-400/40"
           >
             {isAr ? 'حسناً، فهمت' : 'Got it'}
           </button>
