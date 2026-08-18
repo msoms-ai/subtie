@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check } from 'lucide-react';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
@@ -111,14 +111,14 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
     }
   };
 
-  // Generate & Download Subtitle File (.srt or .ass) via Hidden iFrame Engine
+  // Generate & Download Subtitle File (.srt or .ass) with Dual Redundant Download Engines
   const handleTriggerExport = async (e) => {
     if (e) {
       if (typeof e.preventDefault === 'function') e.preventDefault();
       if (typeof e.stopPropagation === 'function') e.stopPropagation();
     }
 
-    // 1. Auto-save current in-memory subtitle edits to server first
+    // 1. Auto-save current subtitle edits to server
     try {
       await fetch(`/api/project/${project.id}/save`, {
         method: 'POST',
@@ -126,20 +126,66 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
         body: JSON.stringify({ subtitles })
       });
     } catch (err) {
-      console.error('Pre-export save failed:', err);
+      console.error('Pre-export save error:', err);
     }
 
-    // 2. Trigger native browser download via hidden iframe (100% reliable, zero tab navigation)
-    const exportUrl = `/api/project/${project.id}/export?format=${exportFormat}&lang=${exportLang}`;
-    
-    let iframe = document.getElementById('hidden-download-iframe');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'hidden-download-iframe';
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
+    // 2. Generate local UTF-8 BOM content
+    const BOM = '\uFEFF';
+    let content = BOM;
+    const safeSubs = Array.isArray(subtitles) ? subtitles : [];
+
+    if (exportFormat === 'ass') {
+      content += `[Script Info]\nTitle: ${project?.projectName || 'Subtie Fansub'}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+      safeSubs.forEach((sub) => {
+        const text = exportLang === 'en' ? (sub?.englishText || '') : exportLang === 'ja' ? (sub?.japaneseText || '') : (sub?.arabicText || '');
+        const rawStart = String(sub?.startTime || '00:00:00,000').trim().replace('.', ',');
+        const rawEnd = String(sub?.endTime || '00:00:05,000').trim().replace('.', ',');
+        const start = rawStart.replace(',', '.').substring(0, 10);
+        const end = rawEnd.replace(',', '.').substring(0, 10);
+        content += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
+      });
+    } else {
+      // Default: SRT format
+      safeSubs.forEach((sub, idx) => {
+        const text = exportLang === 'en' ? (sub?.englishText || '') : exportLang === 'ja' ? (sub?.japaneseText || '') : (sub?.arabicText || '');
+        let start = String(sub?.startTime || '00:00:00,000').trim().replace('.', ',');
+        let end = String(sub?.endTime || '00:00:05,000').trim().replace('.', ',');
+        if (start.length === 8) start += ',000';
+        if (end.length === 8) end += ',000';
+        content += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
+      });
     }
-    iframe.src = exportUrl;
+
+    const cleanName = String(project?.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+    const fileName = `${cleanName}_${exportLang}.${exportFormat}`;
+
+    // 3. Engine A: Direct Anchor Download with Blob
+    try {
+      const blob = new Blob([content], { type: 'application/octet-stream;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        if (document.body.contains(a)) document.body.removeChild(a);
+      }, 500);
+    } catch (err) {
+      console.error('Blob download engine failed, triggering iframe backup:', err);
+      // Engine B: Hidden iFrame Backup
+      const exportUrl = `/api/project/${project.id}/export?format=${exportFormat}&lang=${exportLang}`;
+      let iframe = document.getElementById('hidden-download-iframe');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'hidden-download-iframe';
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+      }
+      iframe.src = exportUrl;
+    }
 
     setShowExportModal(false);
   };
