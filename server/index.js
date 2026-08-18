@@ -451,7 +451,7 @@ app.get('/api/project/:id/export', (req, res) => {
       ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
     });
 
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Type', 'application/octet-stream; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
     return res.send(ass);
   }
@@ -464,7 +464,7 @@ app.get('/api/project/:id/export', (req, res) => {
     srt += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
   });
 
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Type', 'application/octet-stream; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
   res.send(srt);
 });

@@ -112,7 +112,12 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   };
 
   // Generate & Download Subtitle File (.srt or .ass) cleanly on client side
-  const handleTriggerExport = () => {
+  const handleTriggerExport = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     const BOM = '\uFEFF';
     let content = BOM;
 
@@ -138,20 +143,25 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
       });
     }
 
-    // Trigger instant browser download via Blob URL (no page navigation)
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    // Use application/octet-stream to force native browser file download (never opens inline in tab)
+    const blob = new Blob([content], { type: 'application/octet-stream;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    const cleanName = (project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
-    a.download = `${cleanName}_${exportLang}.${exportFormat}`;
-    document.body.appendChild(a);
-    a.click();
+    const link = document.createElement('a');
+    const cleanName = String(project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+    const fileName = `${cleanName}_${exportLang}.${exportFormat}`;
+
+    link.style.display = 'none';
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+
     setTimeout(() => {
       window.URL.revokeObjectURL(url);
-      if (document.body.contains(a)) document.body.removeChild(a);
-    }, 200);
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+    }, 500);
 
     // Save project state to server in background
     try {

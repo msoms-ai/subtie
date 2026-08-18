@@ -1149,5 +1149,128 @@
     ],
     "createdAt": "2026-08-18T21:34:17.094Z",
     "updatedAt": "2026-08-18T21:34:17.094Z"
+  },
+  "subtie_1787089938408_wtryr": {
+    "id": "subtie_1787089938408_wtryr",
+    "projectName": "test",
+    "projectType": "Trailer",
+    "mediaTitle": "test",
+    "videoUrl": "/uploads/subtie_1787089938408_wtryr/video.mp4",
+    "audioUrl": "/uploads/subtie_1787089938408_wtryr/audio.mp3",
+    "srtUrl": "/uploads/subtie_1787089938408_wtryr/subtitle.srt",
+    "subtitles": [
+      {
+        "id": 1,
+        "startTime": "00:00:07,100",
+        "endTime": "00:00:08,100",
+        "startSeconds": 7.1,
+        "endSeconds": 8.1,
+        "japaneseText": "ハイヤッ！",
+        "englishText": "Hiyah!",
+        "arabicText": "هيا!",
+        "approved": false
+      },
+      {
+        "id": 2,
+        "startTime": "00:00:10,500",
+        "endTime": "00:00:13,000",
+        "startSeconds": 10.5,
+        "endSeconds": 13,
+        "japaneseText": "骸骨騎士様",
+        "englishText": "Skeleton Knight...",
+        "arabicText": "الفارس الهيكل العظمي...",
+        "approved": false
+      },
+      {
+        "id": 3,
+        "startTime": "00:00:21,800",
+        "endTime": "00:00:23,800",
+        "startSeconds": 21.8,
+        "endSeconds": 23.8,
+        "japaneseText": "いざ、参る！",
+        "englishText": "Here I come!",
+        "arabicText": "والآن، إلى الأمام!",
+        "approved": false
+      },
+      {
+        "id": 4,
+        "startTime": "00:00:26,500",
+        "endTime": "00:00:30,500",
+        "startSeconds": 26.5,
+        "endSeconds": 30.5,
+        "japaneseText": "悪を見過ごせぬあの男が",
+        "englishText": "The man who cannot overlook evil...",
+        "arabicText": "ذلك الرجل الذي لا يتغاضى عن الشر...",
+        "approved": false
+      },
+      {
+        "id": 5,
+        "startTime": "00:00:32,500",
+        "endTime": "00:00:36,500",
+        "startSeconds": 32.5,
+        "endSeconds": 36.5,
+        "japaneseText": "この世界で涙する人のため",
+        "englishText": "...for the sake of those who weep in this world...",
+        "arabicText": "...من أجل الباكين في هذا العالم...",
+        "approved": false
+      },
+      {
+        "id": 6,
+        "startTime": "00:00:38,000",
+        "endTime": "00:00:41,000",
+        "startSeconds": 38,
+        "endSeconds": 41,
+        "japaneseText": "再び帰ってきた！",
+        "englishText": "...has returned once more!",
+        "arabicText": "...قد عاد من جديد!",
+        "approved": false
+      },
+      {
+        "id": 7,
+        "startTime": "00:00:42,500",
+        "endTime": "00:00:45,000",
+        "startSeconds": 42.5,
+        "endSeconds": 45,
+        "japaneseText": "上級職、聖騎士！",
+        "englishText": "Advanced Class: Paladin!",
+        "arabicText": "الرتبة المتقدمة: الفارس المقدس!",
+        "approved": false
+      },
+      {
+        "id": 8,
+        "startTime": "00:00:45,500",
+        "endTime": "00:00:49,000",
+        "startSeconds": 45.5,
+        "endSeconds": 49,
+        "japaneseText": "戦技スキル、ジャッジメント！",
+        "englishText": "Combat Skill: Judgement!",
+        "arabicText": "مهارة قتالية: الحكم!",
+        "approved": false
+      },
+      {
+        "id": 9,
+        "startTime": "00:00:49,800",
+        "endTime": "00:00:53,800",
+        "startSeconds": 49.8,
+        "endSeconds": 53.8,
+        "japaneseText": "骸骨騎士様、只今異世界へお出掛け中 II",
+        "englishText": "Skeleton Knight in Another World II",
+        "arabicText": "الفارس الهيكل العظمي في عالم آخر 2",
+        "approved": false
+      },
+      {
+        "id": 10,
+        "startTime": "00:00:54,000",
+        "endTime": "00:00:56,800",
+        "startSeconds": 54,
+        "endSeconds": 56.8,
+        "japaneseText": "7月より放送開始！",
+        "englishText": "Broadcasting begins this July!",
+        "arabicText": "يبدأ البث في شهر يوليو!",
+        "approved": false
+      }
+    ],
+    "createdAt": "2026-08-18T21:52:31.434Z",
+    "updatedAt": "2026-08-18T21:52:31.434Z"
   }
 }
