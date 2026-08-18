@@ -582,13 +582,19 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
 
             <div className="flex justify-end space-x-3 rtl:space-x-reverse pt-2">
               <button
+                type="button"
                 onClick={() => setShowExportModal(false)}
                 className="px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-slate-100 text-slate-300 theme-light:text-slate-800 border border-slate-700 text-xs font-semibold"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
-                onClick={handleTriggerExport}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleTriggerExport(e);
+                }}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs shadow-lg wizard-white-text"
               >
                 {isAr ? 'تحميل الملف الآن' : 'Download File Now'}
