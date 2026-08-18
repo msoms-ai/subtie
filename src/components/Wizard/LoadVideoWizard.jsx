@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles } from 'lucide-react';
+import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
 export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'en' }) {
