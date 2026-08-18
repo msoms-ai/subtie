@@ -157,38 +157,38 @@
   },
   "subtie_1786821665538_2veno": {
     "id": "subtie_1786821665538_2veno",
-    "projectName": "Skeleton Knight Trailer",
+    "projectName": "Test",
     "projectType": "Trailer",
-    "mediaTitle": "Official Teaser Trailer 1",
+    "mediaTitle": "Test",
     "videoUrl": "/uploads/subtie_1786821665538_2veno/video.mp4",
     "audioUrl": "/uploads/subtie_1786821665538_2veno/audio.mp3",
     "srtUrl": "/uploads/subtie_1786821665538_2veno/subtitle.srt",
     "subtitles": [
       {
         "id": 1,
-        "startTime": "00:00:07,500",
-        "endTime": "00:00:11,200",
-        "startSeconds": 7.5,
-        "endSeconds": 11.2,
-        "japaneseText": "涙で渡る血の大河",
-        "englishText": "Crossing a river of blood with tears,",
-        "arabicText": "نعبر نهرًا من الدماء بالدموع،",
+        "startTime": "00:00:07,026",
+        "endTime": "00:00:10,750",
+        "startSeconds": 7.026,
+        "endSeconds": 10.75,
+        "japaneseText": "涙を拭う 銀のタイヤ",
+        "englishText": "Wiping away tears, silver tires",
+        "arabicText": "تمسح الدموع، تلك الإطارات الفضية",
         "approved": false
       },
       {
         "id": 2,
-        "startTime": "00:00:11,200",
+        "startTime": "00:00:10,750",
         "endTime": "00:00:18,500",
-        "startSeconds": 11.2,
+        "startSeconds": 10.75,
         "endSeconds": 18.5,
-        "japaneseText": "夢見て走る死の荒野",
-        "englishText": "Running through the wilderness of death with dreams in mind!",
-        "arabicText": "نركض عبر قفار الموت حالمين!",
+        "japaneseText": "夢見て走る シロッコ Oh yeah",
+        "englishText": "Racing toward dreams, the Sirocco, oh yeah",
+        "arabicText": "تنطلق نحو الأحلام، رياح السيروكو، أوه نعم",
         "approved": false
       }
     ],
-    "createdAt": "2026-08-15T19:21:16.558Z",
-    "updatedAt": "2026-08-15T19:23:01.257Z"
+    "createdAt": "2026-08-18T21:24:42.757Z",
+    "updatedAt": "2026-08-18T21:24:42.758Z"
   },
   "subtie_1786821873772_7diep": {
     "id": "subtie_1786821873772_7diep",

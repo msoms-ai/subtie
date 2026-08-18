@@ -169,7 +169,7 @@ Return ONLY valid JSON matching this exact structure:
 `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.5-flash',
+    model: 'gemini-flash-latest',
     contents: [
       {
         fileData: {
