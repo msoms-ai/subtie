@@ -326,6 +326,7 @@ app.post('/api/process', async (req, res) => {
 
 // 3. Get All Projects
 app.get('/api/projects', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const projectsMap = readProjects();
   const projectsList = Object.values(projectsMap).sort(
     (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)

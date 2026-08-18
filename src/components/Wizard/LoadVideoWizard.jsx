@@ -336,6 +336,17 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
 
           <div
             onClick={() => document.getElementById('hidden-video-input')?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                const file = e.dataTransfer.files[0];
+                setVideoFile(file);
+                if (!mediaTitle.trim()) {
+                  setMediaTitle(file.name.replace(/\.[^/.]+$/, ''));
+                }
+              }
+            }}
             className="border-3 border-dashed border-purple-500/60 theme-light:border-purple-600 hover:border-pink-500 bg-purple-950/40 theme-light:bg-purple-100/90 rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center text-center transition cursor-pointer group shadow-inner"
           >
             <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition">
@@ -347,7 +358,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <input
               id="hidden-video-input"
               type="file"
-              accept="video/mp4"
+              accept="video/*"
               onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
               className="hidden"
             />
