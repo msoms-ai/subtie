@@ -25,10 +25,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
   const [errorMessage, setErrorMessage] = useState(null);
 
   const projectTypes = [
-    { id: 'Episode', label: isAr ? 'حلقة أنمي' : 'Anime Episode', desc: isAr ? 'حلقة كاملة من مسلسل أنمي متلفز' : 'Full anime series episode' },
-    { id: 'Movie', label: isAr ? 'فيلم سينمائي' : 'Feature Movie', desc: isAr ? 'فيلم أنمي سينمائي طويل' : 'Full length animated feature movie' },
-    { id: 'Trailer', label: isAr ? 'عروض ترويجية (تريلر)' : 'Teaser / Trailer', desc: isAr ? 'فيديو ترويجي أو إعلان تشويقي' : 'Promotional teaser or trailer video' },
-    { id: 'Clip', label: isAr ? 'مقطع فيديو قصير' : 'Short Video Clip', desc: isAr ? 'مقطع قصير أو مشهد حماسي مقتطع' : 'Short scene or highlight clip' }
+    { id: 'Episode', label: isAr ? 'حلقة أنمي' : 'Anime Episode', icon: Tv },
+    { id: 'Movie', label: isAr ? 'فيلم سينمائي' : 'Feature Movie', icon: Video },
+    { id: 'Trailer', label: isAr ? 'عروض ترويجية' : 'Teaser / Trailer', icon: Sparkles },
+    { id: 'Clip', label: isAr ? 'مقطع فيديو' : 'Short Video Clip', icon: Layers }
   ];
 
   const stepLabels = isAr ? [
@@ -220,26 +220,33 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
             <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-3">
               {isAr ? 'نوع المشروع (اختر الفئة)' : 'Select Media Category'}
             </label>
-            {/* ENLARGED CATEGORY CARDS WITH HIGH CONTRAST SOLID PURPLE BACKGROUND & WHITE TEXT */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {projectTypes.map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setProjectType(t.id)}
-                  className={`p-6 sm:p-7 rounded-3xl transition flex items-start space-x-4 rtl:space-x-reverse text-left rtl:text-right ${
-                    projectType === t.id
-                      ? 'wizard-selected-card shadow-xl scale-[1.02]'
-                      : 'wizard-unselected-card hover:scale-[1.02]'
-                  }`}
-                >
-                  <Layers className={`w-8 h-8 shrink-0 mt-1 ${projectType === t.id ? 'text-yellow-300' : 'text-purple-300'}`} />
-                  <div>
-                    <h4 className="text-lg sm:text-xl font-black text-white mb-1.5">{t.label}</h4>
-                    <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">{t.desc}</p>
-                  </div>
-                </button>
-              ))}
+            {/* BIG ICONS WITH TITLE BELOW (NO EXTRA DESCRIPTION TEXT) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {projectTypes.map(t => {
+                const IconComponent = t.icon;
+                const isSelected = projectType === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setProjectType(t.id)}
+                    className={`p-6 sm:p-7 rounded-3xl transition flex flex-col items-center justify-center text-center cursor-pointer ${
+                      isSelected
+                        ? 'wizard-selected-card shadow-2xl scale-[1.04]'
+                        : 'wizard-unselected-card hover:scale-[1.02]'
+                    }`}
+                  >
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3.5 transition shadow-md ${
+                      isSelected
+                        ? 'bg-purple-950/90 border-2 border-yellow-300 text-yellow-300'
+                        : 'bg-purple-900/90 border-2 border-purple-400/60 text-pink-300'
+                    }`}>
+                      <IconComponent className="w-9 h-9" />
+                    </div>
+                    <h4 className="text-base sm:text-lg font-black text-white text-center">{t.label}</h4>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
