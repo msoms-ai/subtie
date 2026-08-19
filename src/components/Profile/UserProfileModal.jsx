@@ -533,11 +533,10 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser, 
               <label className="block text-xs font-black text-purple-200 theme-light:text-purple-950 mb-2">
                 {isAr ? '1. لغة الموقع الافتراضية:' : '1. Default Site Language:'}
               </label>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { code: 'ar', name: 'العربية (Arabic)' },
-                  { code: 'en', name: 'English' },
-                  { code: 'ja', name: '日本語 (Japanese)' }
+                  { code: 'en', name: 'English' }
                 ].map(l => (
                   <button
                     key={l.code}
