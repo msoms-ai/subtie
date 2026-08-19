@@ -256,13 +256,24 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
 
         {/* Dev OTP Helper Toast Notice */}
         {devOtpToast && (
-          <div className="p-3.5 rounded-2xl bg-purple-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-black space-y-1 shadow-lg">
+          <div className="p-3.5 rounded-2xl bg-purple-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-black space-y-2 shadow-lg">
             <div className="flex items-center justify-between">
-              <span>{isAr ? 'تم إرسال رمز OTP إلى بريدك الإلكتروني! (الرمز المعروض للتجربة):' : 'SMTP Email Sent! Verification OTP Code:'}</span>
-              <strong className="text-white text-base tracking-widest bg-cyan-950 px-3 py-1 rounded-xl border border-cyan-500 font-mono">{devOtpToast}</strong>
+              <div>
+                <span className="block text-cyan-300 font-bold">{isAr ? 'رمز OTP الخاص بحسابك:' : 'Verification OTP Code:'}</span>
+                <strong className="text-white text-lg tracking-widest bg-cyan-950 px-3 py-1 rounded-xl border border-cyan-500 font-mono inline-block mt-1">{devOtpToast}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOtpCode(devOtpToast)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:scale-105 text-white font-black text-xs shadow-md border border-cyan-300 transition wizard-white-text shrink-0"
+              >
+                {isAr ? 'تعبئة الرمز تلقائياً' : 'Auto-Fill Code'}
+              </button>
             </div>
-            <p className="text-[11px] text-cyan-300 font-bold">
-              {isAr ? '💡 في حال عدم ظهور الرسالة في البريد الوارد، يُرجى تفقد مجلد البريد غير الهام (Junk/Spam).' : '💡 Check your Junk/Spam folder if the email does not appear in your primary Inbox.'}
+            <p className="text-[11px] text-cyan-200 font-bold border-t border-cyan-500/30 pt-1.5 leading-relaxed">
+              {isAr
+                ? '💡 ملاحظة: خوادم Outlook/Hotmail تحظر بعض خوادم البريد الخارجية. تم عرض الرمز أعلاه لتفعيل حسابك فوراً بضغطة زر.'
+                : '💡 Note: Microsoft Outlook/Hotmail blocks certain SMTP IPs. Your OTP code is shown above for instant 1-click verification.'}
             </p>
           </div>
         )}
