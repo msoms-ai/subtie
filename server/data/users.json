@@ -1,0 +1,44 @@
+{
+  "usr_admin_msoms1": {
+    "id": "usr_admin_msoms1",
+    "email": "msoms1@gmail.com",
+    "passwordHash": "$2b$10$vIeBxFVMthQaMXpIKZ3oGuX/NQpFCjRnVLZmlcNOE05cHdHfyzIXO",
+    "firstName": "MSOMS",
+    "lastName": "Admin",
+    "msomsUsername": "MSOMS_Leader",
+    "role": "Admin",
+    "isVerified": true,
+    "avatarUrl": "",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "subscriptions": {
+      "updates": true,
+      "newsletter": true,
+      "notifications": true
+    },
+    "preferences": {
+      "defaultLanguage": "ar",
+      "defaultTheme": "dark"
+    }
+  },
+  "usr_1787174757274_3d9fs": {
+    "id": "usr_1787174757274_3d9fs",
+    "email": "translator@msoms.ai",
+    "passwordHash": "$2b$10$VFZRjxlcTj.qrV0TEB9tZuQ3aF/ztQh53U4dFAXDjpz2pf2XP3kAi",
+    "firstName": "Tariq",
+    "lastName": "Translation",
+    "msomsUsername": "Subber_Pro",
+    "role": "Translator",
+    "isVerified": true,
+    "avatarUrl": "",
+    "createdAt": "2026-08-19T21:25:57.348Z",
+    "subscriptions": {
+      "updates": true,
+      "newsletter": true,
+      "notifications": true
+    },
+    "preferences": {
+      "defaultLanguage": "ar",
+      "defaultTheme": "dark"
+    }
+  }
+}

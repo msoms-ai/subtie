@@ -9,18 +9,49 @@ import AboutModal from './components/Modals/AboutModal.jsx';
 import ContactModal from './components/Modals/ContactModal.jsx';
 import RulesModal from './components/Modals/RulesModal.jsx';
 
+import AuthModal from './components/Auth/AuthModal.jsx';
+import UserProfileModal from './components/Profile/UserProfileModal.jsx';
+import AdminUserConsoleModal from './components/Admin/AdminUserConsoleModal.jsx';
+import AssignAuditorModal from './components/Projects/AssignAuditorModal.jsx';
+
 export default function App() {
   const [view, setView] = useState('landing'); // 'landing', 'projects', 'wizard', 'editor'
   const [currentProject, setCurrentProject] = useState(null);
 
-  // App Global Settings (Bilingual & Light/Dark Mode)
-  const [lang, setLang] = useState('en'); // 'en' or 'ar'
-  const [theme, setTheme] = useState('light'); // 'light' or 'dark'
+  // Authenticated user state
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('subtie_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
-  // Modal states
+  // App Global Settings (Bilingual & Light/Dark Mode)
+  const [lang, setLang] = useState(() => user?.preferences?.defaultLanguage || 'ar'); // 'en', 'ar', 'ja'
+  const [theme, setTheme] = useState(() => user?.preferences?.defaultTheme || 'dark'); // 'light' or 'dark'
+
+  // Modals
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
+  const [assignAuditorProject, setAssignAuditorProject] = useState(null);
+
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+
+  // Persist user state & preferences
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('subtie_user', JSON.stringify(user));
+      if (user.preferences?.defaultLanguage) setLang(user.preferences.defaultLanguage);
+      if (user.preferences?.defaultTheme) setTheme(user.preferences.defaultTheme);
+    } else {
+      localStorage.removeItem('subtie_user');
+    }
+  }, [user]);
 
   // Handle shared URL query parameter (?project=id)
   useEffect(() => {
@@ -31,8 +62,8 @@ export default function App() {
       fetch(`/api/project/${projectId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.success && data.project) {
-            setCurrentProject(data.project);
+          if (data.id) {
+            setCurrentProject(data);
             setView('editor');
           }
         })
@@ -40,7 +71,27 @@ export default function App() {
     }
   }, []);
 
+  const handleLoginSuccess = (loggedInUser) => {
+    setUser(loggedInUser);
+    setIsAuthOpen(false);
+  };
+
+  const handleUpdateUser = (updatedUser) => {
+    setUser(updatedUser);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setIsProfileOpen(false);
+    setIsAdminConsoleOpen(false);
+    setView('landing');
+  };
+
   const handleStartWizard = () => {
+    if (!user) {
+      setIsAuthOpen(true);
+      return;
+    }
     setView('wizard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -69,12 +120,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const toggleLang = () => {
-    setLang(prev => (prev === 'en' ? 'ar' : 'en'));
+  const toggleLang = (explicitLang) => {
+    if (typeof explicitLang === 'string') {
+      setLang(explicitLang);
+    } else {
+      setLang(prev => (prev === 'en' ? 'ar' : 'en'));
+    }
   };
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  const toggleTheme = (explicitTheme) => {
+    if (typeof explicitTheme === 'string') {
+      setTheme(explicitTheme);
+    } else {
+      setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+    }
   };
 
   const isAr = lang === 'ar';
@@ -97,6 +156,11 @@ export default function App() {
         theme={theme}
         onToggleLang={toggleLang}
         onToggleTheme={toggleTheme}
+        user={user}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenAdminConsole={() => setIsAdminConsoleOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Views */}
@@ -111,14 +175,17 @@ export default function App() {
 
         {view === 'projects' && (
           <ProjectsGallery
+            user={user}
             onEditProject={handleLoadProject}
             onStartWizard={handleStartWizard}
+            onOpenAssignAuditor={(proj) => setAssignAuditorProject(proj)}
             lang={lang}
           />
         )}
 
         {view === 'wizard' && (
           <LoadVideoWizard
+            user={user}
             onCompleteProcess={handleCompleteProcess}
             onCancel={handleGoHome}
             lang={lang}
@@ -127,6 +194,7 @@ export default function App() {
 
         {view === 'editor' && currentProject && (
           <SubtitleWorkspace
+            user={user}
             initialProject={currentProject}
             onSaveAndClose={handleGoHome}
             lang={lang}
@@ -142,7 +210,42 @@ export default function App() {
         lang={lang}
       />
 
-      {/* Modals */}
+      {/* Auth & Profile Modals */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+        lang={lang}
+      />
+
+      <UserProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        onUpdateUser={handleUpdateUser}
+        lang={lang}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onChangeLang={toggleLang}
+      />
+
+      <AdminUserConsoleModal
+        isOpen={isAdminConsoleOpen}
+        onClose={() => setIsAdminConsoleOpen(false)}
+        currentUser={user}
+        lang={lang}
+      />
+
+      <AssignAuditorModal
+        isOpen={!!assignAuditorProject}
+        onClose={() => setAssignAuditorProject(null)}
+        project={assignAuditorProject}
+        currentUser={user}
+        onAssignedSuccess={() => handleOpenProjects()}
+        lang={lang}
+      />
+
+      {/* Legacy Modals */}
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} lang={lang} />
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} lang={lang} />
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} lang={lang} />

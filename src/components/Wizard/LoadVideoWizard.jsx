@@ -62,8 +62,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     }, 400);
 
     try {
+      const headers = user?.id ? { 'x-user-id': user.id } : {};
       const res = await fetch('/api/upload', {
         method: 'POST',
+        headers,
         body: formData
       });
       const data = await res.json();

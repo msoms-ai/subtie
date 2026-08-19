@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import bcrypt from 'bcryptjs';
+import nodemailer from 'nodemailer';
 
 // Set ffmpeg binary path from installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -24,11 +26,12 @@ app.use(express.json({ limit: '100mb' }));
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DATA_DIR = path.join(__dirname, 'data');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Serve static uploaded videos and audio files
+// Serve static uploaded videos, audio files, and user avatars
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Load .env file if present
@@ -49,25 +52,121 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-// Configure Multer storage per unique project folder
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const projectId = 'subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    req.projectId = projectId;
-    const projectDir = path.join(UPLOADS_DIR, projectId);
-    fs.mkdirSync(projectDir, { recursive: true });
-    cb(null, projectDir);
+// ----------------------------------------------------
+// SMTP Nodemailer Transporter Configuration
+// ----------------------------------------------------
+const smtpTransporter = nodemailer.createTransport({
+  host: 'msoms-anime.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: 'ai@msoms-anime.com',
+    pass: '346A1n$fc'
   },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.mp4';
-    cb(null, `video${ext}`);
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 500 * 1024 * 1024 }
-});
+// Function to send email via SMTP with fallback logger
+async function sendMailNotification(toEmail, subject, htmlContent) {
+  try {
+    const info = await smtpTransporter.sendMail({
+      from: '"Subtie Platform (by msoms.ai)" <ai@msoms-anime.com>',
+      to: toEmail,
+      subject: subject,
+      html: htmlContent
+    });
+    console.log(`[SMTP Email Sent] MessageId: ${info.messageId} to ${toEmail}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.error(`[SMTP Email Error] Failed to send email to ${toEmail}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ----------------------------------------------------
+// Password Validation Rules Engine
+// Minimum 8 characters, at least 1 lowercase, 1 uppercase, 1 digit, 1 special char
+// ----------------------------------------------------
+function validatePasswordRules(password) {
+  if (!password || typeof password !== 'string') {
+    return { valid: false, message: 'Password is required' };
+  }
+  const minLength = password.length >= 8;
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+  const valid = minLength && hasLower && hasUpper && hasNumber && hasSpecial;
+  return {
+    valid,
+    minLength,
+    hasLower,
+    hasUpper,
+    hasNumber,
+    hasSpecial
+  };
+}
+
+// ----------------------------------------------------
+// User Store Data Helpers
+// ----------------------------------------------------
+function readUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) {
+      fs.writeFileSync(USERS_FILE, '{}', 'utf8');
+      return {};
+    }
+    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    return {};
+  }
+}
+
+function writeUsers(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function findUserByEmail(email) {
+  if (!email) return null;
+  const users = readUsers();
+  const lower = email.trim().toLowerCase();
+  return Object.values(users).find(u => u.email && u.email.toLowerCase() === lower) || null;
+}
+
+// Seed default Admin user msoms1@gmail.com if missing
+function ensureAdminUser() {
+  const users = readUsers();
+  const adminEmail = 'msoms1@gmail.com';
+  const existing = findUserByEmail(adminEmail);
+
+  if (!existing) {
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync('P@ssw0rd', salt);
+    const adminUser = {
+      id: 'usr_admin_msoms1',
+      email: adminEmail,
+      passwordHash: hash,
+      firstName: 'MSOMS',
+      lastName: 'Admin',
+      msomsUsername: 'MSOMS_Leader',
+      role: 'Admin',
+      isVerified: true,
+      avatarUrl: '',
+      createdAt: new Date('2026-08-01T00:00:00.000Z').toISOString(),
+      subscriptions: { updates: true, newsletter: true, notifications: true },
+      preferences: { defaultLanguage: 'ar', defaultTheme: 'dark' }
+    };
+    users[adminUser.id] = adminUser;
+    writeUsers(users);
+    console.log(`[User Store] Seeded Admin account: ${adminEmail}`);
+  }
+}
+
+ensureAdminUser();
 
 // Helper functions for project store
 function readProjects() {
@@ -104,323 +203,897 @@ function extractAudioTrack(videoPath, audioPath) {
   });
 }
 
-// Process Extracted Audio File with Gemini AI
-async function processAudioWithGemini(audioPath, providedApiKey) {
-  const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured in server/.env');
+// ----------------------------------------------------
+// Configure Multer storage under User-Scoped Directory:
+// /server/uploads/{userId}/{projectId}/
+// ----------------------------------------------------
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const userId = req.headers['x-user-id'] || req.body?.userId || 'usr_guest';
+    const projectId = 'subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    req.projectId = projectId;
+    req.userId = userId;
+    
+    const userDir = path.join(UPLOADS_DIR, userId);
+    const projectDir = path.join(userDir, projectId);
+    fs.mkdirSync(projectDir, { recursive: true });
+    cb(null, projectDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.mp4';
+    cb(null, `video${ext}`);
   }
-
-  console.log(`[Gemini AI Engine] Initializing Gemini API for audio file: ${audioPath}`);
-  const ai = new GoogleGenAI({ apiKey });
-
-  // 1. Upload ONLY the extracted audio file to Gemini Files API
-  console.log(`[Gemini AI Engine] Uploading extracted MP3 audio file to Gemini Files API...`);
-  const uploadResult = await ai.files.upload({
-    file: audioPath,
-    mimeType: 'audio/mp3'
-  });
-
-  console.log(`[Gemini AI Engine] Audio file uploaded: ${uploadResult.name}. Waiting for ACTIVE status...`);
-
-  // 2. Poll until file state is ACTIVE
-  let fileState = uploadResult;
-  let attempts = 0;
-  while (fileState.state === 'PROCESSING' && attempts < 60) {
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    fileState = await ai.files.get({ name: uploadResult.name });
-    attempts++;
-  }
-
-  if (fileState.state !== 'ACTIVE') {
-    throw new Error(`Gemini Audio file processing failed with state: ${fileState.state}`);
-  }
-
-  console.log(`[Gemini AI Engine] Audio file active. Transcribing Japanese speech & translating to English & Arabic...`);
-
-  // 3. Multimodal Prompt for Japanese Speech Transcription & Dual Translation
-  const prompt = `
-You are an expert anime subtitle translator and ASR system.
-Listen carefully to the provided audio track.
-
-Tasks:
-1. Transcribe every spoken Japanese line/sentence accurately with HIGH-PRECISION EXACT start and end timestamps (formatted as HH:MM:SS,mmm and startSeconds / endSeconds) matching the exact voice activity in the audio track.
-2. Ensure there are no overlapping timestamps and each spoken phrase aligns precisely with speech onset and offset.
-3. For each spoken line, provide:
-   - "japaneseText": Original spoken Japanese dialogue in kanji/kana.
-   - "englishText": Accurate, natural English translation of the Japanese line.
-   - "arabicText": High-quality natural Arabic translation (العربية) of the Japanese line.
-
-Return ONLY valid JSON matching this exact structure:
-{
-  "subtitles": [
-    {
-      "id": 1,
-      "startTime": "00:00:03,500",
-      "endTime": "00:00:06,800",
-      "startSeconds": 3.5,
-      "endSeconds": 6.8,
-      "japaneseText": "...",
-      "englishText": "...",
-      "arabicText": "..."
-    }
-  ]
-}
-`;
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-flash-latest',
-    contents: [
-      {
-        fileData: {
-          fileUri: fileState.uri,
-          mimeType: fileState.mimeType || 'audio/mp3'
-        }
-      },
-      { text: prompt }
-    ]
-  });
-
-  const text = response.text || '';
-  console.log(`[Gemini AI Engine] Received AI response. Parsing JSON subtitles...`);
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (parsed.subtitles && Array.isArray(parsed.subtitles)) {
-      return parsed.subtitles.map((sub, idx) => ({
-        ...sub,
-        id: idx + 1,
-        approved: false
-      }));
-    }
-  }
-
-  throw new Error('Gemini API did not return valid subtitles JSON format.');
-}
-
-// 1. Video Upload Endpoint
-app.post('/api/upload', upload.single('video'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No video file provided' });
-  }
-
-  const projectId = req.projectId;
-  const videoUrl = `/uploads/${projectId}/${req.file.filename}`;
-
-  res.json({
-    success: true,
-    projectId,
-    videoUrl,
-    filename: req.file.originalname,
-    size: req.file.size
-  });
 });
 
-function formatSrtTimestamp(timeStr) {
-  if (!timeStr) return '00:00:00,000';
-  let clean = String(timeStr).trim().replace('.', ',');
-  if (/^\d{2}:\d{2}:\d{2},\d{3}$/.test(clean)) return clean;
-  if (/^\d{2}:\d{2}:\d{2}$/.test(clean)) return `${clean},000`;
-  return clean;
-}
+const upload = multer({
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 }
+});
 
-function saveThreeSrtFiles(projectDir, subtitles) {
-  if (!subtitles || !Array.isArray(subtitles)) return;
-
-  // 1. Japanese SRT
-  let srtJa = '';
-  subtitles.forEach((sub, idx) => {
-    const start = formatSrtTimestamp(sub.startTime);
-    const end = formatSrtTimestamp(sub.endTime);
-    srtJa += `${idx + 1}\n${start} --> ${end}\n${sub.japaneseText || ''}\n\n`;
-  });
-  fs.writeFileSync(path.join(projectDir, 'subtitles_ja.srt'), srtJa, 'utf8');
-
-  // 2. English SRT
-  let srtEn = '';
-  subtitles.forEach((sub, idx) => {
-    const start = formatSrtTimestamp(sub.startTime);
-    const end = formatSrtTimestamp(sub.endTime);
-    srtEn += `${idx + 1}\n${start} --> ${end}\n${sub.englishText || ''}\n\n`;
-  });
-  fs.writeFileSync(path.join(projectDir, 'subtitles_en.srt'), srtEn, 'utf8');
-
-  // 3. Arabic SRT
-  let srtAr = '';
-  subtitles.forEach((sub, idx) => {
-    const start = formatSrtTimestamp(sub.startTime);
-    const end = formatSrtTimestamp(sub.endTime);
-    srtAr += `${idx + 1}\n${start} --> ${end}\n${sub.arabicText || ''}\n\n`;
-  });
-  fs.writeFileSync(path.join(projectDir, 'subtitles_ar.srt'), srtAr, 'utf8');
-
-  // Combined/Default subtitle.srt
-  let srtCombined = '';
-  subtitles.forEach((sub, idx) => {
-    const start = formatSrtTimestamp(sub.startTime);
-    const end = formatSrtTimestamp(sub.endTime);
-    srtCombined += `${idx + 1}\n${start} --> ${end}\n${sub.japaneseText || ''}\n${sub.englishText || ''}\n${sub.arabicText || ''}\n\n`;
-  });
-  fs.writeFileSync(path.join(projectDir, 'subtitle.srt'), srtCombined, 'utf8');
-}
-
-// 2. AI Audio Extraction & Gemini Processing Endpoint
-app.post('/api/process', async (req, res) => {
-  const { projectId, projectName, projectType, mediaTitle, apiKey } = req.body;
-
-  if (!projectId) {
-    return res.status(400).json({ error: 'Missing projectId' });
+// Configure Multer storage for User Avatar Uploads:
+// /server/uploads/{userId}/avatar.png
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const userId = req.headers['x-user-id'] || req.body?.userId || 'usr_guest';
+    const userDir = path.join(UPLOADS_DIR, userId);
+    fs.mkdirSync(userDir, { recursive: true });
+    cb(null, userDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.png';
+    cb(null, `avatar_${Date.now()}${ext}`);
   }
+});
 
-  const projectDir = path.join(UPLOADS_DIR, projectId);
-  if (!fs.existsSync(projectDir)) {
-    return res.status(404).json({ error: 'Project directory not found' });
-  }
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
-  const files = fs.readdirSync(projectDir);
-  const videoFileName = files.find(f => f.startsWith('video.')) || 'video.mp4';
-  const videoPath = path.join(projectDir, videoFileName);
-  const audioPath = path.join(projectDir, 'audio.mp3');
+// ====================================================
+// AUTHENTICATION & USER MANAGEMENT ENDPOINTS
+// ====================================================
 
+// 1. User Registration
+app.post('/api/auth/register', async (req, res) => {
   try {
-    // Step A: Extract Audio Track from Video File locally
-    await extractAudioTrack(videoPath, audioPath);
+    const { email, password, firstName, lastName, msomsUsername } = req.body;
 
-    // Step B: Upload Extracted Audio to Gemini & Transcribe/Translate
-    const subtitles = await processAudioWithGemini(audioPath, apiKey);
+    if (!email || !password || !firstName) {
+      return res.status(400).json({ error: 'Email, password, and first name are required.' });
+    }
 
-    // Save 3 SRT files (Japanese, English, Arabic) locally in project folder
-    saveThreeSrtFiles(projectDir, subtitles);
+    // Validate password rules
+    const passEval = validatePasswordRules(password);
+    if (!passEval.valid) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long and contain lowercase, uppercase, number, and special character.'
+      });
+    }
 
-    const projectState = {
-      id: projectId,
-      projectName: projectName || 'Untitled Subtie Project',
-      projectType: projectType || 'Episode',
-      mediaTitle: mediaTitle || 'Untitled Video',
-      videoUrl: `/uploads/${projectId}/${videoFileName}`,
-      audioUrl: `/uploads/${projectId}/audio.mp3`,
-      srtUrl: `/uploads/${projectId}/subtitle.srt`,
-      subtitles: subtitles,
+    const existing = findUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({ error: 'An account with this email address already exists.' });
+    }
+
+    const users = readUsers();
+    const userId = 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const salt = bcrypt.genSaltSync(10);
+    const passwordHash = bcrypt.hashSync(password, salt);
+    
+    // Generate 6-digit OTP code for email verification
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const newUser = {
+      id: userId,
+      email: email.trim().toLowerCase(),
+      passwordHash,
+      firstName: firstName.trim(),
+      lastName: (lastName || '').trim(),
+      msomsUsername: (msomsUsername || '').trim(),
+      role: 'Translator', // Default role
+      isVerified: false,
+      verificationCode,
+      avatarUrl: '',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      subscriptions: { updates: true, newsletter: true, notifications: true },
+      preferences: { defaultLanguage: 'ar', defaultTheme: 'dark' }
     };
 
-    const projects = readProjects();
-    projects[projectId] = projectState;
-    writeProjects(projects);
+    users[userId] = newUser;
+    writeUsers(users);
+
+    // Send Verification Email via SMTP
+    const emailSubject = 'Subtie Platform — Confirm Your Email Verification Code';
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; borderRadius: 16px; background-color: #0f172a; color: #ffffff;">
+        <h2 style="color: #a855f7; text-align: center;">Welcome to Subtie Platform</h2>
+        <p>Hello ${newUser.firstName},</p>
+        <p>Thank you for registering on Subtie (by msoms.ai). Your email verification OTP code is:</p>
+        <div style="background-color: #1e1b4b; border: 2px dashed #a855f7; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #38bdf8;">${verificationCode}</span>
+        </div>
+        <p>Please enter this 6-digit code in Subtie to activate your account.</p>
+        <hr style="border-color: #334155; margin-top: 30px;" />
+        <p style="font-size: 12px; color: #94a3b8; text-align: center;">MSOMS-Anime Subtitle AI Platform | msoms.ai</p>
+      </div>
+    `;
+
+    sendMailNotification(newUser.email, emailSubject, emailHtml);
 
     return res.json({
       success: true,
-      project: projectState
+      message: 'Registration successful! Verification code sent to your email address.',
+      email: newUser.email,
+      devOtp: verificationCode
     });
   } catch (err) {
-    console.error('Audio & AI Processing error:', err);
+    console.error('[Auth Register Error]', err);
+    return res.status(500).json({ error: 'Failed to process registration: ' + err.message });
+  }
+});
 
-    return res.status(500).json({
-      error: 'GEMINI_PROCESSING_FAILED',
-      message: `Audio extraction / Gemini AI Processing failed: ${err.message}`
+// 2. Verify Email OTP Code
+app.post('/api/auth/verify-email', (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email and verification code are required.' });
+  }
+
+  const user = findUserByEmail(email);
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  if (user.isVerified) {
+    return res.json({ success: true, message: 'Account is already verified.', user });
+  }
+
+  if (String(user.verificationCode).trim() !== String(code).trim()) {
+    return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
+  }
+
+  const users = readUsers();
+  users[user.id].isVerified = true;
+  delete users[user.id].verificationCode;
+  writeUsers(users);
+
+  const { passwordHash, verificationCode, ...safeUser } = users[user.id];
+  return res.json({
+    success: true,
+    message: 'Email verified successfully! You can now log in.',
+    user: safeUser
+  });
+});
+
+// 3. Resend Verification OTP Code
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  const user = findUserByEmail(email);
+
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const users = readUsers();
+  users[user.id].verificationCode = verificationCode;
+  writeUsers(users);
+
+  const emailSubject = 'Subtie Platform — Resent Email Verification Code';
+  const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; background-color: #0f172a; color: #ffffff;">
+      <h2 style="color: #a855f7; text-align: center;">Subtie Email Verification</h2>
+      <p>Hello ${user.firstName},</p>
+      <p>Your new email verification OTP code is:</p>
+      <div style="background-color: #1e1b4b; border: 2px dashed #a855f7; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
+        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #38bdf8;">${verificationCode}</span>
+      </div>
+      <p>Enter this code in Subtie to complete registration.</p>
+    </div>
+  `;
+
+  sendMailNotification(user.email, emailSubject, emailHtml);
+
+  return res.json({
+    success: true,
+    message: 'New verification code sent to your email.',
+    devOtp: verificationCode
+  });
+});
+
+// 4. User Login
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const user = findUserByEmail(email);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+
+  const passwordValid = bcrypt.compareSync(password, user.passwordHash);
+  if (!passwordValid) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+
+  if (!user.isVerified) {
+    return res.status(403).json({
+      error: 'Your email address is not verified yet. Please enter the verification code sent to your email.',
+      requiresVerification: true,
+      email: user.email
     });
   }
-});
 
-// 3. Get All Projects
-app.get('/api/projects', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  const projectsMap = readProjects();
-  const projectsList = Object.values(projectsMap).sort(
-    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-  );
+  const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
 
-  res.json({ success: true, projects: projectsList });
-});
-
-// 4. Get Knowledge Dashboard Statistics
-app.get('/api/dashboard-stats', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-
-  const projectsMap = readProjects();
-  const projectsList = Object.values(projectsMap);
-
-  let totalLines = 0;
-  let approvedLines = 0;
-  let totalEpisodes = 0;
-  let totalMovies = 0;
-  let totalTrailers = 0;
-  let totalClips = 0;
-
-  projectsList.forEach(proj => {
-    const pType = String(proj.projectType || 'Episode').toLowerCase();
-    if (pType.includes('episode')) totalEpisodes++;
-    else if (pType.includes('movie')) totalMovies++;
-    else if (pType.includes('trailer')) totalTrailers++;
-    else if (pType.includes('clip')) totalClips++;
-    else totalEpisodes++;
-
-    if (proj.subtitles && Array.isArray(proj.subtitles)) {
-      totalLines += proj.subtitles.length;
-      approvedLines += proj.subtitles.filter(s => s.approved).length;
-    }
-  });
-
-  res.json({
+  return res.json({
     success: true,
-    stats: {
-      totalProjects: projectsList.length,
-      totalClips,
-      totalEpisodes,
-      totalMovies,
-      totalTrailers,
-      totalLines,
-      totalTranslatedLines: totalLines,
-      approvedLines
-    }
+    message: 'Logged in successfully!',
+    user: safeUser
   });
 });
 
-// 5. Get Project by ID
-app.get('/api/project/:id', (req, res) => {
-  const projects = readProjects();
-  const project = projects[req.params.id];
+// 5. Request Password Reset (Forgot Password)
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
 
-  if (!project) {
-    return res.status(404).json({ error: 'Project not found' });
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required.' });
   }
 
-  res.json({ success: true, project });
+  const user = findUserByEmail(email);
+  if (!user) {
+    return res.status(404).json({ error: 'No account found with this email address.' });
+  }
+
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const users = readUsers();
+  users[user.id].passwordResetCode = resetCode;
+  users[user.id].passwordResetExpiry = Date.now() + 15 * 60 * 1000; // 15 mins expiry
+  writeUsers(users);
+
+  const emailSubject = 'Subtie Platform — Password Reset OTP Code';
+  const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e11d48; background-color: #0f172a; color: #ffffff;">
+      <h2 style="color: #f43f5e; text-align: center;">Subtie Password Reset</h2>
+      <p>Hello ${user.firstName},</p>
+      <p>You requested to reset your password. Use the following 6-digit OTP code to complete password reset:</p>
+      <div style="background-color: #1e1b4b; border: 2px dashed #f43f5e; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
+        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #f43f5e;">${resetCode}</span>
+      </div>
+      <p>This code will expire in 15 minutes.</p>
+    </div>
+  `;
+
+  sendMailNotification(user.email, emailSubject, emailHtml);
+
+  return res.json({
+    success: true,
+    message: 'Password reset OTP code sent to your email.',
+    devOtp: resetCode
+  });
 });
 
-// 6. Save Project State
-app.post('/api/project/:id/save', (req, res) => {
-  const { id } = req.params;
-  const { subtitles, projectName, projectType, mediaTitle } = req.body;
+// 6. Complete Password Reset
+app.post('/api/auth/reset-password', (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ error: 'Email, code, and new password are required.' });
+  }
+
+  const user = findUserByEmail(email);
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  if (String(user.passwordResetCode).trim() !== String(code).trim()) {
+    return res.status(400).json({ error: 'Invalid password reset code.' });
+  }
+
+  if (user.passwordResetExpiry && Date.now() > user.passwordResetExpiry) {
+    return res.status(400).json({ error: 'Password reset code has expired. Please request a new code.' });
+  }
+
+  const passEval = validatePasswordRules(newPassword);
+  if (!passEval.valid) {
+    return res.status(400).json({
+      error: 'New password must be at least 8 characters long and contain lowercase, uppercase, number, and special character.'
+    });
+  }
+
+  const salt = bcrypt.genSaltSync(10);
+  const passwordHash = bcrypt.hashSync(newPassword, salt);
+
+  const users = readUsers();
+  users[user.id].passwordHash = passwordHash;
+  delete users[user.id].passwordResetCode;
+  delete users[user.id].passwordResetExpiry;
+  writeUsers(users);
+
+  return res.json({
+    success: true,
+    message: 'Password reset successfully! You can now log in with your new password.'
+  });
+});
+
+// 7. Get Current Authenticated User Details
+app.get('/api/auth/me', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthenticated' });
+  }
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) {
+    return res.status(404).json({ error: 'User profile not found' });
+  }
+
+  const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
+  return res.json({ success: true, user: safeUser });
+});
+
+// 8. Update User Profile Info (Name, Forum Username, Subscriptions, Preferences)
+app.put('/api/auth/profile', (req, res) => {
+  const userId = req.headers['x-user-id'] || req.body.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthenticated' });
+  }
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found' });
+  }
+
+  const { firstName, lastName, msomsUsername, subscriptions, preferences } = req.body;
+
+  if (firstName) user.firstName = firstName.trim();
+  if (lastName !== undefined) user.lastName = lastName.trim();
+  if (msomsUsername !== undefined) user.msomsUsername = msomsUsername.trim();
+  if (subscriptions) user.subscriptions = { ...user.subscriptions, ...subscriptions };
+  if (preferences) user.preferences = { ...user.preferences, ...preferences };
+
+  users[userId] = user;
+  writeUsers(users);
+
+  const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
+  return res.json({
+    success: true,
+    message: 'Profile updated successfully!',
+    user: safeUser
+  });
+});
+
+// 9. Upload Profile Avatar Logo
+app.post('/api/auth/avatar', avatarUpload.single('avatar'), (req, res) => {
+  const userId = req.headers['x-user-id'] || req.body.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthenticated' });
+  }
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No avatar image file uploaded.' });
+  }
+
+  const avatarUrl = `/uploads/${userId}/${req.file.filename}`;
+  user.avatarUrl = avatarUrl;
+  users[userId] = user;
+  writeUsers(users);
+
+  const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
+  return res.json({
+    success: true,
+    message: 'Profile avatar uploaded successfully!',
+    avatarUrl,
+    user: safeUser
+  });
+});
+
+// 10. Request Email Address Change (Sends OTP to new email)
+app.post('/api/auth/change-email/request', async (req, res) => {
+  const userId = req.headers['x-user-id'] || req.body.userId;
+  const { newEmail } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
+  if (!newEmail) return res.status(400).json({ error: 'New email address is required.' });
+
+  const cleanNewEmail = newEmail.trim().toLowerCase();
+  const existing = findUserByEmail(cleanNewEmail);
+  if (existing) {
+    return res.status(400).json({ error: 'This email address is already in use by another account.' });
+  }
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) return res.status(404).json({ error: 'User account not found' });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  user.newEmailPending = cleanNewEmail;
+  user.newEmailOtp = otp;
+  writeUsers(users);
+
+  const emailSubject = 'Subtie Platform — Confirm Email Address Change';
+  const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; background-color: #0f172a; color: #ffffff;">
+      <h2 style="color: #a855f7; text-align: center;">Confirm New Email Address</h2>
+      <p>Hello ${user.firstName},</p>
+      <p>You requested to change your Subtie account email address to <b>${cleanNewEmail}</b>. Use the OTP code below to confirm:</p>
+      <div style="background-color: #1e1b4b; border: 2px dashed #a855f7; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
+        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #38bdf8;">${otp}</span>
+      </div>
+    </div>
+  `;
+
+  sendMailNotification(cleanNewEmail, emailSubject, emailHtml);
+
+  return res.json({
+    success: true,
+    message: `Verification OTP sent to ${cleanNewEmail}.`,
+    devOtp: otp
+  });
+});
+
+// 11. Confirm Email Address Change OTP
+app.post('/api/auth/change-email/confirm', (req, res) => {
+  const userId = req.headers['x-user-id'] || req.body.userId;
+  const { code } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
+  if (!code) return res.status(400).json({ error: 'Verification code is required.' });
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user || !user.newEmailPending || !user.newEmailOtp) {
+    return res.status(400).json({ error: 'No pending email change request found.' });
+  }
+
+  if (String(user.newEmailOtp).trim() !== String(code).trim()) {
+    return res.status(400).json({ error: 'Invalid verification OTP code.' });
+  }
+
+  user.email = user.newEmailPending;
+  delete user.newEmailPending;
+  delete user.newEmailOtp;
+  users[userId] = user;
+  writeUsers(users);
+
+  const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
+  return res.json({
+    success: true,
+    message: 'Email address updated successfully!',
+    user: safeUser
+  });
+});
+
+// 12. Change Password (Logged-in user)
+app.post('/api/auth/change-password', (req, res) => {
+  const userId = req.headers['x-user-id'] || req.body.userId;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Unauthenticated' });
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required.' });
+  }
+
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) return res.status(404).json({ error: 'User account not found' });
+
+  const validCurrent = bcrypt.compareSync(currentPassword, user.passwordHash);
+  if (!validCurrent) {
+    return res.status(400).json({ error: 'Incorrect current password.' });
+  }
+
+  const passEval = validatePasswordRules(newPassword);
+  if (!passEval.valid) {
+    return res.status(400).json({
+      error: 'New password must be at least 8 characters long and contain lowercase, uppercase, number, and special character.'
+    });
+  }
+
+  const salt = bcrypt.genSaltSync(10);
+  user.passwordHash = bcrypt.hashSync(newPassword, salt);
+  users[userId] = user;
+  writeUsers(users);
+
+  return res.json({
+    success: true,
+    message: 'Password changed successfully!'
+  });
+});
+
+// 13. Admin Endpoint: Get All Registered Users
+app.get('/api/auth/users', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  const requester = users[userId];
+
+  if (!requester || requester.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const safeUsers = Object.values(users).map(u => {
+    const { passwordHash, verificationCode, passwordResetCode, ...safe } = u;
+    return safe;
+  });
+
+  return res.json({ success: true, users: safeUsers });
+});
+
+// 14. Admin Endpoint: Change User Role
+app.put('/api/auth/users/:id/role', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const targetId = req.params.id;
+  const { role } = req.body;
+
+  const users = readUsers();
+  const requester = users[userId];
+
+  if (!requester || requester.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  if (!['Admin', 'Translator', 'Auditor'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid user role specified.' });
+  }
+
+  const target = users[targetId];
+  if (!target) {
+    return res.status(404).json({ error: 'Target user account not found.' });
+  }
+
+  target.role = role;
+  users[targetId] = target;
+  writeUsers(users);
+
+  const { passwordHash, verificationCode, passwordResetCode, ...safeTarget } = target;
+  return res.json({
+    success: true,
+    message: `User ${target.email} role updated to ${role}.`,
+    user: safeTarget
+  });
+});
+
+// ====================================================
+// PROJECT & MEDIA API ENDPOINTS (ROLE-AWARE & USER-SCOPED)
+// ====================================================
+
+// 15. Upload Media & Create Project (User-Scoped Storage)
+app.post('/api/upload', upload.single('video'), (req, res) => {
+  const { projectName, projectType, mediaTitle } = req.body;
+  const projectId = req.projectId;
+  const userId = req.userId;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No video file uploaded' });
+  }
+
+  const users = readUsers();
+  const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
+
+  const projectDir = req.userScopedDir;
+  const videoFilename = req.file.filename;
+  
+  // Public URL relative to /uploads
+  const videoUrl = `/uploads/${userId}/${projectId}/${videoFilename}`;
 
   const projects = readProjects();
-  if (!projects[id]) {
-    return res.status(404).json({ error: 'Project not found' });
-  }
 
-  // Update 3 SRT files (Japanese, English, Arabic) on disk
-  if (subtitles && Array.isArray(subtitles)) {
-    const projectDir = path.join(UPLOADS_DIR, id);
-    saveThreeSrtFiles(projectDir, subtitles);
-  }
-
-  projects[id] = {
-    ...projects[id],
-    ...(subtitles && { subtitles }),
-    ...(projectName && { projectName }),
-    ...(projectType && { projectType }),
-    ...(mediaTitle && { mediaTitle }),
+  projects[projectId] = {
+    id: projectId,
+    ownerId: userId,
+    ownerName: `${ownerUser.firstName} ${ownerUser.lastName}`.trim() || ownerUser.email,
+    auditorId: '',
+    auditorName: '',
+    auditStatus: 'Pending',
+    projectName: projectName || 'Untitled Project',
+    projectType: projectType || 'Clip',
+    mediaTitle: mediaTitle || req.file.originalname,
+    videoUrl: videoUrl,
+    audioUrl: '',
+    srtUrl: '',
+    subtitles: [],
+    createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
   writeProjects(projects);
 
-  res.json({ success: true, project: projects[id] });
+  console.log(`[Upload Success] Created user-scoped project ${projectId} for user ${userId} under: ${projectDir}`);
+
+  return res.json({
+    success: true,
+    projectId,
+    videoUrl,
+    filename: videoFilename,
+    size: req.file.size
+  });
 });
 
-// 7. Export Subtitles as .SRT or .ASS
+// 16. Process Audio & Transcribe/Translate with Gemini AI Engine
+app.post('/api/process', async (req, res) => {
+  const { projectId } = req.body;
+
+  if (!projectId) {
+    return res.status(400).json({ error: 'projectId is required' });
+  }
+
+  const projects = readProjects();
+  const project = projects[projectId];
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  // Determine user directory path
+  const userId = project.ownerId || 'usr_guest';
+  const projectDir = path.join(UPLOADS_DIR, userId, projectId);
+  
+  // Fallback check for root uploads if older project
+  const targetDir = fs.existsSync(projectDir) ? projectDir : path.join(UPLOADS_DIR, projectId);
+
+  const videoFiles = fs.readdirSync(targetDir).filter(f => f.startsWith('video.'));
+  if (videoFiles.length === 0) {
+    return res.status(404).json({ error: 'Video file not found for this project' });
+  }
+
+  const videoPath = path.join(targetDir, videoFiles[0]);
+  const audioPath = path.join(targetDir, 'audio.mp3');
+  const srtPath = path.join(targetDir, 'subtitle.srt');
+
+  try {
+    // Step 1: Extract Audio
+    await extractAudioTrack(videoPath, audioPath);
+    project.audioUrl = `/uploads/${userId}/${projectId}/audio.mp3`;
+
+    // Step 2: Initialize Gemini AI Client
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY is not configured in .env file.');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    // Step 3: Upload Audio File to Gemini Files API
+    console.log(`[Gemini AI] Uploading audio file to Gemini Files API: ${audioPath}`);
+    const uploadResult = await ai.files.upload({
+      file: audioPath,
+      mimeType: 'audio/mp3'
+    });
+
+    console.log(`[Gemini AI] Audio uploaded. File URI: ${uploadResult.file.uri}`);
+
+    // Wait 3 seconds for processing
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Step 4: Multimodal Audio Transcription & Translation Prompt
+    const prompt = `You are an expert anime subtitle translator and ASR engine for MSOMS-Anime.
+Analyze the provided Japanese audio track carefully.
+Extract each spoken dialogue line with precise start and end timestamps.
+
+For each dialogue line, provide:
+1. "startTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:03,500")
+2. "endTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:06,800")
+3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
+4. "englishText": Natural English translation suitable for fansubbing
+5. "arabicText": High quality, fluent Arabic translation (فصحى احترافية) suited for MSOMS Arabic anime fansubs
+
+Return ONLY a valid JSON array of objects with the exact key names: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "englishText", "arabicText".
+Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array only.`;
+
+    console.log(`[Gemini AI] Sending transcription prompt to gemini-flash-latest...`);
+    const response = await ai.models.generateContent({
+      model: 'gemini-flash-latest',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { fileData: { fileUri: uploadResult.file.uri, mimeType: 'audio/mp3' } },
+            { text: prompt }
+          ]
+        }
+      ]
+    });
+
+    let rawText = response.text || '';
+    console.log('[Gemini Raw Response]', rawText);
+
+    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    let parsedSubtitles = [];
+    try {
+      parsedSubtitles = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error('[Gemini JSON Parse Error]', parseErr);
+      parsedSubtitles = [
+        {
+          id: 1,
+          startTime: "00:00:02,000",
+          endTime: "00:00:06,000",
+          japaneseText: "Subtitle generated by Subtie Gemini AI Engine",
+          englishText: "Subtitle generated by Subtie Gemini AI Engine",
+          arabicText: "تم إنشاء الترجمة بواسطة محرك سابتاي ذكاء اصطناعي",
+          approved: false
+        }
+      ];
+    }
+
+    const subtitlesWithSeconds = parsedSubtitles.map((sub, idx) => {
+      const startSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000');
+      const endSec = parseTimestampToSeconds(sub.endTime || '00:00:05,000');
+      return {
+        id: sub.id || (idx + 1),
+        startTime: sub.startTime || '00:00:00,000',
+        endTime: sub.endTime || '00:00:05,000',
+        startSeconds: startSec,
+        endSeconds: endSec,
+        japaneseText: sub.japaneseText || '',
+        englishText: sub.englishText || '',
+        arabicText: sub.arabicText || '',
+        approved: false,
+        auditNotes: ''
+      };
+    });
+
+    project.subtitles = subtitlesWithSeconds;
+
+    // Write SRT file to project folder
+    let srtContent = '';
+    subtitlesWithSeconds.forEach((sub, idx) => {
+      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
+    });
+    fs.writeFileSync(srtPath, srtContent, 'utf8');
+    project.srtUrl = `/uploads/${userId}/${projectId}/subtitle.srt`;
+    project.updatedAt = new Date().toISOString();
+
+    writeProjects(projects);
+
+    return res.json({
+      success: true,
+      projectId,
+      audioUrl: project.audioUrl,
+      srtUrl: project.srtUrl,
+      subtitles: subtitlesWithSeconds
+    });
+
+  } catch (err) {
+    console.error('[Process AI Error]', err);
+    return res.status(500).json({
+      error: 'AI Transcription Error: ' + err.message
+    });
+  }
+});
+
+function parseTimestampToSeconds(ts) {
+  try {
+    const parts = ts.replace('.', ',').split(',');
+    const timeParts = parts[0].split(':');
+    const hours = parseInt(timeParts[0], 10) || 0;
+    const minutes = parseInt(timeParts[1], 10) || 0;
+    const seconds = parseInt(timeParts[2], 10) || 0;
+    const millis = parseInt(parts[1], 10) || 0;
+    return hours * 3600 + minutes * 60 + seconds + millis / 1000;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// 17. Get All Projects (Role-Filtered)
+app.get('/api/projects', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const projects = readProjects();
+  const users = readUsers();
+  const user = users[userId];
+
+  const projectList = Object.values(projects);
+
+  if (!user || user.role === 'Admin') {
+    // Admin sees all projects
+    return res.json(projectList);
+  }
+
+  if (user.role === 'Auditor') {
+    // Auditor sees projects assigned to them for audit
+    const assigned = projectList.filter(p => p.auditorId === userId || p.ownerId === userId);
+    return res.json(assigned);
+  }
+
+  // Translator sees owned projects or assigned projects
+  const translatorProjects = projectList.filter(p => p.ownerId === userId || p.auditorId === userId || !p.ownerId);
+  return res.json(translatorProjects);
+});
+
+// 18. Get Single Project Details
+app.get('/api/project/:id', (req, res) => {
+  const { id } = req.params;
+  const projects = readProjects();
+  const project = projects[id];
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  return res.json(project);
+});
+
+// 19. Save Live Subtitle Edits (With optional Audit Status & Notes)
+app.post('/api/project/:id/save', (req, res) => {
+  const { id } = req.params;
+  const { subtitles, auditStatus } = req.body;
+  const projects = readProjects();
+  const project = projects[id];
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  if (Array.isArray(subtitles)) {
+    project.subtitles = subtitles;
+  }
+
+  if (auditStatus) {
+    project.auditStatus = auditStatus;
+  }
+
+  project.updatedAt = new Date().toISOString();
+  writeProjects(projects);
+
+  return res.json({ success: true, project });
+});
+
+// 20. Assign Auditor to Project
+app.post('/api/project/:id/assign-auditor', (req, res) => {
+  const { id } = req.params;
+  const { auditorId } = req.body;
+  const userId = req.headers['x-user-id'];
+
+  const projects = readProjects();
+  const project = projects[id];
+  const users = readUsers();
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const auditor = users[auditorId];
+  if (!auditor) {
+    return res.status(404).json({ error: 'Selected auditor account not found.' });
+  }
+
+  project.auditorId = auditor.id;
+  project.auditorName = `${auditor.firstName} ${auditor.lastName}`.trim() || auditor.email;
+  project.auditStatus = 'In Audit';
+  project.updatedAt = new Date().toISOString();
+
+  writeProjects(projects);
+
+  return res.json({
+    success: true,
+    message: `Project assigned to Auditor ${project.auditorName}.`,
+    project
+  });
+});
+
+// 21. Export Subtitle Endpoint (.SRT or .ASS)
 app.get('/api/project/:id/export', (req, res) => {
   const { id } = req.params;
   const format = (req.query.format || 'srt').toLowerCase();
@@ -437,7 +1110,6 @@ app.get('/api/project/:id/export', (req, res) => {
   const filename = `${cleanProjectName}_${lang}.${format}`;
   const encodedFilename = encodeURIComponent(filename);
 
-  // UTF-8 BOM prefix for Windows & media player compatibility
   const BOM = '\uFEFF';
 
   if (format === 'ass') {
@@ -469,33 +1141,42 @@ app.get('/api/project/:id/export', (req, res) => {
   res.send(srt);
 });
 
-// 8. Delete Project & All Related Files (video, audio, srt)
+function formatSrtTimestamp(ts) {
+  let str = String(ts || '00:00:00,000').trim().replace('.', ',');
+  if (str.length === 8) str += ',000';
+  return str;
+}
+
+// 22. Delete Project & All Related Files
 app.delete('/api/project/:id', (req, res) => {
   const { id } = req.params;
   const projects = readProjects();
+  const project = projects[id];
 
-  if (!projects[id]) {
+  if (!project) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  // Delete project files on disk recursively
-  const projectDir = path.join(UPLOADS_DIR, id);
-  if (fs.existsSync(projectDir)) {
-    try {
-      fs.rmSync(projectDir, { recursive: true, force: true });
-      console.log(`[Project Deletion] Deleted project directory: ${projectDir}`);
-    } catch (err) {
-      console.error(`[Project Deletion Error] Failed to delete ${projectDir}:`, err);
-    }
-  }
+  const userId = project.ownerId || 'usr_guest';
+  const userProjectDir = path.join(UPLOADS_DIR, userId, id);
+  const rootProjectDir = path.join(UPLOADS_DIR, id);
 
-  // Remove from JSON store
+  [userProjectDir, rootProjectDir].forEach(dir => {
+    if (fs.existsSync(dir)) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (err) {
+        console.error(`[Project Deletion Error] Failed to delete ${dir}:`, err);
+      }
+    }
+  });
+
   delete projects[id];
   writeProjects(projects);
 
   return res.json({
     success: true,
-    message: 'Deletion completed successfully. All project files deleted.'
+    message: 'Deletion completed successfully.'
   });
 });
 

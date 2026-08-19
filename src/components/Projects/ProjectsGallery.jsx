@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter } from 'lucide-react';
+import { Search, Trash2, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
 
-export default function ProjectsGallery({ onEditProject, onStartWizard, lang = 'en' }) {
+export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAssignAuditor, user, lang = 'en' }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,9 +15,12 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/projects', { cache: 'no-store' });
+      const headers = user?.id ? { 'x-user-id': user.id } : {};
+      const res = await fetch('/api/projects', { cache: 'no-store', headers });
       const data = await res.json();
-      if (data.success) {
+      if (Array.isArray(data)) {
+        setProjects(data);
+      } else if (data.success) {
         setProjects(data.projects || []);
       }
     } catch (err) {
@@ -29,7 +32,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [user]);
 
   const handleDeleteConfirm = async () => {
     if (!deletingProjectId) return;
@@ -37,7 +40,8 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
 
     try {
       const res = await fetch(`/api/project/${deletingProjectId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: user?.id ? { 'x-user-id': user.id } : {}
       });
       const data = await res.json();
 
@@ -134,18 +138,20 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
             />
           </div>
 
-          {/* Create New Project Button */}
-          <button
-            onClick={onStartWizard}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 shrink-0 transition wizard-white-text border border-purple-400/40"
-          >
-            <PlusCircle className="w-4.5 h-4.5 text-pink-200" />
-            <span>{isAr ? 'مشروع جديد' : 'New Project'}</span>
-          </button>
+          {/* Create New Project Button (Translators & Admins) */}
+          {(!user || user.role !== 'Auditor') && (
+            <button
+              onClick={onStartWizard}
+              className="flex items-center space-x-2 rtl:space-x-reverse px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 shrink-0 transition wizard-white-text border border-purple-400/40"
+            >
+              <PlusCircle className="w-4.5 h-4.5 text-pink-200" />
+              <span>{isAr ? 'مشروع جديد' : 'New Project'}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* CATEGORY FILTER TABS BAR (RTL Localized) */}
+      {/* CATEGORY FILTER TABS BAR */}
       <div className="flex items-center space-x-2 rtl:space-x-reverse overflow-x-auto pb-2" dir={isAr ? 'rtl' : 'ltr'}>
         <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 flex items-center space-x-1 rtl:space-x-reverse shrink-0 px-2">
           <Filter className="w-3.5 h-3.5 text-pink-400 theme-light:text-purple-700" />
@@ -192,12 +198,14 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
               ? (isAr ? 'لم يتم العثور على نتائج تطابق البحث المدخل' : 'No projects match your search query.')
               : (isAr ? 'ابدأ بإنشاء أول مشروع ترجمة أنمي الآن وافتح محرر التزامن المتقدم!' : 'Get started by creating your first video fansub project!')}
           </p>
-          <button
-            onClick={onStartWizard}
-            className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xs sm:text-sm shadow-xl wizard-white-text border border-purple-400/40"
-          >
-            {isAr ? 'إنشاء مشروع جديد الآن' : 'Create Project Now'}
-          </button>
+          {(!user || user.role !== 'Auditor') && (
+            <button
+              onClick={onStartWizard}
+              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xs sm:text-sm shadow-xl wizard-white-text border border-purple-400/40"
+            >
+              {isAr ? 'إنشاء مشروع جديد الآن' : 'Create Project Now'}
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -205,6 +213,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
             const lineCount = p.subtitles?.length || 0;
             const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
             const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
+            const isAuditorAssigned = p.auditorId && user?.id === p.auditorId;
 
             return (
               <div
@@ -213,24 +222,49 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
               >
                 <div className="w-full space-y-3">
                   
-                  {/* Top Badge (ARABIC CATEGORY TRANSLATION) & Delete Icon */}
+                  {/* Top Badge & Actions */}
                   <div className="flex items-center justify-between w-full" dir={isAr ? 'rtl' : 'ltr'}>
                     <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-800 px-3.5 py-1.5 rounded-full border-2 border-purple-400 shadow-sm text-xs font-black text-white wizard-white-text">
                       {getCategoryIcon(p.projectType)}
                       <span>{getCategoryLabel(p.projectType)}</span>
                     </div>
 
-                    <button
-                      onClick={() => setDeletingProjectId(p.id)}
-                      className="p-2 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 text-white border border-rose-500/40 hover:scale-110 transition shadow-sm wizard-white-text"
-                      title={isAr ? 'حذف المشروع' : 'Delete Project'}
-                    >
-                      <Trash2 className="w-4 h-4 text-white" />
-                    </button>
+                    {/* Delete Icon (Admins & Owners) */}
+                    {(!user || user.role === 'Admin' || user.id === p.ownerId) && (
+                      <button
+                        onClick={() => setDeletingProjectId(p.id)}
+                        className="p-2 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 text-white border border-rose-500/40 hover:scale-110 transition shadow-sm wizard-white-text"
+                        title={isAr ? 'حذف المشروع' : 'Delete Project'}
+                      >
+                        <Trash2 className="w-4 h-4 text-white" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Owner & Auditor Badges */}
+                  <div className="flex items-center justify-between text-[11px] font-black pt-1" dir={isAr ? 'rtl' : 'ltr'}>
+                    <span className="text-purple-300 theme-light:text-purple-900">
+                      👤 {p.ownerName || (isAr ? 'مالك المشروع' : 'Owner')}
+                    </span>
+                    {p.auditorName ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        🔍 {isAr ? 'المدقق:' : 'Auditor:'} {p.auditorName}
+                      </span>
+                    ) : (
+                      (!user || user.role !== 'Auditor') && (
+                        <button
+                          onClick={() => onOpenAssignAuditor(p)}
+                          className="text-pink-400 hover:text-pink-300 font-bold underline flex items-center space-x-1 rtl:space-x-reverse"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>{isAr ? 'تعيين مدقق' : 'Assign Auditor'}</span>
+                        </button>
+                      )
+                    )}
                   </div>
 
                   {/* Project Titles */}
-                  <div className="text-center pt-2" dir={isAr ? 'rtl' : 'ltr'}>
+                  <div className="text-center pt-1" dir={isAr ? 'rtl' : 'ltr'}>
                     <h3 className="text-xl font-black text-white theme-light:text-slate-950 group-hover:text-pink-300 theme-light:group-hover:text-purple-700 transition truncate">
                       {p.projectName}
                     </h3>
@@ -255,7 +289,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
 
                 </div>
 
-                {/* Subtitle Stats Boxes with Solid Purple & White Text */}
+                {/* Subtitle Stats Boxes */}
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-purple-500/20 w-full" dir={isAr ? 'rtl' : 'ltr'}>
                   <div className="bg-purple-950 theme-light:bg-purple-800 p-3 rounded-2xl border-2 border-purple-400/80 shadow-md flex flex-col items-center justify-center text-center wizard-white-text">
                     <span className="text-[11px] text-purple-200 font-bold block mb-0.5 text-center">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
@@ -268,13 +302,17 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, lang = '
                   </div>
                 </div>
 
-                {/* Action Button: Vibrant Gradient Pill */}
+                {/* Action Button */}
                 <button
                   onClick={() => onEditProject(p)}
                   className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-[1.02] text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center space-x-2 rtl:space-x-reverse transition wizard-white-text border border-purple-400/40"
                 >
                   <Edit3 className="w-4 h-4 text-pink-200" />
-                  <span>{isAr ? 'فتح المحرر ومساحة العمل' : 'Open Subtitle Workspace'}</span>
+                  <span>
+                    {isAuditorAssigned
+                      ? (isAr ? 'مراجعة وتدقيق المشروع (Auditor Workspace)' : 'Review & Audit Subtitles')
+                      : (isAr ? 'فتح المحرر ومساحة العمل' : 'Open Subtitle Workspace')}
+                  </span>
                 </button>
               </div>
             );
