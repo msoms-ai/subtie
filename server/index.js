@@ -53,34 +53,36 @@ if (fs.existsSync(envPath)) {
 }
 
 // ----------------------------------------------------
-// SMTP Nodemailer Transporter Configuration
+// Resend Email Dispatch Engine (Domain: msoms.ai)
 // ----------------------------------------------------
-const smtpTransporter = nodemailer.createTransport({
-  host: 'msoms-anime.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: 'ai@msoms-anime.com',
-    pass: '346A1n$fc'
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
-// Function to send email via SMTP with fallback logger
 async function sendMailNotification(toEmail, subject, htmlContent) {
   try {
-    const info = await smtpTransporter.sendMail({
-      from: '"Subtie Platform (by msoms.ai)" <ai@msoms-anime.com>',
-      to: toEmail,
-      subject: subject,
-      html: htmlContent
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'Subtie Platform <ai@msoms.ai>',
+        to: [toEmail],
+        subject: subject,
+        html: htmlContent
+      })
     });
-    console.log(`[SMTP Email Sent] MessageId: ${info.messageId} to ${toEmail}`);
-    return { success: true, messageId: info.messageId };
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error(`[Resend Email Error] API returned status ${res.status}:`, data);
+      return { success: false, error: data.message || 'Resend email error' };
+    }
+
+    console.log(`[Resend Email Sent] ID: ${data.id} to ${toEmail}`);
+    return { success: true, messageId: data.id };
   } catch (err) {
-    console.error(`[SMTP Email Error] Failed to send email to ${toEmail}:`, err.message);
+    console.error(`[Resend Email Exception] Failed to send email to ${toEmail}:`, err.message);
     return { success: false, error: err.message };
   }
 }
