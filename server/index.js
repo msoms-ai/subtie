@@ -319,13 +319,16 @@ app.post('/api/auth/register', async (req, res) => {
       </div>
     `;
 
-    sendMailNotification(newUser.email, emailSubject, emailHtml);
+    // Send Verification Email via SMTP synchronously
+    const mailResult = await sendMailNotification(newUser.email, emailSubject, emailHtml);
+    console.log('[Register Mail Dispatch Result]', mailResult);
 
     return res.json({
       success: true,
-      message: 'Registration successful! Verification code sent to your email address.',
+      message: 'Registration successful! Verification code sent to your email address (check inbox & spam folder).',
       email: newUser.email,
-      devOtp: verificationCode
+      devOtp: verificationCode,
+      mailResult
     });
   } catch (err) {
     console.error('[Auth Register Error]', err);

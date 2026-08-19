@@ -256,9 +256,14 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
 
         {/* Dev OTP Helper Toast Notice */}
         {devOtpToast && (
-          <div className="p-3 rounded-2xl bg-purple-950/90 border-2 border-cyan-400 text-cyan-200 text-xs font-black flex items-center justify-between shadow-lg">
-            <span>{isAr ? 'رمز التحقق OTP الخاص بك:' : 'Dev OTP Code:'} <strong className="text-white text-base tracking-widest bg-cyan-950 px-2.5 py-1 rounded-xl border border-cyan-500">{devOtpToast}</strong></span>
-            <span className="text-[10px] text-cyan-300">{isAr ? '(تم إرساله بريدياً)' : '(SMTP Sent)'}</span>
+          <div className="p-3.5 rounded-2xl bg-purple-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-black space-y-1 shadow-lg">
+            <div className="flex items-center justify-between">
+              <span>{isAr ? 'تم إرسال رمز OTP إلى بريدك الإلكتروني! (الرمز المعروض للتجربة):' : 'SMTP Email Sent! Verification OTP Code:'}</span>
+              <strong className="text-white text-base tracking-widest bg-cyan-950 px-3 py-1 rounded-xl border border-cyan-500 font-mono">{devOtpToast}</strong>
+            </div>
+            <p className="text-[11px] text-cyan-300 font-bold">
+              {isAr ? '💡 في حال عدم ظهور الرسالة في البريد الوارد، يُرجى تفقد مجلد البريد غير الهام (Junk/Spam).' : '💡 Check your Junk/Spam folder if the email does not appear in your primary Inbox.'}
+            </p>
           </div>
         )}
 

@@ -40,5 +40,26 @@
       "defaultLanguage": "ar",
       "defaultTheme": "dark"
     }
+  },
+  "usr_1787175326121_nru0v": {
+    "id": "usr_1787175326121_nru0v",
+    "email": "mohammad.alansari@outlook.com",
+    "passwordHash": "$2b$10$giuN.4Mvxtd4vsWbsKjZLeYSlHxgdu1Vv/b0RNhg5bH9RQbaRhyPi",
+    "firstName": "Mohame",
+    "lastName": "Saeed",
+    "msomsUsername": "msoms1",
+    "role": "Translator",
+    "isVerified": true,
+    "avatarUrl": "",
+    "createdAt": "2026-08-19T21:35:26.217Z",
+    "subscriptions": {
+      "updates": true,
+      "newsletter": true,
+      "notifications": true
+    },
+    "preferences": {
+      "defaultLanguage": "ar",
+      "defaultTheme": "dark"
+    }
   }
 }
