@@ -259,7 +259,7 @@ const avatarUpload = multer({
 // 1. User Registration
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, msomsUsername } = req.body;
+    const { email, password, firstName, lastName, msomsUsername, lang = 'ar' } = req.body;
 
     if (!email || !password || !firstName) {
       return res.status(400).json({ error: 'Email, password, and first name are required.' });
@@ -285,6 +285,7 @@ app.post('/api/auth/register', async (req, res) => {
     
     // Generate 6-digit OTP code for email verification
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const selectedLang = lang === 'en' ? 'en' : 'ar';
 
     const newUser = {
       id: userId,
@@ -299,38 +300,66 @@ app.post('/api/auth/register', async (req, res) => {
       avatarUrl: '',
       createdAt: new Date().toISOString(),
       subscriptions: { updates: true, newsletter: true, notifications: true },
-      preferences: { defaultLanguage: 'ar', defaultTheme: 'dark' }
+      preferences: { defaultLanguage: selectedLang, defaultTheme: 'dark' }
     };
 
     users[userId] = newUser;
     writeUsers(users);
 
-    // Send Verification Email via SMTP
-    const emailSubject = 'Subtie Platform — Confirm Your Email Verification Code';
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; borderRadius: 16px; background-color: #0f172a; color: #ffffff;">
-        <h2 style="color: #a855f7; text-align: center;">Welcome to Subtie Platform</h2>
-        <p>Hello ${newUser.firstName},</p>
-        <p>Thank you for registering on Subtie (by msoms.ai). Your email verification OTP code is:</p>
-        <div style="background-color: #1e1b4b; border: 2px dashed #a855f7; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
-          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #38bdf8;">${verificationCode}</span>
+    // Build Bilingual OTP Verification Email Template
+    const isArMail = selectedLang === 'ar';
+    const emailSubject = isArMail
+      ? 'منصة سابتاي لترجمة الأنمي — رمز تفعيل حسابك (OTP)'
+      : 'Subtie Anime Fansub Platform — Your Account Verification Code (OTP)';
+
+    const emailHtml = isArMail ? `
+      <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 2px solid #7c3aed; border-radius: 20px; background-color: #0f172a; color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #c084fc; font-size: 26px; margin: 0; font-weight: 900;">منصة سابتاي (Subtie)</h1>
+          <p style="color: #f472b6; font-size: 13px; margin-top: 4px; font-weight: bold;">منصة ترجمة الأنمي بالذكاء الاصطناعي — إمـسـومـس</p>
         </div>
-        <p>Please enter this 6-digit code in Subtie to activate your account.</p>
-        <hr style="border-color: #334155; margin-top: 30px;" />
-        <p style="font-size: 12px; color: #94a3b8; text-align: center;">MSOMS-Anime Subtitle AI Platform | msoms.ai</p>
+
+        <p style="font-size: 15px; font-weight: bold; color: #e2e8f0;">مرحباً ${newUser.firstName}،</p>
+        <p style="font-size: 14px; color: #cbd5e1; leading-height: 1.6;">نشكرك على الانضمام إلى منصة سابتاي لترجمة الأنمي. رمز تفعيل حسابك المكون من 6 أرقام هو:</p>
+
+        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%); border: 2px dashed #c084fc; padding: 20px; text-align: center; border-radius: 16px; margin: 24px 0;">
+          <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #38bdf8; font-family: monospace;">${verificationCode}</span>
+        </div>
+
+        <p style="font-size: 13px; color: #94a3b8; text-align: center;">يرجى إدخال هذا الرمز في المنصة لإكمال تفعيل الحساب والبدء في إنشاء مشاريع الترجمة.</p>
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 24px 0;" />
+        <p style="font-size: 11px; color: #64748b; text-align: center;">شبكة إمـسـومـس أنمي | Subtie Platform powered by msoms.ai</p>
+      </div>
+    ` : `
+      <div dir="ltr" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 2px solid #7c3aed; border-radius: 20px; background-color: #0f172a; color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #c084fc; font-size: 26px; margin: 0; font-weight: 900;">Subtie Fansub Hub</h1>
+          <p style="color: #f472b6; font-size: 13px; margin-top: 4px; font-weight: bold;">AI-Powered Anime Subtitles by msoms.ai</p>
+        </div>
+
+        <p style="font-size: 15px; font-weight: bold; color: #e2e8f0;">Hello ${newUser.firstName},</p>
+        <p style="font-size: 14px; color: #cbd5e1; leading-height: 1.6;">Thank you for registering on Subtie. Your 6-digit email verification OTP code is:</p>
+
+        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%); border: 2px dashed #c084fc; padding: 20px; text-align: center; border-radius: 16px; margin: 24px 0;">
+          <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #38bdf8; font-family: monospace;">${verificationCode}</span>
+        </div>
+
+        <p style="font-size: 13px; color: #94a3b8; text-align: center;">Enter this code in Subtie to verify your email address and activate your account.</p>
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 24px 0;" />
+        <p style="font-size: 11px; color: #64748b; text-align: center;">MSOMS Anime Subtitle Hub | Subtie Platform powered by msoms.ai</p>
       </div>
     `;
 
-    // Send Verification Email via SMTP synchronously
+    // Send Verification Email via Resend
     const mailResult = await sendMailNotification(newUser.email, emailSubject, emailHtml);
     console.log('[Register Mail Dispatch Result]', mailResult);
 
     return res.json({
       success: true,
-      message: 'Registration successful! Verification code sent to your email address (check inbox & spam folder).',
-      email: newUser.email,
-      devOtp: verificationCode,
-      mailResult
+      message: isArMail
+        ? 'تم إنشاء الحساب بنجاح! تم إرسال رمز التفعيل OTP إلى بريدك الإلكتروني.'
+        : 'Registration successful! Verification code sent to your email address.',
+      email: newUser.email
     });
   } catch (err) {
     console.error('[Auth Register Error]', err);
@@ -339,7 +368,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // 2. Verify Email OTP Code
-app.post('/api/auth/verify-email', (req, res) => {
+app.post('/api/auth/verify-email', async (req, res) => {
   const { email, code } = req.body;
 
   if (!email || !code) {
@@ -365,9 +394,91 @@ app.post('/api/auth/verify-email', (req, res) => {
   writeUsers(users);
 
   const { passwordHash, verificationCode, ...safeUser } = users[user.id];
+
+  // Send Post-Verification Welcome & Platform Guide Email
+  const userLang = safeUser.preferences?.defaultLanguage || 'ar';
+  const isArWelcome = userLang === 'ar';
+
+  const welcomeSubject = isArWelcome
+    ? `مرحباً بك في منصة سابتاي لترجمة الأنمي (Subtie) — الدليل الشامل لميزات المنصة 🎬`
+    : `Welcome to Subtie Anime Fansub Platform — Complete Feature & User Guide 🎬`;
+
+  const welcomeHtml = isArWelcome ? `
+    <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 650px; margin: 0 auto; padding: 28px; border: 2px solid #7c3aed; border-radius: 24px; background-color: #0f172a; color: #ffffff;">
+      
+      <div style="text-align: center; border-bottom: 2px solid #334155; padding-bottom: 20px; margin-bottom: 24px;">
+        <h1 style="color: #c084fc; font-size: 28px; margin: 0; font-weight: 900;">منصة سابتاي لترجمة الأنمي 🌟</h1>
+        <p style="color: #f472b6; font-size: 14px; margin-top: 6px; font-weight: bold;">Subtie AI Fansub Platform | msoms.ai</p>
+      </div>
+
+      <p style="font-size: 16px; font-weight: bold; color: #38bdf8;">مرحباً بك يا ${safeUser.firstName} في عائلة سابتاي! 🎉</p>
+      <p style="font-size: 14px; color: #cbd5e1; line-height: 1.7;">تم تفعيل حسابك بنجاح. يسعدنا انضمامك إلى نخبة المترجمين في عالم ترجمة وتوقيت الأنمي. إليك دليلك السريع للاستفادة الكاملة من كافة ميزات المنصة:</p>
+
+      <div style="background-color: #1e1b4b; border: 1px solid #6d28d9; border-radius: 16px; padding: 20px; margin: 20px 0; font-size: 13px; line-height: 1.8;">
+        <h3 style="color: #a855f7; margin-top: 0; font-size: 16px; font-weight: bold;">🚀 الميزات والدليل التشغيلي للمنصة:</h3>
+        
+        <p><strong>1. 📹 رفع المشاريع ومعالجة الصوت بالذكاء الاصطناعي:</strong><br />
+        يمكنك رفع حلقات الأنمي الكاملة، الأفلام، العروض الترويجية، أو المقاطع القصيرة. تقوم المنصة بفصل الصوت وتفريغ الحوار الياباني وترجمته بالذكاء الاصطناعي (Gemini AI) إلى الإنجليزية والعربية تلقائياً.</p>
+
+        <p><strong>2. ⏱️ محرر التزامن المتقدم (Subtitle Workspace):</strong><br />
+        جدول تفاعلي مدمج مع مشغل فيديو وموجات الصوت (Waveform) للتوقيت والدقة بالمللي ثانية، مع حاسب سرعة القراءة (CPS) لتفادي التوقيت السريع.</p>
+
+        <p><strong>3. 👥 التعاون ومراجعة التدقيق (Translator & Auditor):</strong><br />
+        يمكنك تعيين مدقق جودة (Auditor) لمراجعة مشروعك، إجراء التعديلات، إبداء الملاحظات، واعتماد الأسطر نهائياً.</p>
+
+        <p><strong>4. 📥 تصدير الترجمة بصيغ احترافية:</strong><br />
+        تصدير الترجمة النهائية مباشرة بصيغة <strong>ASS</strong> (مع حفظ الاستايلات والألوان والخطوط) أو صيغة <strong>SRT</strong> القياسية.</p>
+      </div>
+
+      <div style="text-align: center; margin-top: 28px;">
+        <a href="http://localhost:5173" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); color: #ffffff; padding: 14px 32px; border-radius: 14px; font-weight: 900; text-decoration: none; display: inline-block; font-size: 15px; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4);">ابتدئ مشروعك الأول الآن 🚀</a>
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid #334155; margin: 30px 0 16px 0;" />
+      <p style="font-size: 11px; color: #64748b; text-align: center;">جميع الحقوق محفوظة © شبكة إمـسـومـس أنمي | msoms.ai</p>
+    </div>
+  ` : `
+    <div dir="ltr" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 650px; margin: 0 auto; padding: 28px; border: 2px solid #7c3aed; border-radius: 24px; background-color: #0f172a; color: #ffffff;">
+      
+      <div style="text-align: center; border-bottom: 2px solid #334155; padding-bottom: 20px; margin-bottom: 24px;">
+        <h1 style="color: #c084fc; font-size: 28px; margin: 0; font-weight: 900;">Subtie Fansub Hub 🌟</h1>
+        <p style="color: #f472b6; font-size: 14px; margin-top: 6px; font-weight: bold;">Subtie AI Fansub Platform | msoms.ai</p>
+      </div>
+
+      <p style="font-size: 16px; font-weight: bold; color: #38bdf8;">Welcome to Subtie, ${safeUser.firstName}! 🎉</p>
+      <p style="font-size: 14px; color: #cbd5e1; line-height: 1.7;">Your email has been verified successfully. We are excited to have you join our community of anime translators. Here is your getting started guide:</p>
+
+      <div style="background-color: #1e1b4b; border: 1px solid #6d28d9; border-radius: 16px; padding: 20px; margin: 20px 0; font-size: 13px; line-height: 1.8;">
+        <h3 style="color: #a855f7; margin-top: 0; font-size: 16px; font-weight: bold;">🚀 Key Features & Platform Overview:</h3>
+        
+        <p><strong>1. 📹 Video Upload & AI Processing:</strong><br />
+        Upload full episodes, movies, trailers, or clips. Extract audio and automatically transcribe Japanese speech and translate to English & Arabic using Gemini AI.</p>
+
+        <p><strong>2. ⏱️ Advanced Subtitle Sync Workspace:</strong><br />
+        Interactive working table with synced Video Player and Audio Waveform for millisecond timing accuracy, featuring real-time CPS speed indicators.</p>
+
+        <p><strong>3. 👥 Multi-Role Collaboration (Translator & Auditor):</strong><br />
+        Assign certified auditors to audit your subtitle lines, add notes, and grant final line approvals.</p>
+
+        <p><strong>4. 📥 Professional Subtitle Exports:</strong><br />
+        Export final subtitles in styled <strong>ASS</strong> format (with custom fonts, positioning, and colors) or standard <strong>SRT</strong> format.</p>
+      </div>
+
+      <div style="text-align: center; margin-top: 28px;">
+        <a href="http://localhost:5173" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); color: #ffffff; padding: 14px 32px; border-radius: 14px; font-weight: 900; text-decoration: none; display: inline-block; font-size: 15px; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4);">Launch Workspace Now 🚀</a>
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid #334155; margin: 30px 0 16px 0;" />
+      <p style="font-size: 11px; color: #64748b; text-align: center;">All Rights Reserved © MSOMS Anime Network | msoms.ai</p>
+    </div>
+  `;
+
+  // Send Welcome Email asynchronously
+  sendMailNotification(safeUser.email, welcomeSubject, welcomeHtml).catch(e => console.error('Failed to send welcome email:', e));
+
   return res.json({
     success: true,
-    message: 'Email verified successfully! You can now log in.',
+    message: isArWelcome ? 'تم تأكيد البريد الإلكتروني بنجاح! تم إرسال دليل البدء لبريدك الإلكتروني.' : 'Email verified successfully! Getting started guide sent to your inbox.',
     user: safeUser
   });
 });
@@ -386,25 +497,38 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   users[user.id].verificationCode = verificationCode;
   writeUsers(users);
 
-  const emailSubject = 'Subtie Platform — Resent Email Verification Code';
-  const emailHtml = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; background-color: #0f172a; color: #ffffff;">
-      <h2 style="color: #a855f7; text-align: center;">Subtie Email Verification</h2>
-      <p>Hello ${user.firstName},</p>
-      <p>Your new email verification OTP code is:</p>
-      <div style="background-color: #1e1b4b; border: 2px dashed #a855f7; padding: 15px; text-align: center; border-radius: 12px; margin: 20px 0;">
-        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #38bdf8;">${verificationCode}</span>
+  const userLang = user.preferences?.defaultLanguage || 'ar';
+  const isAr = userLang === 'ar';
+
+  const emailSubject = isAr
+    ? 'منصة سابتاي لترجمة الأنمي — رمز التفعيل الجديد (OTP)'
+    : 'Subtie Anime Fansub Platform — Your New Verification Code (OTP)';
+
+  const emailHtml = isAr ? `
+    <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 2px solid #7c3aed; border-radius: 20px; background-color: #0f172a; color: #ffffff;">
+      <h2 style="color: #c084fc; text-align: center;">إعادة إرسال رمز التفعيل (OTP)</h2>
+      <p style="font-size: 14px; color: #cbd5e1;">مرحباً ${user.firstName}، رمز تفعيل حسابك الجديد المكون من 6 أرقام هو:</p>
+      <div style="background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%); border: 2px dashed #c084fc; padding: 20px; text-align: center; border-radius: 16px; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #38bdf8; font-family: monospace;">${verificationCode}</span>
       </div>
-      <p>Enter this code in Subtie to complete registration.</p>
+      <p style="font-size: 13px; color: #94a3b8; text-align: center;">يرجى إدخال هذا الرمز في منصة سابتاي لإكمال التفعيل.</p>
+    </div>
+  ` : `
+    <div dir="ltr" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 2px solid #7c3aed; border-radius: 20px; background-color: #0f172a; color: #ffffff;">
+      <h2 style="color: #c084fc; text-align: center;">Resent Verification Code (OTP)</h2>
+      <p style="font-size: 14px; color: #cbd5e1;">Hello ${user.firstName}, your new 6-digit verification code is:</p>
+      <div style="background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%); border: 2px dashed #c084fc; padding: 20px; text-align: center; border-radius: 16px; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #38bdf8; font-family: monospace;">${verificationCode}</span>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; text-align: center;">Enter this code in Subtie to complete account verification.</p>
     </div>
   `;
 
-  sendMailNotification(user.email, emailSubject, emailHtml);
+  await sendMailNotification(user.email, emailSubject, emailHtml);
 
   return res.json({
     success: true,
-    message: 'New verification code sent to your email.',
-    devOtp: verificationCode
+    message: isAr ? 'تم إعادة إرسال رمز التفعيل إلى بريدك الإلكتروني.' : 'New verification code sent to your email.'
   });
 });
 

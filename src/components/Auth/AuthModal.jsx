@@ -18,7 +18,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [devOtpToast, setDevOtpToast] = useState('');
 
   const isAr = lang === 'ar';
 
@@ -27,7 +26,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
   const resetFormState = () => {
     setError('');
     setMessage('');
-    setDevOtpToast('');
   };
 
   const handleSwitchView = (newView) => {
@@ -85,7 +83,8 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
           password,
           firstName,
           lastName,
-          msomsUsername
+          msomsUsername,
+          lang
         })
       });
       const data = await res.json();
@@ -94,10 +93,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
         setError(data.error || 'Registration failed.');
         setIsLoading(false);
         return;
-      }
-
-      if (data.devOtp) {
-        setDevOtpToast(data.devOtp);
       }
 
       setMessage(data.message);
@@ -253,30 +248,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, lang = 'en'
             {view === 'reset' && (isAr ? 'أدخل الرمز وكلمة المرور الجديدة المستوفية للشروط' : 'Enter the code and your new secure password')}
           </p>
         </div>
-
-        {/* Dev OTP Helper Toast Notice */}
-        {devOtpToast && (
-          <div className="p-3.5 rounded-2xl bg-purple-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-black space-y-2 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="block text-cyan-300 font-bold">{isAr ? 'رمز OTP الخاص بحسابك:' : 'Verification OTP Code:'}</span>
-                <strong className="text-white text-lg tracking-widest bg-cyan-950 px-3 py-1 rounded-xl border border-cyan-500 font-mono inline-block mt-1">{devOtpToast}</strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOtpCode(devOtpToast)}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:scale-105 text-white font-black text-xs shadow-md border border-cyan-300 transition wizard-white-text shrink-0"
-              >
-                {isAr ? 'تعبئة الرمز تلقائياً' : 'Auto-Fill Code'}
-              </button>
-            </div>
-            <p className="text-[11px] text-cyan-200 font-bold border-t border-cyan-500/30 pt-1.5 leading-relaxed">
-              {isAr
-                ? '💡 ملاحظة: خوادم Outlook/Hotmail تحظر بعض خوادم البريد الخارجية. تم عرض الرمز أعلاه لتفعيل حسابك فوراً بضغطة زر.'
-                : '💡 Note: Microsoft Outlook/Hotmail blocks certain SMTP IPs. Your OTP code is shown above for instant 1-click verification.'}
-            </p>
-          </div>
-        )}
 
         {/* Success Alert */}
         {message && (
