@@ -919,7 +919,7 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   const users = readUsers();
   const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
 
-  const projectDir = req.userScopedDir;
+  const projectDir = path.join(UPLOADS_DIR, userId, projectId);
   const videoFilename = req.file.filename;
   
   // Public URL relative to /uploads

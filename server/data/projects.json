@@ -1272,5 +1272,39 @@
     ],
     "createdAt": "2026-08-18T21:52:31.434Z",
     "updatedAt": "2026-08-18T22:09:54.158Z"
+  },
+  "subtie_1787262713702_xkyjo": {
+    "id": "subtie_1787262713702_xkyjo",
+    "ownerId": "usr_admin_msoms1",
+    "ownerName": "محمد شريف",
+    "auditorId": "",
+    "auditorName": "",
+    "auditStatus": "Pending",
+    "projectName": "Test Project",
+    "projectType": "Clip",
+    "mediaTitle": "test_video.mp4",
+    "videoUrl": "/uploads/usr_admin_msoms1/subtie_1787262713702_xkyjo/video.mp4",
+    "audioUrl": "",
+    "srtUrl": "",
+    "subtitles": [],
+    "createdAt": "2026-08-20T21:51:53.712Z",
+    "updatedAt": "2026-08-20T21:51:53.713Z"
+  },
+  "subtie_1787262730712_bfd0v": {
+    "id": "subtie_1787262730712_bfd0v",
+    "ownerId": "usr_admin_msoms1",
+    "ownerName": "محمد شريف",
+    "auditorId": "",
+    "auditorName": "",
+    "auditStatus": "Pending",
+    "projectName": "Iwamoto Senpai",
+    "projectType": "Clip",
+    "mediaTitle": "Iwamoto Senpai PV",
+    "videoUrl": "/uploads/usr_admin_msoms1/subtie_1787262730712_bfd0v/video.mp4",
+    "audioUrl": "",
+    "srtUrl": "",
+    "subtitles": [],
+    "createdAt": "2026-08-20T21:52:10.746Z",
+    "updatedAt": "2026-08-20T21:52:10.746Z"
   }
 }

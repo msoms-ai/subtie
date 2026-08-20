@@ -37,7 +37,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
-  // Step 3 -> Step 4 Upload Action
+  // Step 3 -> Step 4 Video File Upload to Server
   const handleUploadClick = async () => {
     if (!videoFile) {
       alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
@@ -46,49 +46,59 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
 
     setCurrentStep(4);
     setIsUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
 
     const formData = new FormData();
     formData.append('video', videoFile);
+    if (user?.id) formData.append('userId', user.id);
+    if (projectName) formData.append('projectName', projectName);
+    if (projectType) formData.append('projectType', projectType);
+    if (mediaTitle) formData.append('mediaTitle', mediaTitle);
 
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return 90;
+    const xhr = new XMLHttpRequest();
+    
+    // Real-time upload progress tracking
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percent);
+      }
+    };
+
+    xhr.onload = () => {
+      setIsUploading(false);
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+          setUploadProgress(100);
+          setProjectId(data.projectId);
+          setTimeout(() => {
+            setUploadCompleted(true);
+            setCurrentStep(5);
+          }, 400);
+        } else {
+          alert(data.error || (isAr ? 'فشل رفع فيديو المشروع' : 'Upload failed'));
+          setCurrentStep(3);
         }
-        return prev + 15;
-      });
-    }, 400);
-
-    try {
-      const headers = user?.id ? { 'x-user-id': user.id } : {};
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers,
-        body: formData
-      });
-      const data = await res.json();
-      clearInterval(interval);
-
-      if (data.success) {
-        setUploadProgress(100);
-        setProjectId(data.projectId);
-        setTimeout(() => {
-          setIsUploading(false);
-          setUploadCompleted(true);
-          setCurrentStep(5);
-        }, 600);
-      } else {
-        alert(data.error || 'Upload failed');
+      } catch (err) {
+        console.error('JSON parse error on upload response:', err);
+        alert(isAr ? 'حدث خطأ أثناء معالجة الاستجابة من السيرفر' : 'Error parsing server upload response');
         setCurrentStep(3);
       }
-    } catch (err) {
-      clearInterval(interval);
-      console.error('Upload error:', err);
-      alert(isAr ? 'خطأ في الاتصال أثناء الرفع' : 'Network upload error. Please try again.');
+    };
+
+    xhr.onerror = () => {
+      setIsUploading(false);
+      console.error('XHR Upload Network Error');
+      alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network error during upload. Please check your connection and try again.');
       setCurrentStep(3);
+    };
+
+    xhr.open('POST', '/api/upload', true);
+    if (user?.id) {
+      xhr.setRequestHeader('x-user-id', user.id);
     }
+    xhr.send(formData);
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
