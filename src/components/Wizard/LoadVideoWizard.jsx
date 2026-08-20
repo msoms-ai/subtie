@@ -37,19 +37,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
-  // Target direct backend Express port 3001 in dev mode to bypass Vite proxy binary stream buffering
-  const getUploadUrl = () => {
-    const protocol = window.location.protocol || 'http:';
-    const hostname = window.location.hostname || 'localhost';
-    const port = window.location.port;
-
-    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') {
-      return `${protocol}//${hostname}:3001/api/upload`;
-    }
-    return '/api/upload';
-  };
-
-  // Step 3 -> Step 4 Video File Upload to Server
+  // Universal Upload Strategy with 3-Tier Dual Fallback & Simple Request Bypass
   const handleUploadClick = async () => {
     if (!videoFile) {
       alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
@@ -60,53 +48,98 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     setIsUploading(true);
     setUploadProgress(10);
 
-    // Active progress ticker interval (10% -> 95%)
+    // Active progress ticker interval (10% -> 92%)
     const progressTimer = setInterval(() => {
       setUploadProgress(prev => {
         if (prev >= 92) return 92;
-        return prev + 6;
+        return prev + 8;
       });
     }, 250);
 
-    const formData = new FormData();
-    formData.append('video', videoFile);
-    if (user?.id) formData.append('userId', user.id);
-    if (projectName) formData.append('projectName', projectName);
-    if (projectType) formData.append('projectType', projectType);
-    if (mediaTitle) formData.append('mediaTitle', mediaTitle);
+    const createFormData = () => {
+      const fd = new FormData();
+      fd.append('video', videoFile);
+      if (user?.id) fd.append('userId', user.id);
+      if (projectName) fd.append('projectName', projectName);
+      if (projectType) fd.append('projectType', projectType);
+      if (mediaTitle) fd.append('mediaTitle', mediaTitle);
+      return fd;
+    };
+
+    const protocol = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    const directBackendUrl = `${protocol}//${hostname}:3001/api/upload`;
+    const relativeUrl = '/api/upload';
 
     const reqHeaders = user?.id ? { 'x-user-id': user.id } : {};
-    const uploadUrl = getUploadUrl();
 
-    try {
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: formData
-      });
-
-      const data = await res.json();
+    const handleSuccess = (data) => {
       clearInterval(progressTimer);
-
-      if (res.ok && data.success) {
-        setUploadProgress(100);
-        setProjectId(data.projectId);
-        setTimeout(() => {
-          setIsUploading(false);
-          setUploadCompleted(true);
-          setCurrentStep(5);
-        }, 300);
-      } else {
+      setUploadProgress(100);
+      setProjectId(data.projectId);
+      setTimeout(() => {
         setIsUploading(false);
-        alert(data.error || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
-        setCurrentStep(3);
-      }
-    } catch (err) {
+        setUploadCompleted(true);
+        setCurrentStep(5);
+      }, 300);
+    };
+
+    const handleFailure = (msg) => {
       clearInterval(progressTimer);
       setIsUploading(false);
-      console.error('Upload Error on', uploadUrl, err);
-      alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network connection error during upload. Please try again.');
+      alert(msg || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
       setCurrentStep(3);
+    };
+
+    // Strategy 1: Direct Backend URL (Port 3001) with x-user-id header
+    try {
+      const res = await fetch(directBackendUrl, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: createFormData()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        handleSuccess(data);
+        return;
+      }
+    } catch (err) {
+      console.warn('Strategy 1 (Direct Port 3001 with Headers) failed:', err);
+    }
+
+    // Strategy 2: Relative URL (/api/upload) via Vite Proxy
+    try {
+      const res = await fetch(relativeUrl, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: createFormData()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        handleSuccess(data);
+        return;
+      }
+    } catch (err) {
+      console.warn('Strategy 2 (Relative Proxy /api/upload) failed:', err);
+    }
+
+    // Strategy 3: Direct Backend URL WITHOUT custom headers (CORS Simple Request fallback)
+    try {
+      const res = await fetch(directBackendUrl, {
+        method: 'POST',
+        body: createFormData()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        handleSuccess(data);
+        return;
+      } else {
+        handleFailure(data.error || (isAr ? 'فشل رفع فيديو المشروع.' : 'Upload failed on server.'));
+        return;
+      }
+    } catch (err) {
+      console.error('All 3 upload strategies failed:', err);
+      handleFailure(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network connection error during upload. Please check server status.');
     }
   };
 
