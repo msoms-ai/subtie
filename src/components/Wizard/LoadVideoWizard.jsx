@@ -37,7 +37,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
-  // Step 3 -> Step 4 Video File Upload to Server with Dual Fallback & Active Progress
+  // Step 3 -> Step 4 Video File Upload to Server
   const handleUploadClick = async () => {
     if (!videoFile) {
       alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
@@ -48,81 +48,66 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     setIsUploading(true);
     setUploadProgress(10);
 
-    const formData = new FormData();
-    formData.append('video', videoFile);
-    if (user?.id) formData.append('userId', user.id);
-    if (projectName) formData.append('projectName', projectName);
-    if (projectType) formData.append('projectType', projectType);
-    if (mediaTitle) formData.append('mediaTitle', mediaTitle);
-
     // Active progress ticker interval (10% -> 92%)
     const progressTimer = setInterval(() => {
       setUploadProgress(prev => {
         if (prev >= 92) return 92;
-        return prev + 8;
+        return prev + 6;
       });
-    }, 300);
+    }, 250);
+
+    const createFormData = () => {
+      const fd = new FormData();
+      fd.append('video', videoFile);
+      if (user?.id) fd.append('userId', user.id);
+      if (projectName) fd.append('projectName', projectName);
+      if (projectType) fd.append('projectType', projectType);
+      if (mediaTitle) fd.append('mediaTitle', mediaTitle);
+      return fd;
+    };
 
     const reqHeaders = user?.id ? { 'x-user-id': user.id } : {};
 
-    // Helper to process successful upload response
-    const handleUploadSuccess = (data) => {
-      clearInterval(progressTimer);
-      setUploadProgress(100);
-      setProjectId(data.projectId);
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadCompleted(true);
-        setCurrentStep(5);
-      }, 400);
-    };
-
-    // Helper to process upload failure
-    const handleUploadFailure = (errMessage) => {
-      clearInterval(progressTimer);
-      setIsUploading(false);
-      alert(errMessage || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
-      setCurrentStep(3);
-    };
-
-    // Attempt 1: Try relative path /api/upload
     try {
-      const res = await fetch('/api/upload', {
+      // Primary Upload Attempt: /api/upload
+      let res = await fetch('/api/upload', {
         method: 'POST',
         headers: reqHeaders,
-        body: formData
+        body: createFormData()
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          handleUploadSuccess(data);
-          return;
-        }
+      // Fallback Attempt if Proxy Fails
+      if (!res.ok && res.status !== 400 && res.status !== 500) {
+        const directUrl = `${window.location.protocol}//${window.location.hostname}:3001/api/upload`;
+        res = await fetch(directUrl, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: createFormData()
+        });
       }
-    } catch (err) {
-      console.warn('Proxy upload attempt 1 failed, trying direct backend URL...', err);
-    }
-
-    // Attempt 2: Fallback to direct backend URL on port 3001
-    try {
-      const directBackendUrl = `${window.location.protocol}//${window.location.hostname}:3001/api/upload`;
-      const res = await fetch(directBackendUrl, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: formData
-      });
 
       const data = await res.json();
+      clearInterval(progressTimer);
+
       if (res.ok && data.success) {
-        handleUploadSuccess(data);
-        return;
+        setUploadProgress(100);
+        setProjectId(data.projectId);
+        setTimeout(() => {
+          setIsUploading(false);
+          setUploadCompleted(true);
+          setCurrentStep(5);
+        }, 300);
       } else {
-        handleUploadFailure(data.error || (isAr ? 'فشل رفع الفيديو على السيرفر.' : 'Server upload error.'));
+        setIsUploading(false);
+        alert(data.error || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
+        setCurrentStep(3);
       }
     } catch (err) {
-      console.error('All upload attempts failed:', err);
-      handleUploadFailure(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. يرجى التأكد من تشغيل السيرفر.' : 'Network connection error during upload. Please check server connection.');
+      clearInterval(progressTimer);
+      setIsUploading(false);
+      console.error('Upload Error:', err);
+      alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network connection error during upload. Please try again.');
+      setCurrentStep(3);
     }
   };
 
