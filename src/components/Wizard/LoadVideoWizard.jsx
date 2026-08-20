@@ -37,6 +37,18 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
+  // Target direct backend Express port 3001 in dev mode to bypass Vite proxy binary stream buffering
+  const getUploadUrl = () => {
+    const protocol = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    const port = window.location.port;
+
+    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:3001/api/upload`;
+    }
+    return '/api/upload';
+  };
+
   // Step 3 -> Step 4 Video File Upload to Server
   const handleUploadClick = async () => {
     if (!videoFile) {
@@ -48,7 +60,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     setIsUploading(true);
     setUploadProgress(10);
 
-    // Active progress ticker interval (10% -> 92%)
+    // Active progress ticker interval (10% -> 95%)
     const progressTimer = setInterval(() => {
       setUploadProgress(prev => {
         if (prev >= 92) return 92;
@@ -56,35 +68,22 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
       });
     }, 250);
 
-    const createFormData = () => {
-      const fd = new FormData();
-      fd.append('video', videoFile);
-      if (user?.id) fd.append('userId', user.id);
-      if (projectName) fd.append('projectName', projectName);
-      if (projectType) fd.append('projectType', projectType);
-      if (mediaTitle) fd.append('mediaTitle', mediaTitle);
-      return fd;
-    };
+    const formData = new FormData();
+    formData.append('video', videoFile);
+    if (user?.id) formData.append('userId', user.id);
+    if (projectName) formData.append('projectName', projectName);
+    if (projectType) formData.append('projectType', projectType);
+    if (mediaTitle) formData.append('mediaTitle', mediaTitle);
 
     const reqHeaders = user?.id ? { 'x-user-id': user.id } : {};
+    const uploadUrl = getUploadUrl();
 
     try {
-      // Primary Upload Attempt: /api/upload
-      let res = await fetch('/api/upload', {
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         headers: reqHeaders,
-        body: createFormData()
+        body: formData
       });
-
-      // Fallback Attempt if Proxy Fails
-      if (!res.ok && res.status !== 400 && res.status !== 500) {
-        const directUrl = `${window.location.protocol}//${window.location.hostname}:3001/api/upload`;
-        res = await fetch(directUrl, {
-          method: 'POST',
-          headers: reqHeaders,
-          body: createFormData()
-        });
-      }
 
       const data = await res.json();
       clearInterval(progressTimer);
@@ -105,7 +104,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     } catch (err) {
       clearInterval(progressTimer);
       setIsUploading(false);
-      console.error('Upload Error:', err);
+      console.error('Upload Error on', uploadUrl, err);
       alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network connection error during upload. Please try again.');
       setCurrentStep(3);
     }
