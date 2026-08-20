@@ -37,8 +37,10 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
-  // Universal Upload Strategy with 3-Tier Dual Fallback & Simple Request Bypass
-  const handleUploadClick = async () => {
+  const [uploadStatusText, setUploadStatusText] = useState('');
+
+  // Robust XHR Upload with Real Byte Tracking & Direct Fallback
+  const handleUploadClick = () => {
     if (!videoFile) {
       alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
       return;
@@ -46,101 +48,110 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
 
     setCurrentStep(4);
     setIsUploading(true);
-    setUploadProgress(10);
-
-    // Active progress ticker interval (10% -> 92%)
-    const progressTimer = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 92) return 92;
-        return prev + 8;
-      });
-    }, 250);
+    setUploadProgress(5);
+    setUploadStatusText(isAr ? 'جاري تجهيز اتصال الرفع...' : 'Preparing upload stream...');
 
     const createFormData = () => {
       const fd = new FormData();
-      fd.append('video', videoFile);
+      // Text metadata FIRST so Busboy/Multer reads req.body fields before parsing the binary file
       if (user?.id) fd.append('userId', user.id);
       if (projectName) fd.append('projectName', projectName);
       if (projectType) fd.append('projectType', projectType);
       if (mediaTitle) fd.append('mediaTitle', mediaTitle);
+      fd.append('video', videoFile);
       return fd;
     };
 
-    const protocol = window.location.protocol || 'http:';
-    const hostname = window.location.hostname || 'localhost';
-    const directBackendUrl = `${protocol}//${hostname}:3001/api/upload`;
-    const relativeUrl = '/api/upload';
+    const runUploadXHR = (targetUrl, isFallback = false) => {
+      const xhr = new XMLHttpRequest();
 
-    const reqHeaders = user?.id ? { 'x-user-id': user.id } : {};
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const loadedMb = (e.loaded / (1024 * 1024)).toFixed(1);
+          const totalMb = (e.total / (1024 * 1024)).toFixed(1);
+          const percent = Math.min(Math.round((e.loaded / e.total) * 100), 99);
+          setUploadProgress(percent);
+          setUploadStatusText(
+            isAr 
+              ? `تم نقل ${loadedMb} MB من ${totalMb} MB (${percent}%)`
+              : `Uploaded ${loadedMb} MB of ${totalMb} MB (${percent}%)`
+          );
+        }
+      };
 
-    const handleSuccess = (data) => {
-      clearInterval(progressTimer);
-      setUploadProgress(100);
-      setProjectId(data.projectId);
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadCompleted(true);
-        setCurrentStep(5);
-      }, 300);
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+            setUploadProgress(100);
+            setUploadStatusText(isAr ? 'اكتمل نقل الملف إلى السيرفر بنجاح!' : 'File upload completed successfully!');
+            setProjectId(data.projectId);
+            setTimeout(() => {
+              setIsUploading(false);
+              setUploadCompleted(true);
+              setCurrentStep(5);
+            }, 300);
+          } else if (!isFallback) {
+            console.warn('Upload attempt 1 returned non-200, trying direct backend port 3001...');
+            const protocol = window.location.protocol || 'http:';
+            const hostname = window.location.hostname || 'localhost';
+            const directUrl = `${protocol}//${hostname}:3001/api/upload`;
+            runUploadXHR(directUrl, true);
+          } else {
+            setIsUploading(false);
+            alert(data.error || (isAr ? 'فشل رفع الفيديو على السيرفر.' : 'Server upload error.'));
+            setCurrentStep(3);
+          }
+        } catch (err) {
+          if (!isFallback) {
+            const protocol = window.location.protocol || 'http:';
+            const hostname = window.location.hostname || 'localhost';
+            const directUrl = `${protocol}//${hostname}:3001/api/upload`;
+            runUploadXHR(directUrl, true);
+          } else {
+            setIsUploading(false);
+            alert(isAr ? 'حدث خطأ أثناء معالجة استجابة السيرفر' : 'Error parsing server response');
+            setCurrentStep(3);
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        if (!isFallback) {
+          console.warn('XHR error on relative path, attempting direct port 3001...');
+          const protocol = window.location.protocol || 'http:';
+          const hostname = window.location.hostname || 'localhost';
+          const directUrl = `${protocol}//${hostname}:3001/api/upload`;
+          runUploadXHR(directUrl, true);
+        } else {
+          setIsUploading(false);
+          alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء التأكد من تشغيل السيرفر.' : 'Network connection error during upload. Please check server connection.');
+          setCurrentStep(3);
+        }
+      };
+
+      xhr.ontimeout = () => {
+        if (!isFallback) {
+          const protocol = window.location.protocol || 'http:';
+          const hostname = window.location.hostname || 'localhost';
+          const directUrl = `${protocol}//${hostname}:3001/api/upload`;
+          runUploadXHR(directUrl, true);
+        } else {
+          setIsUploading(false);
+          alert(isAr ? 'انتهت مهلة اتصال الرفع للسيرفر.' : 'Upload request timed out.');
+          setCurrentStep(3);
+        }
+      };
+
+      xhr.open('POST', targetUrl, true);
+      if (user?.id) {
+        xhr.setRequestHeader('x-user-id', user.id);
+      }
+      xhr.timeout = 30000;
+      xhr.send(createFormData());
     };
 
-    const handleFailure = (msg) => {
-      clearInterval(progressTimer);
-      setIsUploading(false);
-      alert(msg || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
-      setCurrentStep(3);
-    };
-
-    // Strategy 1: Direct Backend URL (Port 3001) with x-user-id header
-    try {
-      const res = await fetch(directBackendUrl, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: createFormData()
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        handleSuccess(data);
-        return;
-      }
-    } catch (err) {
-      console.warn('Strategy 1 (Direct Port 3001 with Headers) failed:', err);
-    }
-
-    // Strategy 2: Relative URL (/api/upload) via Vite Proxy
-    try {
-      const res = await fetch(relativeUrl, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: createFormData()
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        handleSuccess(data);
-        return;
-      }
-    } catch (err) {
-      console.warn('Strategy 2 (Relative Proxy /api/upload) failed:', err);
-    }
-
-    // Strategy 3: Direct Backend URL WITHOUT custom headers (CORS Simple Request fallback)
-    try {
-      const res = await fetch(directBackendUrl, {
-        method: 'POST',
-        body: createFormData()
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        handleSuccess(data);
-        return;
-      } else {
-        handleFailure(data.error || (isAr ? 'فشل رفع فيديو المشروع.' : 'Upload failed on server.'));
-        return;
-      }
-    } catch (err) {
-      console.error('All 3 upload strategies failed:', err);
-      handleFailure(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network connection error during upload. Please check server status.');
-    }
+    runUploadXHR('/api/upload');
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
@@ -498,7 +509,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
               />
             </div>
 
-            {/* FILE NAME IN PURE BOLD WHITE TEXT (LTR) */}
+            {/* FILE NAME & LIVE STATUS IN PURE BOLD WHITE TEXT (LTR) */}
             <div className="flex items-center justify-between text-xs font-extrabold" dir="ltr">
               <span className="text-white font-black bg-purple-950 theme-light:bg-purple-800 px-4 py-1 rounded-xl border border-purple-400 shadow-sm text-left truncate max-w-xs">
                 {videoFile?.name}
@@ -507,6 +518,12 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                 {uploadProgress}%
               </span>
             </div>
+
+            {uploadStatusText && (
+              <p className="text-xs font-extrabold text-pink-300 bg-purple-950/80 theme-light:bg-purple-900/90 py-1.5 px-4 rounded-xl border border-pink-400/40 inline-block">
+                {uploadStatusText}
+              </p>
+            )}
           </div>
         </div>
       )}
