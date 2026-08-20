@@ -19,7 +19,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'X-User-Id', 'Accept']
+}));
+app.options('*', cors());
 app.use(express.json({ limit: '100mb' }));
 
 // Ensure directories exist

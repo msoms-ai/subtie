@@ -37,15 +37,7 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     'Project Setup', 'Video Details', 'Select File', 'Uploading', 'Complete', 'AI Processing'
   ];
 
-  // Determine upload URL: use direct port 3001 in dev mode to bypass Vite proxy buffering
-  const getUploadUrl = () => {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:3001/api/upload';
-    }
-    return '/api/upload';
-  };
-
-  // Step 3 -> Step 4 Video File Upload to Server
+  // Step 3 -> Step 4 Video File Upload to Server with Dual Fallback & Active Progress
   const handleUploadClick = async () => {
     if (!videoFile) {
       alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
@@ -63,64 +55,75 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
     if (projectType) formData.append('projectType', projectType);
     if (mediaTitle) formData.append('mediaTitle', mediaTitle);
 
-    const uploadUrl = getUploadUrl();
-    const xhr = new XMLHttpRequest();
-
-    // Smooth progress ticker to keep UI moving during large file processing
+    // Active progress ticker interval (10% -> 92%)
     const progressTimer = setInterval(() => {
       setUploadProgress(prev => {
-        if (prev >= 92) {
-          clearInterval(progressTimer);
-          return 92;
-        }
-        return prev + 6;
+        if (prev >= 92) return 92;
+        return prev + 8;
       });
-    }, 250);
-    
-    // Real-time upload progress tracking
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        const percent = Math.round((event.loaded / event.total) * 100);
-        setUploadProgress(prev => Math.max(prev, Math.min(percent, 95)));
-      }
+    }, 300);
+
+    const reqHeaders = user?.id ? { 'x-user-id': user.id } : {};
+
+    // Helper to process successful upload response
+    const handleUploadSuccess = (data) => {
+      clearInterval(progressTimer);
+      setUploadProgress(100);
+      setProjectId(data.projectId);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadCompleted(true);
+        setCurrentStep(5);
+      }, 400);
     };
 
-    xhr.onload = () => {
+    // Helper to process upload failure
+    const handleUploadFailure = (errMessage) => {
       clearInterval(progressTimer);
       setIsUploading(false);
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300 && data.success) {
-          setUploadProgress(100);
-          setProjectId(data.projectId);
-          setTimeout(() => {
-            setUploadCompleted(true);
-            setCurrentStep(5);
-          }, 300);
-        } else {
-          alert(data.error || (isAr ? 'فشل رفع فيديو المشروع' : 'Upload failed'));
-          setCurrentStep(3);
-        }
-      } catch (err) {
-        console.error('JSON parse error on upload response:', err);
-        alert(isAr ? 'حدث خطأ أثناء معالجة الاستجابة من السيرفر' : 'Error parsing server upload response');
-        setCurrentStep(3);
-      }
-    };
-
-    xhr.onerror = () => {
-      clearInterval(progressTimer);
-      setIsUploading(false);
-      console.error('XHR Upload Network Error on', uploadUrl);
-      alert(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. الرجاء المحاولة مرة أخرى.' : 'Network error during upload. Please check your connection and try again.');
+      alert(errMessage || (isAr ? 'فشل رفع فيديو المشروع. الرجاء المحاولة مرة أخرى.' : 'Upload failed. Please try again.'));
       setCurrentStep(3);
     };
 
-    xhr.open('POST', uploadUrl, true);
-    if (user?.id) {
-      xhr.setRequestHeader('x-user-id', user.id);
+    // Attempt 1: Try relative path /api/upload
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: reqHeaders,
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          handleUploadSuccess(data);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Proxy upload attempt 1 failed, trying direct backend URL...', err);
     }
-    xhr.send(formData);
+
+    // Attempt 2: Fallback to direct backend URL on port 3001
+    try {
+      const directBackendUrl = `${window.location.protocol}//${window.location.hostname}:3001/api/upload`;
+      const res = await fetch(directBackendUrl, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        handleUploadSuccess(data);
+        return;
+      } else {
+        handleUploadFailure(data.error || (isAr ? 'فشل رفع الفيديو على السيرفر.' : 'Server upload error.'));
+      }
+    } catch (err) {
+      console.error('All upload attempts failed:', err);
+      handleUploadFailure(isAr ? 'خطأ في الاتصال بالسيرفر أثناء الرفع. يرجى التأكد من تشغيل السيرفر.' : 'Network connection error during upload. Please check server connection.');
+    }
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
