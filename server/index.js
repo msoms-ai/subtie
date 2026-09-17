@@ -966,6 +966,8 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
 
 // 16. Process Audio & Transcribe/Translate with Gemini AI Engine
 app.post('/api/process', async (req, res) => {
+  req.setTimeout(0); // Disable timeout for extremely long multi-hour video processing
+  res.setTimeout(0);
   const { projectId } = req.body;
 
   if (!projectId) {
@@ -1008,24 +1010,51 @@ app.post('/api/process', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Step 3: Upload Audio File to Gemini Files API
-    console.log(`[Gemini AI] Uploading audio file to Gemini Files API: ${audioPath}`);
-    const uploadResult = await ai.files.upload({
-      file: audioPath,
-      mimeType: 'audio/mp3'
+
+    // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
+    const chunkDuration = 300; // 5 minutes per chunk
+    const chunksDir = path.join(targetDir, 'chunks');
+    if (!fs.existsSync(chunksDir)) {
+      fs.mkdirSync(chunksDir);
+    }
+    
+    console.log(`[Audio Splitter] Segmenting audio into 5-minute chunks...`);
+    await new Promise((resolve, reject) => {
+      ffmpeg(audioPath)
+        .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
+        .output(path.join(chunksDir, 'chunk_%03d.mp3'))
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
     });
 
-    console.log(`[Gemini AI] Audio uploaded. File URI: ${uploadResult.file.uri}`);
+    const chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+    console.log(`[Audio Splitter] Splitted into ${chunkFiles.length} chunks.`);
 
-    // Wait 3 seconds for processing
-    await new Promise(r => setTimeout(r, 3000));
+    let allParsedSubtitles = [];
+    let globalId = 1;
 
-    // Step 4: Multimodal Audio Transcription & Translation Prompt
-    const prompt = `You are an expert anime subtitle translator and ASR engine for MSOMS-Anime.
-Analyze the provided Japanese audio track carefully.
-Extract each spoken dialogue line with precise start and end timestamps.
+    for (let i = 0; i < chunkFiles.length; i++) {
+      const chunkPath = path.join(chunksDir, chunkFiles[i]);
+      console.log(`[Gemini AI] Processing chunk ${i + 1}/${chunkFiles.length}...`);
+      
+      const uploadResult = await ai.files.upload({
+        file: chunkPath,
+        mimeType: 'audio/mp3'
+      });
+      await new Promise(r => setTimeout(r, 2000));
 
-For each dialogue line, provide:
+      const prompt = `You are an expert anime subtitle translator and ASR engine for MSOMS-Anime.
+Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from start to finish. DO NOT skip any dialogue!
+
+CRITICAL RULES FOR SUBTITLE CHUNKING:
+1. TRANSCRIBE EVERYTHING: You must output a large array covering the entire duration of the audio.
+2. MAXIMUM DURATION: A single JSON subtitle object must NOT exceed 5 seconds of screen time.
+3. SPLIT LONG SPEECHES: If a character speaks for 15 seconds, you MUST split their speech into 3 to 4 separate, consecutive JSON subtitle objects.
+4. READABILITY: Keep text short (Max 45 chars per line).
+5. PRECISE TIMING: Do NOT hallucinate timestamps. Timings must match the actual audio exactly.
+
+For each subtitle block, provide:
 1. "startTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:03,500")
 2. "endTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:06,800")
 3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
@@ -1035,65 +1064,58 @@ For each dialogue line, provide:
 Return ONLY a valid JSON array of objects with the exact key names: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "englishText", "arabicText".
 Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array only.`;
 
-    console.log(`[Gemini AI] Sending transcription prompt to gemini-flash-latest...`);
-    const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { fileData: { fileUri: uploadResult.file.uri, mimeType: 'audio/mp3' } },
-            { text: prompt }
-          ]
+      const response = await ai.models.generateContent({
+        model: 'gemini-flash-latest',
+        contents: [
+          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: prompt }] }
+        ],
+        config: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
+      });
+
+      let rawText = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let chunkSubtitles = [];
+
+      try {
+        chunkSubtitles = JSON.parse(rawText);
+      } catch (parseErr) {
+        try {
+          const lastValidIndex = rawText.lastIndexOf('}');
+          if (lastValidIndex !== -1) {
+            chunkSubtitles = JSON.parse(rawText.substring(0, lastValidIndex + 1) + ']');
+          }
+        } catch (salvageErr) {
+          console.error(`[Gemini JSON Error] Chunk ${i} failed completely.`);
         }
-      ]
-    });
+      }
 
-    let rawText = response.text || '';
-    console.log('[Gemini Raw Response]', rawText);
-
-    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-    let parsedSubtitles = [];
-    try {
-      parsedSubtitles = JSON.parse(rawText);
-    } catch (parseErr) {
-      console.error('[Gemini JSON Parse Error]', parseErr);
-      parsedSubtitles = [
-        {
-          id: 1,
-          startTime: "00:00:02,000",
-          endTime: "00:00:06,000",
-          japaneseText: "Subtitle generated by Subtie Gemini AI Engine",
-          englishText: "Subtitle generated by Subtie Gemini AI Engine",
-          arabicText: "تم إنشاء الترجمة بواسطة محرك سابتاي ذكاء اصطناعي",
-          approved: false
-        }
-      ];
+      // Add offset to timestamps
+      const offsetSeconds = i * chunkDuration;
+      chunkSubtitles.forEach(sub => {
+        let sSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000') + offsetSeconds;
+        let eSec = parseTimestampToSeconds(sub.endTime || '00:00:02,000') + offsetSeconds;
+        
+        allParsedSubtitles.push({
+          id: globalId++,
+          startTime: formatSecondsToTimestamp(sSec),
+          endTime: formatSecondsToTimestamp(eSec),
+          startSeconds: sSec,
+          endSeconds: eSec,
+          japaneseText: sub.japaneseText || '',
+          englishText: sub.englishText || '',
+          arabicText: sub.arabicText || '',
+          approved: false,
+          auditNotes: ''
+        });
+      });
+      
+      // Try to clean up file from Gemini to save space (optional, skipping for now)
     }
 
-    const subtitlesWithSeconds = parsedSubtitles.map((sub, idx) => {
-      const startSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000');
-      const endSec = parseTimestampToSeconds(sub.endTime || '00:00:05,000');
-      return {
-        id: sub.id || (idx + 1),
-        startTime: sub.startTime || '00:00:00,000',
-        endTime: sub.endTime || '00:00:05,000',
-        startSeconds: startSec,
-        endSeconds: endSec,
-        japaneseText: sub.japaneseText || '',
-        englishText: sub.englishText || '',
-        arabicText: sub.arabicText || '',
-        approved: false,
-        auditNotes: ''
-      };
-    });
-
-    project.subtitles = subtitlesWithSeconds;
+    project.subtitles = allParsedSubtitles;
 
     // Write SRT file to project folder
     let srtContent = '';
-    subtitlesWithSeconds.forEach((sub, idx) => {
+    allParsedSubtitles.forEach((sub, idx) => {
       srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
     });
     fs.writeFileSync(srtPath, srtContent, 'utf8');
@@ -1107,7 +1129,8 @@ Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array 
       projectId,
       audioUrl: project.audioUrl,
       srtUrl: project.srtUrl,
-      subtitles: subtitlesWithSeconds
+      subtitles: allParsedSubtitles,
+      project
     });
 
   } catch (err) {
@@ -1122,9 +1145,20 @@ function parseTimestampToSeconds(ts) {
   try {
     const parts = ts.replace('.', ',').split(',');
     const timeParts = parts[0].split(':');
-    const hours = parseInt(timeParts[0], 10) || 0;
-    const minutes = parseInt(timeParts[1], 10) || 0;
-    const seconds = parseInt(timeParts[2], 10) || 0;
+    let hours = 0, minutes = 0, seconds = 0;
+    
+    if (timeParts.length === 3) {
+      hours = parseInt(timeParts[0], 10) || 0;
+      minutes = parseInt(timeParts[1], 10) || 0;
+      seconds = parseInt(timeParts[2], 10) || 0;
+    } else if (timeParts.length === 2) {
+      hours = 0;
+      minutes = parseInt(timeParts[0], 10) || 0;
+      seconds = parseInt(timeParts[1], 10) || 0;
+    } else if (timeParts.length === 1) {
+      seconds = parseInt(timeParts[0], 10) || 0;
+    }
+    
     const millis = parseInt(parts[1], 10) || 0;
     return hours * 3600 + minutes * 60 + seconds + millis / 1000;
   } catch (e) {
@@ -1133,6 +1167,43 @@ function parseTimestampToSeconds(ts) {
 }
 
 // 17. Get All Projects (Role-Filtered)
+
+// 15b. Fetch Global Dashboard Stats
+app.get('/api/dashboard-stats', (req, res) => {
+  const projects = readProjects();
+  let totalProjects = 0;
+  let totalClips = 0;
+  let totalEpisodes = 0;
+  let totalMovies = 0;
+  let totalTrailers = 0;
+  let totalLines = 0;
+
+  Object.values(projects).forEach(p => {
+    totalProjects++;
+    const t = String(p.projectType || '').toLowerCase();
+    if (t.includes('clip') || t.includes('مقطع')) totalClips++;
+    else if (t.includes('movie') || t.includes('فيلم')) totalMovies++;
+    else if (t.includes('trailer') || t.includes('تريلر') || t.includes('عرض')) totalTrailers++;
+    else totalEpisodes++;
+
+    if (Array.isArray(p.subtitles)) {
+      totalLines += p.subtitles.length;
+    }
+  });
+
+  res.json({
+    success: true,
+    stats: {
+      totalProjects,
+      totalClips,
+      totalEpisodes,
+      totalMovies,
+      totalTrailers,
+      totalLines
+    }
+  });
+});
+
 app.get('/api/projects', (req, res) => {
   const userId = req.headers['x-user-id'];
   const projects = readProjects();
@@ -1318,3 +1389,11 @@ app.delete('/api/project/:id', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Subtie Backend running on http://localhost:${PORT}`);
 });
+
+function formatSecondsToTimestamp(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.round((sec % 1) * 1000);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+}

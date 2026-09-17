@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize } from 'lucide-react';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
@@ -9,6 +9,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   // Video Duration & Time update state for active subtitle preview overlay
   const [videoDurationSeconds, setVideoDurationSeconds] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [toastMsg, setToastMsg] = useState(null);
 
   // 3-Language Subtitle Radio Selection for Video Preview ('ja', 'en', 'ar')
   const [activeSrtLang, setActiveSrtLang] = useState('ar');
@@ -22,6 +23,8 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   const [exportLang, setExportLang] = useState('ar'); // 'ar', 'en', 'ja'
 
   const videoRef = useRef(null);
+  const videoContainerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isAr = lang === 'ar';
 
   // Seek video player to exact timestamp when clicking a line
@@ -39,6 +42,28 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
       setCurrentTime(videoRef.current.currentTime);
     }
   };
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      if (videoContainerRef.current?.requestFullscreen) {
+        videoContainerRef.current.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Toggle Human Check Approved Status
   const handleToggleApproved = (id) => {
@@ -289,23 +314,37 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
           </div>
 
           {/* HTML5 Video Player with Live Subtitle Overlay */}
-          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-inner border border-slate-800">
+          <div 
+            ref={videoContainerRef}
+            className={`relative w-full rounded-2xl overflow-hidden bg-black shadow-inner border border-slate-800 flex items-center justify-center ${isFullscreen ? 'h-screen' : 'aspect-video'}`}
+          >
             <video
               ref={videoRef}
               src={project.videoUrl}
               controls
+              controlsList="nofullscreen"
               playsInline
+              webkit-playsinline="true"
               preload="metadata"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={() => setVideoDurationSeconds(videoRef.current?.duration || 0)}
               className="w-full h-full object-contain"
             />
+            
+            {/* Custom Fullscreen Button */}
+            <button
+              onClick={toggleFullScreen}
+              className="absolute top-4 right-4 z-30 bg-black/60 text-white p-2.5 rounded-xl hover:bg-black/90 hover:scale-105 transition border border-white/20 shadow-lg backdrop-blur-md"
+              title={isFullscreen ? (isAr ? 'إنهاء ملء الشاشة' : 'Exit Fullscreen') : (isAr ? 'ملء الشاشة' : 'Fullscreen')}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
 
             {/* DYNAMIC SUBTITLE OVERLAY BASED ON RADIO SELECTION */}
             {previewOverlayText && (
-              <div className="absolute bottom-10 left-3 right-3 z-20 flex items-center justify-center text-center pointer-events-none">
+              <div className={`absolute left-3 right-3 z-20 flex items-center justify-center text-center pointer-events-none ${isFullscreen ? 'bottom-24' : 'bottom-10'}`}>
                 <p
-                  className="text-sm sm:text-base font-black leading-snug anime-subtitle-overlay tracking-wide bg-black/60 px-3 py-1.5 rounded-xl border border-white/20"
+                  className={`${isFullscreen ? 'text-2xl sm:text-4xl' : 'text-sm sm:text-base'} font-black leading-snug anime-subtitle-overlay tracking-wide bg-black/60 px-4 py-2 rounded-xl border border-white/20 drop-shadow-2xl`}
                   dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}
                 >
                   {previewOverlayText}

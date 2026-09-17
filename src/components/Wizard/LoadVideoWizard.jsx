@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
-export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'en' }) {
+export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lang = 'en' }) {
   const [currentStep, setCurrentStep] = useState(1);
   const isAr = lang === 'ar';
 
@@ -612,19 +612,47 @@ export default function LoadVideoWizard({ onCompleteProcess, onCancel, lang = 'e
                 </p>
               </div>
 
-              <div className="max-w-md mx-auto space-y-3">
-                <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
-                  <div
-                    className="h-full rounded-full shimmer-bar transition-all duration-500"
-                    style={{ width: `${processProgress}%` }}
-                  />
+              <div className="max-w-md mx-auto space-y-5 text-left" dir={isAr ? 'rtl' : 'ltr'}>
+                
+                {/* Step 1: Extracting Audio */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '1. استخراج الصوت' : '1. Extracting audio'}</span>
+                    <span className="text-emerald-400">{processProgress >= 40 ? '100%' : Math.round((processProgress/40)*100)}%</span>
+                  </div>
+                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 1-2 دقيقة' : 'Estimated time: 1-2 mins'}</div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${Math.min((processProgress/40)*100, 100)}%` }} />
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs font-black">
-                  <span className="text-purple-400 theme-light:text-purple-950">{processStatusMsg}</span>
-                  <span className="text-white bg-purple-950 theme-light:bg-purple-700 px-3 py-0.5 rounded-full border border-purple-500/30 wizard-white-text">
-                    {processProgress}%
-                  </span>
+                {/* Step 2: Submitting to AI */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '2. إرسال إلى الذكاء الاصطناعي' : '2. Chunking & Submitting to AI'}</span>
+                    <span className="text-pink-400">{processProgress < 40 ? '0%' : processProgress >= 80 ? '100%' : Math.round(((processProgress-40)/40)*100)}%</span>
+                  </div>
+                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 2-3 دقيقة' : 'Estimated time: 2-3 mins'}</div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-40)/40)*100, 100))}%` }} />
+                  </div>
+                </div>
+
+                {/* Step 3: AI Processing */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '3. معالجة وتفريغ الذكاء الاصطناعي' : '3. AI Transcription & Translation'}</span>
+                    <span className="text-indigo-400">{processProgress < 80 ? '0%' : Math.round(((processProgress-80)/20)*100)}%</span>
+                  </div>
+                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 3-5 دقائق لكل ساعة من الفيديو' : 'Estimated time: 3-5 mins per hour of video'}</div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-80)/20)*100, 100))}%` }} />
+                  </div>
+                </div>
+                
+                {/* Overall Status Text */}
+                <div className="text-center pt-2">
+                  <span className="text-xs font-black text-purple-400 theme-light:text-purple-900 bg-purple-950/50 theme-light:bg-purple-100 px-4 py-1.5 rounded-xl inline-block border border-purple-500/20">{processStatusMsg}</span>
                 </div>
               </div>
             </>
