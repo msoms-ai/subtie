@@ -77,14 +77,16 @@ export default function Header({
             )}
           </button>
 
-          {/* My Projects Button */}
-          <button
-            onClick={onOpenProjects}
-            className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-3.5 py-2 rounded-xl transition-all shadow-md shadow-purple-500/20"
-          >
-            <FolderKanban className="w-4 h-4 text-pink-200" />
-            <span className="hidden sm:inline">{isAr ? 'مشاريعي' : 'My Projects'}</span>
-          </button>
+          {/* My Projects Button (Only visible if logged in) */}
+          {user && (
+            <button
+              onClick={onOpenProjects}
+              className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-3.5 py-2 rounded-xl transition-all shadow-md shadow-purple-500/20"
+            >
+              <FolderKanban className="w-4 h-4 text-pink-200" />
+              <span className="hidden sm:inline">{isAr ? 'مشاريعي' : 'My Projects'}</span>
+            </button>
+          )}
 
           {/* User Profile Avatar & Dropdown Menu */}
           {user ? (

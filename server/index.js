@@ -1210,32 +1210,44 @@ app.get('/api/projects', (req, res) => {
   const users = readUsers();
   const user = users[userId];
 
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const projectList = Object.values(projects);
 
-  if (!user || user.role === 'Admin') {
-    // Admin sees all projects
+  if (user.role === 'Admin') {
     return res.json(projectList);
   }
 
   if (user.role === 'Auditor') {
-    // Auditor sees projects assigned to them for audit
     const assigned = projectList.filter(p => p.auditorId === userId || p.ownerId === userId);
     return res.json(assigned);
   }
 
-  // Translator sees owned projects or assigned projects
-  const translatorProjects = projectList.filter(p => p.ownerId === userId || p.auditorId === userId || !p.ownerId);
+  const translatorProjects = projectList.filter(p => p.ownerId === userId || p.auditorId === userId);
   return res.json(translatorProjects);
 });
 
 // 18. Get Single Project Details
 app.get('/api/project/:id', (req, res) => {
   const { id } = req.params;
+  const userId = req.headers['x-user-id'];
   const projects = readProjects();
+  const users = readUsers();
+  const user = users[userId];
   const project = projects[id];
 
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user.role !== 'Admin' && project.ownerId !== userId && project.auditorId !== userId) {
+    return res.status(403).json({ error: 'Forbidden' });
   }
 
   return res.json(project);
@@ -1244,12 +1256,23 @@ app.get('/api/project/:id', (req, res) => {
 // 19. Save Live Subtitle Edits (With optional Audit Status & Notes)
 app.post('/api/project/:id/save', (req, res) => {
   const { id } = req.params;
+  const userId = req.headers['x-user-id'];
   const { subtitles, auditStatus } = req.body;
   const projects = readProjects();
+  const users = readUsers();
+  const user = users[userId];
   const project = projects[id];
 
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user.role !== 'Admin' && project.ownerId !== userId && project.auditorId !== userId) {
+    return res.status(403).json({ error: 'Forbidden' });
   }
 
   if (Array.isArray(subtitles)) {
@@ -1356,11 +1379,22 @@ function formatSrtTimestamp(ts) {
 // 22. Delete Project & All Related Files
 app.delete('/api/project/:id', (req, res) => {
   const { id } = req.params;
+  const userId = req.headers['x-user-id'];
   const projects = readProjects();
+  const users = readUsers();
+  const user = users[userId];
   const project = projects[id];
 
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user.role !== 'Admin' && project.ownerId !== userId) {
+    return res.status(403).json({ error: 'Forbidden' });
   }
 
   const userId = project.ownerId || 'usr_guest';
