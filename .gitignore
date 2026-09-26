@@ -6,3 +6,11 @@ dist
 server/.env
 server/uploads/*
 !server/uploads/.gitkeep
+
+# Ignore Databases
+server/data/projects.json
+server/data/users.json
+
+# Ignore Databases
+server/data/projects.json
+server/data/users.json
