@@ -25,7 +25,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'X-User-Id', 'Accept']
 }));
-app.options('*', cors());
+app.options(/(.*)/, cors());
 app.use(express.json({ limit: '100mb' }));
 
 // Ensure directories exist
@@ -1426,7 +1426,7 @@ const distPath = path.join(__dirname, '../dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   // SPA Fallback
-  app.get('*', (req, res) => {
+  app.get(/(.*)/, (req, res) => {
     if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
       res.sendFile(path.join(distPath, 'index.html'));
     }
@@ -1442,4 +1442,11 @@ function formatSecondsToTimestamp(sec) {
   const s = Math.floor(sec % 60);
   const ms = Math.round((sec % 1) * 1000);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+}
+
+if (typeof server !== 'undefined') {
+  server.setTimeout(1800000);
+  server.keepAliveTimeout = 1800000;
+  server.headersTimeout = 1800000;
+  server.requestTimeout = 1800000;
 }
