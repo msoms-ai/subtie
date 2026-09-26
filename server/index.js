@@ -1397,8 +1397,8 @@ app.delete('/api/project/:id', (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const userId = project.ownerId || 'usr_guest';
-  const userProjectDir = path.join(UPLOADS_DIR, userId, id);
+  const folderOwnerId = project.ownerId || 'usr_guest';
+  const userProjectDir = path.join(UPLOADS_DIR, folderOwnerId, id);
   const rootProjectDir = path.join(UPLOADS_DIR, id);
 
   [userProjectDir, rootProjectDir].forEach(dir => {
