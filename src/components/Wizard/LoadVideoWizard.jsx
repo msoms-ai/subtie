@@ -147,7 +147,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       if (user?.id) {
         xhr.setRequestHeader('x-user-id', user.id);
       }
-      xhr.timeout = 30000;
+      xhr.timeout = 0;
       xhr.send(createFormData());
     };
 
