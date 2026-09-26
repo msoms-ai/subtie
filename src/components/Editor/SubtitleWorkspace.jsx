@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize } from 'lucide-react';
 
-export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang = 'en' }) {
+export default function SubtitleWorkspace({ initialProject, onSaveAndClose, user, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
   const [subtitles, setSubtitles] = useState(initialProject?.subtitles || []);
   const [activeSubId, setActiveSubId] = useState(null);
@@ -96,17 +96,23 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   };
 
   // Save project file & 3 SRT files in project folder, close editor, and return
-  const handleSaveAndClose = async () => {
+  const handleSave = async () => {
     setIsSaving(true);
     try {
       const res = await fetch(`/api/project/${project.id}/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
         body: JSON.stringify({ subtitles })
       });
       const data = await res.json();
       if (data.success) {
-        onSaveAndClose();
+        setToastMsg(lang === 'ar' ? 'تم حفظ التعديلات بنجاح' : 'Changes saved successfully!');
+        setTimeout(() => setToastMsg(null), 3000);
+      } else {
+        alert(data.error || 'Failed to save.');
       }
     } catch (err) {
       console.error('Save failed:', err);
@@ -121,7 +127,8 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/project/${project.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: user?.id ? { 'x-user-id': user.id } : {}
       });
       const data = await res.json();
       if (data.success) {
@@ -242,6 +249,13 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Global Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-500/90 text-white px-6 py-3 rounded-2xl shadow-xl font-black flex items-center space-x-2 rtl:space-x-reverse border border-emerald-400">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
       
       {/* Top Header: Video Info & High-Contrast Action Buttons */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-24 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
@@ -299,12 +313,12 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
 
           {/* Save & Exit Button */}
           <button
-            onClick={handleSaveAndClose}
+            onClick={handleSave}
             disabled={isSaving}
             className="flex items-center space-x-2 rtl:space-x-reverse px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white text-xs sm:text-sm font-black shadow-lg shadow-purple-500/20 transition wizard-white-text border border-purple-400/30"
           >
             <Save className="w-4 h-4 text-pink-200" />
-            <span>{isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ والخروج' : 'Save & Exit')}</span>
+            <span>{isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ التعديلات' : 'Save Changes')}</span>
           </button>
         </div>
       </div>
