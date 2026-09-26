@@ -66,6 +66,8 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
   }, []);
 
   // Toggle Human Check Approved Status
+  const handleApproveAll = () => { setSubtitles(prev => prev.map(sub => ({ ...sub, approved: true }))); };
+
   const handleToggleApproved = (id) => {
     setSubtitles(prev =>
       prev.map(sub => sub.id === id ? { ...sub, approved: !sub.approved } : sub)
@@ -242,7 +244,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Top Header: Video Info & High-Contrast Action Buttons */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-24 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
         
         {/* Exit button */}
         <button
@@ -283,7 +285,16 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
             className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-purple-900 border border-slate-700 theme-light:border-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105 wizard-white-text"
           >
             <Download className="w-4 h-4 text-purple-300" />
-            <span>{isAr ? 'تصدير الملفات (.SRT/.ASS)' : 'Export (.SRT/.ASS)'}</span>
+            <span className="hidden lg:inline">{isAr ? 'تصدير الملفات' : 'Export'}</span>
+          </button>
+
+          {/* Approve All Button */}
+          <button
+            onClick={handleApproveAll}
+            className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-emerald-900/60 theme-light:bg-emerald-600 border border-emerald-500/30 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105 wizard-white-text"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+            <span className="hidden lg:inline">{isAr ? 'اعتماد الكل' : 'Approve All'}</span>
           </button>
 
           {/* Save & Exit Button */}
@@ -679,6 +690,15 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, lang
         </div>
       )}
 
+
+      {/* Scroll to Top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-500 transition hover:-translate-y-1"
+        title="Scroll to Top"
+      >
+        <ArrowLeft className="w-6 h-6 rotate-90" />
+      </button>
     </div>
   );
 }

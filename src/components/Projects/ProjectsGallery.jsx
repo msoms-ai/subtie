@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
+import { Search, Trash2, ArrowLeft, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
 
 export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAssignAuditor, user, lang = 'en' }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all'); // 'all', 'episode', 'movie', 'trailer', 'clip'
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
+  const [sortOption, setSortOption] = useState('newest'); // 'all', 'episode', 'movie', 'trailer', 'clip'
   
   // Deletion modal states
   const [deletingProjectId, setDeletingProjectId] = useState(null);
@@ -81,8 +82,18 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
     return <Tv className="w-4 h-4 text-purple-300" />;
   };
 
-  // Filter projects by category & search query
-  const filteredProjects = projects.filter(p => {
+  // Sort and filter projects
+  const sortedProjects = [...projects].sort((a, b) => {
+    const dateA = new Date(a.updatedAt || a.createdAt || a.id || 0).getTime();
+    const dateB = new Date(b.updatedAt || b.createdAt || b.id || 0).getTime();
+    if (sortOption === 'newest') return dateB - dateA;
+    if (sortOption === 'oldest') return dateA - dateB;
+    if (sortOption === 'nameAsc') return (a.projectName || '').localeCompare(b.projectName || '');
+    if (sortOption === 'nameDesc') return (b.projectName || '').localeCompare(a.projectName || '');
+    return 0;
+  });
+
+  const filteredProjects = sortedProjects.filter(p => {
     const matchesSearch =
       (p.projectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.mediaTitle || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -151,8 +162,9 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
         </div>
       </div>
 
-      {/* CATEGORY FILTER TABS BAR */}
-      <div className="flex items-center space-x-2 rtl:space-x-reverse overflow-x-auto pb-2" dir={isAr ? 'rtl' : 'ltr'}>
+      {/* SORTING & FILTER TABS BAR */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="flex items-center space-x-2 rtl:space-x-reverse overflow-x-auto pb-2">
         <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 flex items-center space-x-1 rtl:space-x-reverse shrink-0 px-2">
           <Filter className="w-3.5 h-3.5 text-pink-400 theme-light:text-purple-700" />
           <span>{isAr ? 'التصفية حسب الفئة:' : 'Filter by Category:'}</span>
@@ -177,6 +189,19 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
             {isAr ? tab.labelAr : tab.labelEn}
           </button>
         ))}
+        </div>
+
+        {/* SORT DROPDOWN */}
+        <select
+          value={sortOption}
+          onChange={(e) => setSortOption(e.target.value)}
+          className="bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 text-white theme-light:text-slate-950 text-xs font-bold rounded-xl px-3 py-2 outline-none"
+        >
+          <option value="newest">{isAr ? 'الأحدث أولاً' : 'Latest First'}</option>
+          <option value="oldest">{isAr ? 'الأقدم أولاً' : 'Oldest First'}</option>
+          <option value="nameAsc">{isAr ? 'الاسم (أ-ي)' : 'Name (A-Z)'}</option>
+          <option value="nameDesc">{isAr ? 'الاسم (ي-أ)' : 'Name (Z-A)'}</option>
+        </select>
       </div>
 
       {/* Projects Grid Layout */}
@@ -360,6 +385,15 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
         </div>
       )}
 
+
+      {/* Scroll to Top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-500 transition hover:-translate-y-1"
+        title="Scroll to Top"
+      >
+        <ArrowLeft className="w-6 h-6 rotate-90" />
+      </button>
     </div>
   );
 }

@@ -196,7 +196,7 @@ export default function App() {
           <SubtitleWorkspace
             user={user}
             initialProject={currentProject}
-            onSaveAndClose={handleGoHome}
+            onSaveAndClose={() => setView('projects')}
             lang={lang}
           />
         )}
