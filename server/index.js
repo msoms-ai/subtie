@@ -957,6 +957,8 @@ app.get('/api/settings/models', async (req, res) => {
     console.error('[Settings] Fetch models error:', err);
     // Fallback to hardcoded known models if the API fails due to permissions or SDK issues
     const fallbackModels = [
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-preview',
       'gemini-1.5-pro',
       'gemini-1.5-pro-latest',
       'gemini-1.5-pro-001',
@@ -1112,13 +1114,13 @@ app.post('/api/process', async (req, res) => {
 
 
     // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
-    const chunkDuration = 300; // 5 minutes per chunk
+    const chunkDuration = 120; // 2 minutes per chunk to prevent AI truncation
     const chunksDir = path.join(targetDir, 'chunks');
     if (!fs.existsSync(chunksDir)) {
       fs.mkdirSync(chunksDir);
     }
     
-    console.log(`[Audio Splitter] Segmenting audio into 5-minute chunks...`);
+    console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
         .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
@@ -1147,10 +1149,10 @@ app.post('/api/process', async (req, res) => {
       // --- STAGE 1: JAPANESE ASR ---
       console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
       const promptStage1 = `You are an expert anime Japanese ASR engine.
-Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from start to finish. DO NOT skip any dialogue!
+Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
 
 CRITICAL RULES:
-1. TRANSCRIBE EVERYTHING covering the entire duration.
+1. COMPLETE COVERAGE: You MUST transcribe everything up to the final second of the audio file. Never truncate, never summarize, never stop early.
 2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
 3. SPLIT LONG SPEECHES into separate consecutive objects.
 4. PRECISE TIMING: Timings must match the actual audio exactly.
@@ -1161,7 +1163,7 @@ For each subtitle block, provide:
 3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
 
 Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
-Output raw JSON array only, without markdown formatting.`;
+Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
 
       const settings = readSettings();
       const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
