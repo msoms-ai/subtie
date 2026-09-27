@@ -1103,14 +1103,7 @@ app.post('/api/process', async (req, res) => {
     // Step 1: Extract Audio
     await extractAudioTrack(videoPath, audioPath);
     
-      (function() {
-        const db = readProjects();
-        if(db[projectId]) {
-          db[projectId].processingProgress = 100;
-          db[projectId].processingStatus = "Completed";
-          writeProjects(db);
-        }
-      })();
+
       project.audioUrl = `${req.urlPrefix}/audio.mp3`;
 
     // Step 2: Initialize Gemini AI Client
@@ -1169,8 +1162,10 @@ app.post('/api/process', async (req, res) => {
       (function() {
         const db = readProjects();
         if(db[projectId]) {
-          db[projectId].processingProgress = 30;
-          db[projectId].processingStatus = "AI Stage 1: Transcribing Japanese (ASR)...";
+          const base = 40;
+          const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
+          db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.2));
+          db[projectId].processingStatus = `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}...`;
           writeProjects(db);
         }
       })();
@@ -1235,8 +1230,10 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
       (function() {
         const db = readProjects();
         if(db[projectId]) {
-          db[projectId].processingProgress = 60;
-          db[projectId].processingStatus = "AI Stage 2: Translating to English & Arabic...";
+          const base = 40;
+          const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
+          db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.7));
+          db[projectId].processingStatus = `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}...`;
           writeProjects(db);
         }
       })();
@@ -1331,6 +1328,8 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     fs.writeFileSync(srtPath, srtContent, 'utf8');
     project.srtUrl = `${req.urlPrefix}/subtitle.srt`;
     project.updatedAt = new Date().toISOString();
+    project.processingProgress = 100;
+    project.processingStatus = "Completed";
 
     writeProjects(projects);
 
