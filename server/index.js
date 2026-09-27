@@ -224,7 +224,7 @@ const storage = multer.diskStorage({
     
     // Create physical folder structure using projectName
     const rawFolderName = req.body?.projectName || 'Uncategorized';
-    const safeFolderName = rawFolderName.replace(/[\/\?%*:|"<>\]/g, '_').trim();
+    const safeFolderName = rawFolderName.replace(/[\/\\?%*:|\"<>]/g, '_').trim();
     req.safeFolderName = safeFolderName;
     
     const userDir = path.join(UPLOADS_DIR, userId);
@@ -991,7 +991,7 @@ app.post('/api/process', async (req, res) => {
 
   // Determine user directory path
   const userId = project.ownerId || 'usr_guest';
-  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\?%*:|"<>\]/g, '_').trim() : 'Uncategorized';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
   
   const newNestedDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
   const oldFlatDir = path.join(UPLOADS_DIR, userId, projectId);
