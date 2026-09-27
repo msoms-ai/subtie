@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, ArrowLeft, Edit3, Film, Sparkles, AlertTriangle, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
+import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
 
 export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAssignAuditor, user, lang = 'en' }) {
   const [projects, setProjects] = useState([]);
@@ -377,6 +377,49 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
           </div>
         );
       })()}
+
+            {/* Delete Confirmation Modal */}
+      {deletingProjectId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          <div className="bg-slate-900 theme-light:bg-white p-6 rounded-3xl border border-rose-500/30 max-w-sm w-full shadow-2xl relative overflow-hidden">
+            
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-500 to-pink-500" />
+            
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-rose-500" />
+              </div>
+              
+              <h3 className="text-xl font-black text-white theme-light:text-slate-950">
+                {lang === 'ar' ? 'حذف المشروع' : 'Delete Project'}
+              </h3>
+              
+              <p className="text-sm font-bold text-slate-400 theme-light:text-slate-600 leading-relaxed">
+                {lang === 'ar' 
+                  ? 'هل أنت متأكد من حذف هذا المشروع؟ سيتم حذف جميع الملفات النصية والصوتية المرتبطة به نهائياً ولن يمكنك التراجع.' 
+                  : 'Are you sure you want to delete this project? All associated media and text files will be permanently erased. This cannot be undone.'}
+              </p>
+            </div>
+
+            <div className="mt-8 flex space-x-3 rtl:space-x-reverse">
+              <button
+                onClick={() => setDeletingProjectId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 font-black hover:bg-slate-800 theme-light:hover:bg-slate-100 transition"
+                disabled={isDeleting}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white font-black shadow-lg hover:shadow-rose-500/25 transition disabled:opacity-50"
+              >
+                {isDeleting ? (lang === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (lang === 'ar' ? 'نعم، احذف نهائياً' : 'Yes, Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scroll to Top */}
       <button
