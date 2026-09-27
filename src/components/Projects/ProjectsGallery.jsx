@@ -6,7 +6,9 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
-  const [sortOption, setSortOption] = useState('newest'); // 'all', 'episode', 'movie', 'trailer', 'clip'
+  const [sortOption, setSortOption] = useState('newest');
+  const [viewMode, setViewMode] = useState('folders');
+  const [selectedFolder, setSelectedFolder] = useState(null); // 'all', 'episode', 'movie', 'trailer', 'clip'
   
   // Deletion modal states
   const [deletingProjectId, setDeletingProjectId] = useState(null);
@@ -205,186 +207,176 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
       </div>
 
       {/* Projects Grid Layout */}
+      {/* VIEW MODE TOGGLE */}
+      <div className="flex justify-end mb-4" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="flex bg-slate-900 theme-light:bg-white rounded-xl p-1 border border-slate-700 theme-light:border-purple-300 shadow-md">
+          <button onClick={() => { setViewMode('folders'); setSelectedFolder(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'folders' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
+            {isAr ? 'عرض المجلدات' : 'Folders'}
+          </button>
+          <button onClick={() => setViewMode('flat')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'flat' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
+            {isAr ? 'عرض القائمة' : 'List'}
+          </button>
+        </div>
+      </div>
+
+      {/* FOLDER NAVIGATION BACK BUTTON */}
+      {viewMode === 'folders' && selectedFolder && (
+        <div className="mb-4 flex items-center" dir={isAr ? 'rtl' : 'ltr'}>
+           <button onClick={() => setSelectedFolder(null)} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
+             <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
+             <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
+           </button>
+           <h3 className="text-xl font-black text-white theme-light:text-slate-900 mx-4">{selectedFolder}</h3>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-20 text-purple-300">
           <Sparkles className="w-10 h-10 animate-spin mx-auto mb-3 text-purple-400" />
           <p className="text-sm font-black text-white theme-light:text-slate-950">{isAr ? 'جاري تحميل قائمة مشاريعك...' : 'Loading project gallery...'}</p>
         </div>
-      ) : filteredProjects.length === 0 ? (
-        <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 space-y-5 max-w-lg mx-auto shadow-2xl">
-          <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 flex items-center justify-center text-pink-300">
-            <Film className="w-8 h-8" />
+      ) : (() => {
+        
+        // Handle Folder View Root
+        if (viewMode === 'folders' && !selectedFolder) {
+           const folderNames = [...new Set(filteredProjects.map(p => p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')))];
+           
+           if (folderNames.length === 0) return (
+             <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 max-w-lg mx-auto shadow-2xl">
+                <Layers className="w-16 h-16 text-slate-500 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white theme-light:text-slate-950 mb-2">{isAr ? 'لا توجد مجلدات' : 'No Folders Found'}</h3>
+             </div>
+           );
+
+           return (
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+               {folderNames.map(folder => {
+                 const folderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === folder);
+                 return (
+                   <div key={folder} onClick={() => setSelectedFolder(folder)} className="glass-panel-glow p-6 rounded-3xl border border-purple-500/30 cursor-pointer hover:scale-105 transition shadow-xl group bg-slate-900/50 theme-light:bg-white">
+                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-800 flex items-center justify-center mb-4 group-hover:-translate-y-1 transition shadow-lg">
+                       <Layers className="w-7 h-7 text-white" />
+                     </div>
+                     <h3 className="text-lg font-black text-white theme-light:text-slate-950 mb-1 line-clamp-1">{folder}</h3>
+                     <p className="text-xs text-purple-300 theme-light:text-purple-700 font-bold">{folderProjects.length} {isAr ? 'عنصر' : 'items'}</p>
+                   </div>
+                 );
+               })}
+             </div>
+           );
+        }
+
+        // Handle Project List (Flat or Inside Folder)
+        const displayProjects = viewMode === 'folders' 
+          ? filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === selectedFolder) 
+          : filteredProjects;
+
+        if (displayProjects.length === 0) return (
+          <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 space-y-5 max-w-lg mx-auto shadow-2xl">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 flex items-center justify-center text-pink-300">
+              <Film className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-white theme-light:text-slate-950">
+              {isAr ? 'لا توجد مشاريع' : 'No Projects Found'}
+            </h3>
           </div>
-          <h3 className="text-xl font-black text-white theme-light:text-slate-950">
-            {isAr ? 'لا توجد مشاريع حتى الآن' : 'No Subtitle Projects Found'}
-          </h3>
-          <p className="text-xs text-purple-300 theme-light:text-purple-950 font-extrabold leading-relaxed">
-            {searchQuery
-              ? (isAr ? 'لم يتم العثور على نتائج تطابق البحث المدخل' : 'No projects match your search query.')
-              : (isAr ? 'ابدأ بإنشاء أول مشروع ترجمة أنمي الآن وافتح محرر التزامن المتقدم!' : 'Get started by creating your first video fansub project!')}
-          </p>
-          {(!user || user.role !== 'Auditor') && (
-            <button
-              onClick={onStartWizard}
-              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xs sm:text-sm shadow-xl wizard-white-text border border-purple-400/40"
-            >
-              {isAr ? 'إنشاء مشروع جديد الآن' : 'Create Project Now'}
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map((p) => {
-            const lineCount = p.subtitles?.length || 0;
-            const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
-            const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
-            const isAuditorAssigned = p.auditorId && user?.id === p.auditorId;
+        );
 
-            return (
-              <div
-                key={p.id}
-                className="glass-panel-glow p-6 rounded-3xl border border-purple-500/30 hover:border-purple-400 transition-all duration-300 shadow-xl flex flex-col justify-between space-y-5 text-center items-center group relative overflow-hidden"
-              >
-                <div className="w-full space-y-3">
-                  
-                  {/* Top Badge & Actions */}
-                  <div className="flex items-center justify-between w-full" dir={isAr ? 'rtl' : 'ltr'}>
-                    <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-800 px-3.5 py-1.5 rounded-full border-2 border-purple-400 shadow-sm text-xs font-black text-white wizard-white-text">
-                      {getCategoryIcon(p.projectType)}
-                      <span>{getCategoryLabel(p.projectType)}</span>
-                    </div>
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {displayProjects.map((p) => {
+              const lineCount = p.subtitles?.length || 0;
+              const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
+              const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
+              
+              return (
+                <div key={p.id} className="group relative glass-panel-glow rounded-3xl overflow-hidden border border-purple-500/30 shadow-2xl hover:shadow-purple-500/40 transition-all hover:-translate-y-1 flex flex-col h-full bg-slate-900/60 theme-light:bg-white" dir={isAr ? 'rtl' : 'ltr'}>
+                  {/* Status Banner */}
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500 opacity-80" />
 
-                    {/* Delete Icon (Admins & Owners) */}
-                    {(!user || user.role === 'Admin' || user.id === p.ownerId) && (
-                      <button
+                  <div className="p-5 flex-1 flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-100 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-300 mb-2">
+                          {getCategoryIcon(p.projectType)}
+                          <span className="text-[10px] font-black text-purple-200 theme-light:text-purple-800 tracking-wider uppercase">
+                            {getCategoryLabel(p.projectType)}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight mb-1 line-clamp-2">
+                          {p.mediaTitle}
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 theme-light:text-slate-600 line-clamp-1">
+                          {p.projectName}
+                        </p>
+                      </div>
+
+                      {/* Action Dropdown Menu Placeholder */}
+                      <button 
                         onClick={() => setDeletingProjectId(p.id)}
-                        className="p-2 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 text-white border border-rose-500/40 hover:scale-110 transition shadow-sm wizard-white-text"
+                        className="p-2 rounded-xl bg-slate-900/50 theme-light:bg-rose-100 border border-slate-700 theme-light:border-rose-200 text-slate-400 theme-light:text-rose-600 hover:text-rose-400 hover:border-rose-500/50 transition group-hover:opacity-100 opacity-0"
                         title={isAr ? 'حذف المشروع' : 'Delete Project'}
                       >
-                        <Trash2 className="w-4 h-4 text-white" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Owner & Auditor Badges */}
-                  <div className="flex items-center justify-between text-[11px] font-black pt-1" dir={isAr ? 'rtl' : 'ltr'}>
-                    <span className="text-purple-300 theme-light:text-purple-900">
-                      👤 {p.ownerName || (isAr ? 'مالك المشروع' : 'Owner')}
-                    </span>
-                    {p.auditorName ? (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        🔍 {isAr ? 'المدقق:' : 'Auditor:'} {p.auditorName}
-                      </span>
-                    ) : (
-                      (!user || user.role !== 'Auditor') && (
+                    {/* Meta Info */}
+                    <div className="mt-auto space-y-4">
+                      
+                      {/* Date */}
+                      <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-slate-400 theme-light:text-slate-500 font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>
+                          {new Date(p.createdAt || p.id).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', {
+                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Audit Progress Bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px] font-black">
+                          <span className="text-purple-300 theme-light:text-purple-800">{isAr ? 'الترجمة والتدقيق' : 'Subtitling Progress'}</span>
+                          <span className={progressPercent === 100 ? 'text-emerald-400' : 'text-pink-400'}>{progressPercent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 theme-light:bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-1000 ${progressPercent === 100 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-gradient-to-r from-pink-500 to-purple-500 shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-2 flex items-center space-x-2 rtl:space-x-reverse">
                         <button
-                          onClick={() => onOpenAssignAuditor(p)}
-                          className="text-pink-400 hover:text-pink-300 font-bold underline flex items-center space-x-1 rtl:space-x-reverse"
+                          onClick={() => onEditProject(p)}
+                          className="flex-1 flex items-center justify-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 hover:bg-purple-900 theme-light:hover:bg-purple-800 text-white py-2.5 rounded-xl border border-purple-500/30 transition text-xs font-black shadow-md wizard-white-text"
                         >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>{isAr ? 'تعيين مدقق' : 'Assign Auditor'}</span>
+                          <Edit3 className="w-4 h-4 text-purple-300 theme-light:text-purple-200" />
+                          <span>{isAr ? 'فتح المحرر' : 'Open Editor'}</span>
                         </button>
-                      )
-                    )}
-                  </div>
-
-                  {/* Project Titles */}
-                  <div className="text-center pt-1" dir={isAr ? 'rtl' : 'ltr'}>
-                    <h3 className="text-xl font-black text-white theme-light:text-slate-950 group-hover:text-pink-300 theme-light:group-hover:text-purple-700 transition truncate">
-                      {p.projectName}
-                    </h3>
-                    <p className="text-xs font-extrabold text-purple-300 theme-light:text-purple-950 truncate mt-1">
-                      {p.mediaTitle}
-                    </p>
-                  </div>
-
-                  {/* Approved Lines Progress Bar */}
-                  <div className="space-y-1.5 pt-2" dir={isAr ? 'rtl' : 'ltr'}>
-                    <div className="flex items-center justify-between text-[11px] font-black text-purple-300 theme-light:text-purple-950">
-                      <span>{isAr ? 'نسبة اعتماد الترجمة:' : 'Approved Translation:'}</span>
-                      <span className="text-emerald-400 theme-light:text-emerald-800 font-mono font-black">{progressPercent}%</span>
-                    </div>
-                    <div className="w-full bg-slate-950 theme-light:bg-purple-200 h-2.5 rounded-full overflow-hidden border border-purple-500/30">
-                      <div
-                        className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-500"
-                        style={{ width: `${progressPercent}%` }}
-                      />
+                        
+                        {(user?.role === 'Admin' || user?.role === 'Translator') && (
+                          <button
+                            onClick={() => onOpenAssignAuditor(p)}
+                            className="p-2.5 rounded-xl bg-slate-800 theme-light:bg-slate-200 border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 hover:text-white theme-light:hover:bg-purple-100 transition shadow-sm"
+                            title={isAr ? 'تعيين مدقق' : 'Assign Auditor'}
+                          >
+                            <Shield className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-
                 </div>
-
-                {/* Subtitle Stats Boxes */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-purple-500/20 w-full" dir={isAr ? 'rtl' : 'ltr'}>
-                  <div className="bg-purple-950 theme-light:bg-purple-800 p-3 rounded-2xl border-2 border-purple-400/80 shadow-md flex flex-col items-center justify-center text-center wizard-white-text">
-                    <span className="text-[11px] text-purple-200 font-bold block mb-0.5 text-center">{isAr ? 'أسطر الترجمة' : 'Total Lines'}</span>
-                    <span className="font-mono text-sm font-black text-white text-center block">{lineCount} {isAr ? 'سطر' : 'lines'}</span>
-                  </div>
-                  
-                  <div className="bg-purple-950 theme-light:bg-purple-800 p-3 rounded-2xl border-2 border-purple-400/80 shadow-md flex flex-col items-center justify-center text-center wizard-white-text">
-                    <span className="text-[11px] text-purple-200 font-bold block mb-0.5 text-center">{isAr ? 'أسطر معتمدة' : 'Approved'}</span>
-                    <span className="font-mono text-sm font-black text-emerald-300 text-center block">{approvedCount}/{lineCount}</span>
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <button
-                  onClick={() => onEditProject(p)}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-[1.02] text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center space-x-2 rtl:space-x-reverse transition wizard-white-text border border-purple-400/40"
-                >
-                  <Edit3 className="w-4 h-4 text-pink-200" />
-                  <span>
-                    {isAuditorAssigned
-                      ? (isAr ? 'مراجعة وتدقيق المشروع (Auditor Workspace)' : 'Review & Audit Subtitles')
-                      : (isAr ? 'فتح المحرر ومساحة العمل' : 'Open Subtitle Workspace')}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deletingProjectId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-3xl border border-rose-500/40 text-center space-y-5 shadow-2xl animate-fade-in">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400">
-              <AlertTriangle className="w-8 h-8" />
-            </div>
-
-            <div>
-              <h3 className="text-xl font-black text-white theme-light:text-slate-950">
-                {isAr ? 'تأكيد حذف المشروع' : 'Confirm Project Deletion'}
-              </h3>
-              <p className="text-xs text-rose-300 theme-light:text-rose-700 mt-2 leading-relaxed font-bold">
-                {isAr
-                  ? 'هل أنت تأكد من أنك تريد حذف هذا المشروع؟ سيتم حذف جميع الملفات نهائياً بما في ذلك الفيديو والصوت وملف الترجمة.'
-                  : 'Are you sure you want to delete this project? All associated media files (video, audio track, and SRT subtitles) will be permanently deleted from the server.'}
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-3 rtl:space-x-reverse pt-2">
-              <button
-                disabled={isDeleting}
-                onClick={() => setDeletingProjectId(null)}
-                className="flex-1 py-3 bg-purple-950 theme-light:bg-slate-200 border border-purple-500/40 theme-light:border-slate-300 text-white theme-light:text-slate-900 rounded-xl text-xs font-black transition"
-              >
-                {isAr ? 'إلغاء' : 'Cancel'}
-              </button>
-              <button
-                disabled={isDeleting}
-                onClick={handleDeleteConfirm}
-                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-rose-500/30 transition flex items-center justify-center space-x-1.5 wizard-white-text"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>{isDeleting ? (isAr ? 'جاري الحذف...' : 'Deleting...') : (isAr ? 'حذف المشروع' : 'Delete Project')}</span>
-              </button>
-            </div>
+              );
+            })}
           </div>
-        </div>
-      )}
-
+        );
+      })()}
 
       {/* Scroll to Top */}
       <button

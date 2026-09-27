@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
@@ -38,6 +38,34 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   ];
 
   const [uploadStatusText, setUploadStatusText] = useState('');
+
+  const [existingFolders, setExistingFolders] = useState([]);
+  const [folderSelectionMode, setFolderSelectionMode] = useState('new'); // 'new' or 'existing'
+
+  useEffect(() => {
+    const fetchFolders = async () => {
+      try {
+        const headers = user?.id ? { 'x-user-id': user.id } : {};
+        const res = await fetch('/api/projects', { cache: 'no-store', headers });
+        const data = await res.json();
+        let projectsArray = [];
+        if (Array.isArray(data)) {
+          projectsArray = data;
+        } else if (data.success) {
+          projectsArray = data.projects || [];
+        }
+        const folders = [...new Set(projectsArray.map(p => p.projectName).filter(Boolean))];
+        setExistingFolders(folders);
+        if (folders.length > 0) {
+          setFolderSelectionMode('existing');
+          setProjectName(folders[0]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch folders:', err);
+      }
+    };
+    fetchFolders();
+  }, [user]);
 
   // Robust XHR Upload with Real Byte Tracking & Direct Fallback
   const handleUploadClick = () => {
@@ -268,17 +296,47 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           </div>
 
           <div>
-            <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-1.5">
-              {isAr ? 'اسم المشروع' : 'Project Name'}
+            <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-3">
+              {isAr ? 'مجلد المشروع (الأنمي)' : 'Project Folder (Anime Series)'}
             </label>
-            <input
-              type="text"
-              dir={isAr ? 'rtl' : 'ltr'}
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              placeholder={isAr ? 'مثال: مشروع ترجمة ون بيس - أرك وانو' : 'e.g. One Piece Wano Fansub Project'}
-              className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
-            />
+            
+            <div className="flex space-x-2 rtl:space-x-reverse mb-3" dir={isAr ? 'rtl' : 'ltr'}>
+              <button
+                onClick={() => setFolderSelectionMode('existing')}
+                disabled={existingFolders.length === 0}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${folderSelectionMode === 'existing' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'} ${existingFolders.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isAr ? 'اختيار مجلد حالي' : 'Select Existing Folder'}
+              </button>
+              <button
+                onClick={() => { setFolderSelectionMode('new'); setProjectName(''); }}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${folderSelectionMode === 'new' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'}`}
+              >
+                {isAr ? 'إنشاء مجلد جديد' : 'Create New Folder'}
+              </button>
+            </div>
+
+            {folderSelectionMode === 'existing' && existingFolders.length > 0 ? (
+              <select
+                dir={isAr ? 'rtl' : 'ltr'}
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+              >
+                {existingFolders.map(folder => (
+                  <option key={folder} value={folder}>{folder}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                dir={isAr ? 'rtl' : 'ltr'}
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder={isAr ? 'مثال: ون بيس - أرك وانو' : 'e.g. One Piece Wano Arc'}
+                className="w-full bg-slate-900 theme-light:bg-white border border-slate-700 theme-light:border-purple-400 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+              />
+            )}
           </div>
 
           <div>
