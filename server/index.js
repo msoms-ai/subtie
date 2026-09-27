@@ -222,8 +222,15 @@ const storage = multer.diskStorage({
     req.projectId = projectId;
     req.userId = userId;
     
+    // Create physical folder structure using projectName
+    const rawFolderName = req.body?.projectName || 'Uncategorized';
+    const safeFolderName = rawFolderName.replace(/[\/\?%*:|"<>\]/g, '_').trim();
+    req.safeFolderName = safeFolderName;
+    
     const userDir = path.join(UPLOADS_DIR, userId);
-    const projectDir = path.join(userDir, projectId);
+    const folderDir = path.join(userDir, safeFolderName);
+    const projectDir = path.join(folderDir, projectId);
+    
     fs.mkdirSync(projectDir, { recursive: true });
     cb(null, projectDir);
   },
@@ -925,11 +932,12 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   const users = readUsers();
   const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
 
-  const projectDir = path.join(UPLOADS_DIR, userId, projectId);
+  const safeFolderName = req.safeFolderName || 'Uncategorized';
+  const projectDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
   const videoFilename = req.file.filename;
   
   // Public URL relative to /uploads
-  const videoUrl = `/uploads/${userId}/${projectId}/${videoFilename}`;
+  const videoUrl = `/uploads/${userId}/${safeFolderName}/${projectId}/${videoFilename}`;
 
   const projects = readProjects();
 
@@ -983,10 +991,26 @@ app.post('/api/process', async (req, res) => {
 
   // Determine user directory path
   const userId = project.ownerId || 'usr_guest';
-  const projectDir = path.join(UPLOADS_DIR, userId, projectId);
+  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\?%*:|"<>\]/g, '_').trim() : 'Uncategorized';
   
-  // Fallback check for root uploads if older project
-  const targetDir = fs.existsSync(projectDir) ? projectDir : path.join(UPLOADS_DIR, projectId);
+  const newNestedDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
+  const oldFlatDir = path.join(UPLOADS_DIR, userId, projectId);
+  const rootDir = path.join(UPLOADS_DIR, projectId);
+  
+  let targetDir = newNestedDir;
+  let urlPrefix = `/uploads/${userId}/${safeFolderName}/${projectId}`;
+  
+  if (!fs.existsSync(newNestedDir)) {
+    if (fs.existsSync(oldFlatDir)) {
+      targetDir = oldFlatDir;
+      urlPrefix = `/uploads/${userId}/${projectId}`;
+    } else if (fs.existsSync(rootDir)) {
+      targetDir = rootDir;
+      urlPrefix = `/uploads/${projectId}`;
+    }
+  }
+  
+  req.urlPrefix = urlPrefix; // Store for later use
 
   const videoFiles = fs.readdirSync(targetDir).filter(f => f.startsWith('video.'));
   if (videoFiles.length === 0) {
@@ -1000,7 +1024,7 @@ app.post('/api/process', async (req, res) => {
   try {
     // Step 1: Extract Audio
     await extractAudioTrack(videoPath, audioPath);
-    project.audioUrl = `/uploads/${userId}/${projectId}/audio.mp3`;
+    project.audioUrl = `${req.urlPrefix}/audio.mp3`;
 
     // Step 2: Initialize Gemini AI Client
     const apiKey = process.env.GEMINI_API_KEY;
@@ -1174,7 +1198,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
     });
     fs.writeFileSync(srtPath, srtContent, 'utf8');
-    project.srtUrl = `/uploads/${userId}/${projectId}/subtitle.srt`;
+    project.srtUrl = `${req.urlPrefix}/subtitle.srt`;
     project.updatedAt = new Date().toISOString();
 
     writeProjects(projects);

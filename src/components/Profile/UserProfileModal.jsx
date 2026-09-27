@@ -275,7 +275,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser, 
         )}
 
         {/* Tab Navigation Buttons */}
-        <div className="flex border-b border-purple-500/20 text-xs font-black">
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-purple-500/20 text-xs font-black scrollbar-hide pb-1">
           <button
             onClick={() => { setError(''); setMessage(''); setActiveTab('profile'); }}
             className={`pb-3 px-4 transition border-b-2 ${

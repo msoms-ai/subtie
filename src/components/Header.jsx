@@ -38,7 +38,7 @@ export default function Header({
           <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-600 rounded-lg blur-lg opacity-25 group-hover:opacity-60 transition duration-500"></div>
           <div className="relative flex items-center space-x-2 rtl:space-x-reverse">
             <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight glitter-title font-['Outfit']">
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight glitter-title font-['Outfit']">
               Subtie
             </h1>
             <Sparkles className="w-5 h-5 text-pink-400 animate-pulse" />
@@ -51,7 +51,7 @@ export default function Header({
           {/* Language Switcher */}
           <button
             onClick={onToggleLang}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-2 rounded-xl text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-purple-200 theme-light:text-white border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
+            className="flex items-center space-x-1.5 rtl:space-x-reverse px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-purple-200 theme-light:text-white border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
             title="Switch Language / تغيير اللغة"
           >
             <Globe className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
@@ -61,7 +61,7 @@ export default function Header({
           {/* Theme Switcher */}
           <button
             onClick={onToggleTheme}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-2 rounded-xl text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-amber-300 theme-light:text-yellow-300 border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
+            className="flex items-center space-x-1.5 rtl:space-x-reverse px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black bg-purple-950/80 theme-light:bg-purple-700 text-amber-300 theme-light:text-yellow-300 border border-purple-500/40 theme-light:border-purple-800 shadow-md transition hover:scale-105"
             title={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           >
             {isLight ? (
@@ -81,7 +81,7 @@ export default function Header({
           {user && (
             <button
               onClick={onOpenProjects}
-              className="flex items-center space-x-2 rtl:space-x-reverse text-xs sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-3.5 py-2 rounded-xl transition-all shadow-md shadow-purple-500/20"
+              className="flex items-center space-x-1 sm:space-x-2 rtl:space-x-reverse text-[10px] sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all shadow-md shadow-purple-500/20"
             >
               <FolderKanban className="w-4 h-4 text-pink-200" />
               <span className="hidden sm:inline">{isAr ? 'مشاريعي' : 'My Projects'}</span>
@@ -93,9 +93,9 @@ export default function Header({
             <div className="relative">
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center space-x-2 rtl:space-x-reverse p-1.5 sm:px-3 sm:py-1.5 rounded-2xl bg-purple-950/90 theme-light:bg-purple-800 border-2 border-purple-400/80 shadow-lg hover:scale-105 transition"
+                className="flex items-center space-x-1 sm:space-x-2 rtl:space-x-reverse p-1 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-2xl bg-purple-950/90 theme-light:bg-purple-800 border sm:border-2 border-purple-400/80 shadow-lg hover:scale-105 transition"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white font-black flex items-center justify-center border border-purple-300 overflow-hidden shrink-0">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white font-black flex items-center justify-center border border-purple-300 overflow-hidden shrink-0">
                   {user.avatarUrl ? (
                     <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
@@ -156,7 +156,7 @@ export default function Header({
           ) : (
             <button
               onClick={onOpenAuth}
-              className="flex items-center space-x-1.5 rtl:space-x-reverse px-4 py-2 rounded-xl text-xs font-black bg-purple-950/90 theme-light:bg-purple-800 text-white border-2 border-purple-400/80 shadow-md hover:scale-105 transition wizard-white-text"
+              className="flex items-center space-x-1 sm:space-x-1.5 rtl:space-x-reverse px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black bg-purple-950/90 theme-light:bg-purple-800 text-white border border-purple-400/80 shadow-md hover:scale-105 transition wizard-white-text"
             >
               <LogIn className="w-4 h-4 text-pink-400" />
               <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
