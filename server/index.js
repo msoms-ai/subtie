@@ -939,13 +939,19 @@ app.get('/api/settings', (req, res) => {
 
 app.get('/api/settings/models', async (req, res) => {
   try {
-    const modelsResponse = await ai.models.list();
-    const modelNames = [];
-    for await (const m of modelsResponse) {
-      if (m.name.includes('gemini')) {
-        modelNames.push(m.name.replace('models/', ''));
-      }
-    }
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("GEMINI_API_KEY missing from environment");
+    
+    // Use raw REST API fetch to bypass SDK iterator bugs
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const data = await response.json();
+    
+    if (!response.ok) throw new Error(data.error?.message || 'API rejected the request');
+    
+    const modelNames = data.models
+      .filter(m => m.name.includes('gemini'))
+      .map(m => m.name.replace('models/', ''));
+      
     res.json({ success: true, models: modelNames });
   } catch (err) {
     console.error('[Settings] Fetch models error:', err);
