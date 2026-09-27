@@ -6,14 +6,54 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('users'); // 'users' or 'settings'
+  const [settings, setSettings] = useState({ geminiModel: 'gemini-1.5-pro' });
+  const [isSaving, setIsSaving] = useState(false);
 
   const isAr = lang === 'ar';
 
   useEffect(() => {
     if (isOpen && currentUser?.role === 'Admin') {
       fetchUsersList();
+      fetchSettings();
     }
   }, [isOpen, currentUser]);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      const data = await res.json();
+      if (data.success) {
+        setSettings(data.settings);
+      }
+    } catch (err) {
+      console.error('Failed to fetch settings');
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser.id
+        },
+        body: JSON.stringify(settings)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage(isAr ? 'تم حفظ الإعدادات بنجاح!' : 'Settings saved successfully!');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   const fetchUsersList = async () => {
     setIsLoading(true);

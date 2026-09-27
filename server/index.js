@@ -33,6 +33,7 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DATA_DIR = path.join(__dirname, 'data');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -177,6 +178,19 @@ function ensureAdminUser() {
 ensureAdminUser();
 
 // Helper functions for project store
+function readSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return { geminiModel: 'gemini-1.5-pro' };
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    return { geminiModel: 'gemini-1.5-pro' };
+  }
+}
+function writeSettings(data) {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
 function readProjects() {
   try {
     const raw = fs.readFileSync(PROJECTS_FILE, 'utf8');
@@ -916,6 +930,29 @@ app.put('/api/auth/users/:id/role', (req, res) => {
 });
 
 // ====================================================
+// SYSTEM SETTINGS ENDPOINTS
+// ====================================================
+app.get('/api/settings', (req, res) => {
+  const settings = readSettings();
+  res.json({ success: true, settings });
+});
+
+app.put('/api/settings', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  const user = users[userId];
+  if (!user || user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+  }
+  
+  const currentSettings = readSettings();
+  const newSettings = { ...currentSettings, ...req.body };
+  writeSettings(newSettings);
+  
+  res.json({ success: true, message: 'Settings saved successfully', settings: newSettings });
+});
+
+// ====================================================
 // PROJECT & MEDIA API ENDPOINTS (ROLE-AWARE & USER-SCOPED)
 // ====================================================
 
@@ -1087,8 +1124,10 @@ For each subtitle block, provide:
 Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
 Output raw JSON array only, without markdown formatting.`;
 
-      const response1 = await ai.models.generateContent({
-        model: 'gemini-1.5-pro-latest',
+      const settings = readSettings();
+      const targetModel = process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro';
+      const fallbackModel = 'gemini-1.5-flash';
+      const stage1Config = {
         contents: [
           { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
         ],
@@ -1102,7 +1141,15 @@ Output raw JSON array only, without markdown formatting.`;
             { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
           ]
         }
-      });
+      };
+      
+      let response1;
+      try {
+        response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
+      } catch (err) {
+        console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
+        response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+      }
 
       let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       let jpSubtitles = [];
@@ -1135,8 +1182,7 @@ ${JSON.stringify(jpSubtitles)}
 
 Return ONLY the updated valid JSON array. Output raw JSON array only, without markdown formatting.`;
 
-      const response2 = await ai.models.generateContent({
-        model: 'gemini-1.5-pro-latest',
+      const stage2Config = {
         contents: [
           { role: 'user', parts: [{ text: promptStage2 }] }
         ],
@@ -1150,7 +1196,15 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
             { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
           ]
         }
-      });
+      };
+
+      let response2;
+      try {
+        response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
+      } catch (err) {
+        console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
+        response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+      }
 
       let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       let translatedSubtitles = [];
