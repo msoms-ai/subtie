@@ -1174,7 +1174,7 @@ app.post('/api/process', async (req, res) => {
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
 
 CRITICAL RULES:
-1. COMPLETE COVERAGE: You MUST transcribe everything up to the final second of the audio file. Never truncate, never summarize, never stop early.
+1. COMPLETE COVERAGE: You MUST transcribe every single word up to the final second of the audio file. Never truncate, never summarize, never stop early. If there is dialogue, you MUST output it.
 2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
 3. SPLIT LONG SPEECHES into separate consecutive objects.
 4. PRECISE TIMING: Timings must match the actual audio exactly.
