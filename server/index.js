@@ -1012,13 +1012,13 @@ app.post('/api/process', async (req, res) => {
 
 
     // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
-    const chunkDuration = 120; // 2 minutes per chunk
+    const chunkDuration = 300; // 5 minutes per chunk
     const chunksDir = path.join(targetDir, 'chunks');
     if (!fs.existsSync(chunksDir)) {
       fs.mkdirSync(chunksDir);
     }
     
-    console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
+    console.log(`[Audio Splitter] Segmenting audio into 5-minute chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
         .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
@@ -1044,30 +1044,29 @@ app.post('/api/process', async (req, res) => {
       });
       await new Promise(r => setTimeout(r, 2000));
 
-      const prompt = `You are an expert anime subtitle translator and ASR engine for MSOMS-Anime.
+      // --- STAGE 1: JAPANESE ASR ---
+      console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
+      const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from start to finish. DO NOT skip any dialogue!
 
-CRITICAL RULES FOR SUBTITLE CHUNKING:
-1. TRANSCRIBE EVERYTHING: You must output a large array covering the entire duration of the audio.
-2. MAXIMUM DURATION: A single JSON subtitle object must NOT exceed 5 seconds of screen time.
-3. SPLIT LONG SPEECHES: If a character speaks for 15 seconds, you MUST split their speech into 3 to 4 separate, consecutive JSON subtitle objects.
-4. READABILITY: Keep text short (Max 45 chars per line).
-5. PRECISE TIMING: Do NOT hallucinate timestamps. Timings must match the actual audio exactly.
+CRITICAL RULES:
+1. TRANSCRIBE EVERYTHING covering the entire duration.
+2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
+3. SPLIT LONG SPEECHES into separate consecutive objects.
+4. PRECISE TIMING: Timings must match the actual audio exactly.
 
 For each subtitle block, provide:
-1. "startTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:03,500")
-2. "endTime": Timestamp formatted as HH:MM:SS,mmm (e.g. "00:00:06,800")
+1. "startTime": Timestamp formatted as HH:MM:SS,mmm
+2. "endTime": Timestamp formatted as HH:MM:SS,mmm
 3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
-4. "englishText": Natural English translation suitable for fansubbing
-5. "arabicText": High quality, fluent Arabic translation (فصحى احترافية) suited for MSOMS Arabic anime fansubs
 
-Return ONLY a valid JSON array of objects with the exact key names: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "englishText", "arabicText".
-Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array only.`;
+Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
+Output raw JSON array only, without markdown formatting.`;
 
-      const response = await ai.models.generateContent({
+      const response1 = await ai.models.generateContent({
         model: 'gemini-1.5-pro',
         contents: [
-          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: prompt }] }
+          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
         ],
         config: { 
           responseMimeType: 'application/json', 
@@ -1081,25 +1080,73 @@ Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array 
         }
       });
 
-      let rawText = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-      let chunkSubtitles = [];
-
+      let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let jpSubtitles = [];
       try {
-        chunkSubtitles = JSON.parse(rawText);
+        jpSubtitles = JSON.parse(rawText1);
       } catch (parseErr) {
         try {
-          const lastValidIndex = rawText.lastIndexOf('}');
+          const lastValidIndex = rawText1.lastIndexOf('}');
           if (lastValidIndex !== -1) {
-            chunkSubtitles = JSON.parse(rawText.substring(0, lastValidIndex + 1) + ']');
+            jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
           }
-        } catch (salvageErr) {
-          console.error(`[Gemini JSON Error] Chunk ${i} failed completely.`);
+        } catch (e) {
+          console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i}.`);
+          continue; // Skip chunk if ASR completely fails
+        }
+      }
+
+      // --- STAGE 2: TRANSLATION (Text to Text) ---
+      console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
+      const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
+I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
+
+CRITICAL RULES:
+1. Maintain the exact same JSON structure, array length, and timestamps.
+2. For each object, add "englishText" (natural English for fansubbing) and "arabicText" (high quality, fluent Arabic translation - فصحى احترافية).
+3. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", and "japaneseText".
+
+Input JSON:
+${JSON.stringify(jpSubtitles)}
+
+Return ONLY the updated valid JSON array. Output raw JSON array only, without markdown formatting.`;
+
+      const response2 = await ai.models.generateContent({
+        model: 'gemini-1.5-pro',
+        contents: [
+          { role: 'user', parts: [{ text: promptStage2 }] }
+        ],
+        config: { 
+          responseMimeType: 'application/json', 
+          maxOutputTokens: 8192,
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
+          ]
+        }
+      });
+
+      let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let translatedSubtitles = [];
+      try {
+        translatedSubtitles = JSON.parse(rawText2);
+      } catch (parseErr) {
+        try {
+          const lastValidIndex = rawText2.lastIndexOf('}');
+          if (lastValidIndex !== -1) {
+            translatedSubtitles = JSON.parse(rawText2.substring(0, lastValidIndex + 1) + ']');
+          }
+        } catch (e) {
+          console.error(`[Gemini JSON Error] Stage 2 failed for chunk ${i}. Using Japanese only.`);
+          translatedSubtitles = jpSubtitles; // Fallback to un-translated
         }
       }
 
       // Add offset to timestamps
       const offsetSeconds = i * chunkDuration;
-      chunkSubtitles.forEach(sub => {
+      translatedSubtitles.forEach(sub => {
         let sSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000') + offsetSeconds;
         let eSec = parseTimestampToSeconds(sub.endTime || '00:00:02,000') + offsetSeconds;
         
@@ -1117,7 +1164,6 @@ Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array 
         });
       });
       
-      // Try to clean up file from Gemini to save space (optional, skipping for now)
     }
 
     project.subtitles = allParsedSubtitles;
