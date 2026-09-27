@@ -948,7 +948,23 @@ app.get('/api/settings/models', async (req, res) => {
     }
     res.json({ success: true, models: modelNames });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch models from Google API.' });
+    console.error('[Settings] Fetch models error:', err);
+    // Fallback to hardcoded known models if the API fails due to permissions or SDK issues
+    const fallbackModels = [
+      'gemini-1.5-pro',
+      'gemini-1.5-pro-latest',
+      'gemini-1.5-pro-001',
+      'gemini-1.5-pro-002',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash-8b',
+      'gemini-2.0-flash-exp'
+    ];
+    res.json({ 
+      success: true, 
+      models: fallbackModels, 
+      warning: 'Fetched from offline fallback list due to API error: ' + err.message 
+    });
   }
 });
 

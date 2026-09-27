@@ -45,7 +45,11 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
       if (!res.ok) throw new Error(data.error || 'Failed to fetch models');
       if (data.success && data.models) {
         setAvailableModels(data.models);
-        setMessage(isAr ? 'تم تحديث قائمة النماذج بنجاح من جوجل!' : 'Live models refreshed successfully from Google API!');
+        if (data.warning) {
+          setMessage(isAr ? 'تم تحميل القائمة الاحتياطية (تعذر الاتصال بـ API)' : 'Loaded offline fallback list (API connection failed)');
+        } else {
+          setMessage(isAr ? 'تم تحديث قائمة النماذج بنجاح من جوجل!' : 'Live models refreshed successfully from Google API!');
+        }
       }
     } catch (err) {
       setError(err.message);
