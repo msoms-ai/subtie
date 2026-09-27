@@ -187,25 +187,24 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     setCurrentStep(6);
     setIsProcessing(true);
     setErrorMessage(null);
-    setProcessProgress(15);
-    setProcessStatusMsg(isAr ? 'جاري استخراج الصوت من الفيديو...' : 'Extracting audio track from video file...');
+    setProcessProgress(5);
+    setProcessStatusMsg(isAr ? 'جاري بدء المعالجة...' : 'Initializing processing...');
 
-    const progressTimer = setInterval(() => {
-      setProcessProgress(prev => {
-        if (prev < 40) return prev + 5;
-        if (prev < 80) return prev + 2;
-        if (prev < 95) return prev + 1;
-        return prev;
-      });
-    }, 1000);
-
-    setTimeout(() => {
-      setProcessStatusMsg(isAr ? 'جاري رفع الملف الصوتي إلى Gemini Files API...' : 'Uploading extracted audio track to Gemini Files API...');
-    }, 3000);
-
-    setTimeout(() => {
-      setProcessStatusMsg(isAr ? 'جاري تفريغ الصوت الياباني والترجمة للإنجليزية والعربية...' : 'Transcribing Japanese speech & translating to English & Arabic...');
-    }, 7000);
+    // Start polling the server for real progress
+    const progressTimer = setInterval(async () => {
+      try {
+        const pRes = await fetch(`/api/project/${projectId}/progress`);
+        const pData = await pRes.json();
+        if (pData.progress > 0) {
+          setProcessProgress(pData.progress);
+          if (pData.status) {
+            setProcessStatusMsg(pData.status);
+          }
+        }
+      } catch (err) {
+        // Ignore polling errors
+      }
+    }, 2000);
 
     try {
       const res = await fetch('/api/process', {

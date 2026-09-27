@@ -1102,7 +1102,16 @@ app.post('/api/process', async (req, res) => {
   try {
     // Step 1: Extract Audio
     await extractAudioTrack(videoPath, audioPath);
-    project.audioUrl = `${req.urlPrefix}/audio.mp3`;
+    
+      (function() {
+        const db = readProjects();
+        if(db[projectId]) {
+          db[projectId].processingProgress = 100;
+          db[projectId].processingStatus = "Completed";
+          writeProjects(db);
+        }
+      })();
+      project.audioUrl = `${req.urlPrefix}/audio.mp3`;
 
     // Step 2: Initialize Gemini AI Client
     const apiKey = process.env.GEMINI_API_KEY;
@@ -1120,7 +1129,16 @@ app.post('/api/process', async (req, res) => {
       fs.mkdirSync(chunksDir);
     }
     
-    console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
+    
+      (function() {
+        const db = readProjects();
+        if(db[projectId]) {
+          db[projectId].processingProgress = 15;
+          db[projectId].processingStatus = "Splitting audio into chunks...";
+          writeProjects(db);
+        }
+      })();
+      console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
         .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
@@ -1147,6 +1165,15 @@ app.post('/api/process', async (req, res) => {
       await new Promise(r => setTimeout(r, 2000));
 
       // --- STAGE 1: JAPANESE ASR ---
+      
+      (function() {
+        const db = readProjects();
+        if(db[projectId]) {
+          db[projectId].processingProgress = 30;
+          db[projectId].processingStatus = "AI Stage 1: Transcribing Japanese (ASR)...";
+          writeProjects(db);
+        }
+      })();
       console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
       const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
@@ -1204,6 +1231,15 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
       }
 
       // --- STAGE 2: TRANSLATION (Text to Text) ---
+      
+      (function() {
+        const db = readProjects();
+        if(db[projectId]) {
+          db[projectId].processingProgress = 60;
+          db[projectId].processingStatus = "AI Stage 2: Translating to English & Arabic...";
+          writeProjects(db);
+        }
+      })();
       console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
       const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
 I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
@@ -1212,6 +1248,7 @@ CRITICAL RULES:
 1. Maintain the exact same JSON structure, array length, and timestamps.
 2. For each object, add "englishText" (natural English for fansubbing) and "arabicText" (high quality, fluent Arabic translation - فصحى احترافية).
 3. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", and "japaneseText".
+4. COMPLETE COVERAGE: You MUST translate every single object in the array up to the very last one. Do not stop early, do not truncate.
 
 Input JSON:
 ${JSON.stringify(jpSubtitles)}
@@ -1237,6 +1274,15 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
         response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
       }
 
+      
+      (function() {
+        const db = readProjects();
+        if(db[projectId]) {
+          db[projectId].processingProgress = 90;
+          db[projectId].processingStatus = "Finalizing subtitles...";
+          writeProjects(db);
+        }
+      })();
       let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       let translatedSubtitles = [];
       try {
@@ -1418,6 +1464,13 @@ app.get('/api/project/:id', (req, res) => {
 });
 
 // 19. Save Live Subtitle Edits (With optional Audit Status & Notes)
+app.get('/api/project/:id/progress', (req, res) => {
+  const projects = readProjects();
+  const project = projects[req.params.id];
+  if (!project) return res.json({ progress: 0, status: 'Not found' });
+  return res.json({ progress: project.processingProgress || 0, status: project.processingStatus || '' });
+});
+
 app.post('/api/project/:id/save', (req, res) => {
   const { id } = req.params;
   const userId = req.headers['x-user-id'];
