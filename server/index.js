@@ -964,7 +964,9 @@ app.get('/api/settings/models', async (req, res) => {
       'gemini-1.5-flash',
       'gemini-1.5-flash-latest',
       'gemini-1.5-flash-8b',
-      'gemini-2.0-flash-exp'
+      'gemini-2.0-flash-exp',
+      'gemini-pro',
+      'gemini-1.0-pro'
     ];
     res.json({ 
       success: true, 
@@ -1162,7 +1164,7 @@ Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTi
 Output raw JSON array only, without markdown formatting.`;
 
       const settings = readSettings();
-      const targetModel = process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro';
+      const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
       const fallbackModel = 'gemini-1.5-flash';
       const stage1Config = {
         contents: [
@@ -1171,12 +1173,7 @@ Output raw JSON array only, without markdown formatting.`;
         config: { 
           responseMimeType: 'application/json', 
           maxOutputTokens: 8192,
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
-          ]
+
         }
       };
       
@@ -1226,12 +1223,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
         config: { 
           responseMimeType: 'application/json', 
           maxOutputTokens: 8192,
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
-          ]
+
         }
       };
 
