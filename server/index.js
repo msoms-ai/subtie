@@ -1012,13 +1012,13 @@ app.post('/api/process', async (req, res) => {
 
 
     // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
-    const chunkDuration = 300; // 5 minutes per chunk
+    const chunkDuration = 120; // 2 minutes per chunk
     const chunksDir = path.join(targetDir, 'chunks');
     if (!fs.existsSync(chunksDir)) {
       fs.mkdirSync(chunksDir);
     }
     
-    console.log(`[Audio Splitter] Segmenting audio into 5-minute chunks...`);
+    console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
         .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
@@ -1065,7 +1065,7 @@ Return ONLY a valid JSON array of objects with the exact key names: "id" (1, 2, 
 Do NOT wrap in markdown backticks or markdown formatting. Output raw JSON array only.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-1.5-pro',
         contents: [
           { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: prompt }] }
         ],
