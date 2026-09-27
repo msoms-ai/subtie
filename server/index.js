@@ -1088,7 +1088,7 @@ Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTi
 Output raw JSON array only, without markdown formatting.`;
 
       const response1 = await ai.models.generateContent({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-1.5-pro-latest',
         contents: [
           { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
         ],
@@ -1136,7 +1136,7 @@ ${JSON.stringify(jpSubtitles)}
 Return ONLY the updated valid JSON array. Output raw JSON array only, without markdown formatting.`;
 
       const response2 = await ai.models.generateContent({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-1.5-pro-latest',
         contents: [
           { role: 'user', parts: [{ text: promptStage2 }] }
         ],
