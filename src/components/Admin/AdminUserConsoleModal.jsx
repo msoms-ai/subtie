@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, User, CheckCircle2, ShieldAlert, UserCheck } from 'lucide-react';
+import { X, ShieldCheck, User, CheckCircle2, ShieldAlert, UserCheck, RefreshCw } from 'lucide-react';
 
 export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, lang = 'en' }) {
   const [users, setUsers] = useState([]);
@@ -9,6 +9,8 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
   const [activeTab, setActiveTab] = useState('users'); // 'users' or 'settings'
   const [settings, setSettings] = useState({ geminiModel: 'gemini-1.5-pro' });
   const [isSaving, setIsSaving] = useState(false);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
 
   const isAr = lang === 'ar';
 
@@ -28,6 +30,27 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
       }
     } catch (err) {
       console.error('Failed to fetch settings');
+    }
+  };
+
+    const handleFetchModels = async () => {
+    setIsFetchingModels(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch('/api/settings/models', {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch models');
+      if (data.success && data.models) {
+        setAvailableModels(data.models);
+        setMessage(isAr ? 'تم تحديث قائمة النماذج بنجاح من جوجل!' : 'Live models refreshed successfully from Google API!');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsFetchingModels(false);
     }
   };
 

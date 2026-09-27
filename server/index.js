@@ -937,6 +937,21 @@ app.get('/api/settings', (req, res) => {
   res.json({ success: true, settings });
 });
 
+app.get('/api/settings/models', async (req, res) => {
+  try {
+    const modelsResponse = await ai.models.list();
+    const modelNames = [];
+    for await (const m of modelsResponse) {
+      if (m.name.includes('gemini')) {
+        modelNames.push(m.name.replace('models/', ''));
+      }
+    }
+    res.json({ success: true, models: modelNames });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch models from Google API.' });
+  }
+});
+
 app.put('/api/settings', (req, res) => {
   const userId = req.headers['x-user-id'];
   const users = readUsers();
