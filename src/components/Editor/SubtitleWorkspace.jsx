@@ -307,6 +307,14 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
 
           {/* Export Button */}
           <button
+            onClick={() => setShowReSubtitleModal(true)}
+            className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl border-2 border-amber-500/30 text-amber-500 font-bold hover:bg-amber-950/30 transition shadow-sm"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            <span className="hidden lg:inline">{isAr ? 'إعادة ترجمة الأجزاء' : 'ReSubtitle'}</span>
+          </button>
+          
+          <button
             onClick={() => setShowExportModal(true)}
             className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-purple-900 border border-slate-700 theme-light:border-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105 wizard-white-text"
           >
@@ -629,6 +637,22 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
           </div>
         </div>
       )}
+
+      {/* RESUBTITLE MODAL */}
+      <ReSubtitleModal
+        isOpen={showReSubtitleModal}
+        onClose={() => setShowReSubtitleModal(false)}
+        project={project}
+        videoDurationSeconds={videoDurationSeconds}
+        isAr={isAr}
+        onComplete={(updatedProject) => {
+          setProject(updatedProject);
+          setSubtitles(updatedProject.subtitles || []);
+          setShowReSubtitleModal(false);
+          setToastMsg(isAr ? 'تمت إعادة معالجة الأجزاء المحددة بنجاح!' : 'Selected chunks re-processed successfully!');
+          setTimeout(() => setToastMsg(null), 3000);
+        }}
+      />
 
       {/* EXPORT MODAL */}
       {showExportModal && (

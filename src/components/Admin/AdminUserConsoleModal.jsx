@@ -41,7 +41,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
       const res = await fetch('/api/settings/test-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelName: localSettings.geminiModel })
+        body: JSON.stringify({ modelName: settings.geminiModel })
       });
       const data = await res.json();
       if (data.success) {
@@ -290,14 +290,23 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
                   <span>{isAr ? 'جلب النماذج الحية' : 'Refresh Live Models'}</span>
                 </button>
               </label>
-              <input
-                type="text"
-                list="gemini-models-list"
-                value={settings.geminiModel || ''}
-                onChange={(e) => setSettings({...settings, geminiModel: e.target.value})}
-                className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-slate-300 rounded-xl px-4 py-2.5 text-sm text-white theme-light:text-slate-900 font-mono outline-none focus:border-purple-500"
-                placeholder="e.g. gemini-1.5-pro"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  list="gemini-models-list"
+                  value={settings.geminiModel || ''}
+                  onChange={(e) => setSettings({...settings, geminiModel: e.target.value})}
+                  className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-slate-300 rounded-xl px-4 py-2.5 text-sm text-white theme-light:text-slate-900 font-mono outline-none focus:border-purple-500"
+                  placeholder="e.g. gemini-1.5-pro"
+                />
+                <button
+                  onClick={handleTestModel}
+                  disabled={isTestingModel || !settings.geminiModel}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {isTestingModel ? (isAr ? 'جاري الاختبار...' : 'Testing...') : (isAr ? 'اختبار النموذج' : 'Test Model')}
+                </button>
+              </div>
               <datalist id="gemini-models-list">
                 {availableModels.map(m => (
                   <option key={m} value={m} />
