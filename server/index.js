@@ -1574,7 +1574,7 @@ app.post('/api/settings/test-model', async (req, res) => {
     const response = await ai.models.generateContent({
       model: modelName,
       contents: 'Translate the word "Arigato" into Arabic. Output only the Arabic word without any extra text.',
-      config: { maxOutputTokens: 10 }
+      config: { maxOutputTokens: 100 }
     });
 
     
