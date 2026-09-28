@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
-export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lang = 'en' }) {
+export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lang = 'en', initialProjectName = '', initialProjectType = 'Episode' }) {
   const [currentStep, setCurrentStep] = useState(1);
   const isAr = lang === 'ar';
 

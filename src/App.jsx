@@ -41,6 +41,7 @@ export default function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [preSelectedFolder, setPreSelectedFolder] = useState('');
 
   // Persist user state & preferences
   useEffect(() => {
@@ -186,8 +187,15 @@ export default function App() {
         {view === 'wizard' && (
           <LoadVideoWizard
             user={user}
-            onCompleteProcess={handleCompleteProcess}
-            onCancel={handleGoHome}
+            initialProjectName={preSelectedFolder}
+            onCompleteProcess={(project) => {
+              handleCompleteProcess(project);
+              setPreSelectedFolder('');
+            }}
+            onCancel={() => {
+              handleGoHome();
+              setPreSelectedFolder('');
+            }}
             lang={lang}
           />
         )}
