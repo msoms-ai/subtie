@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAddAnotherEpisode, user, lang = 'en' }) {
@@ -260,85 +260,92 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       )}
       
       {/* Top Header: Video Info & High-Contrast Action Buttons */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-4 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col xl:flex-row items-center justify-between gap-4 glass-panel p-4 sm:p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-4 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
         
-        {/* Exit button */}
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={onSaveAndClose}
-          className="flex justify-center items-center space-x-2 rtl:space-x-reverse text-xs font-black text-white bg-slate-900 theme-light:bg-purple-700 px-4 py-2.5 rounded-xl border border-slate-700 theme-light:border-purple-800 shadow-md transition hover:scale-105 wizard-white-text"
-        >
-          <ArrowLeft className="w-4 h-4 text-white" />
-          <span>{isAr ? 'الخروج من محرر الترجمة' : 'Exit Workspace'}</span>
-        </button>
-        {onAddAnotherEpisode && (
+        {/* Left Section: Back & Add Episode */}
+        <div className="flex w-full xl:w-auto items-center justify-between xl:justify-start gap-3">
           <button
-            onClick={onAddAnotherEpisode}
-            className="flex justify-center items-center space-x-2 rtl:space-x-reverse text-[10px] font-bold text-sky-200 bg-sky-900/50 hover:bg-sky-800 px-4 py-1.5 rounded-lg border border-sky-700/50 shadow-sm transition hover:scale-105"
+            onClick={onSaveAndClose}
+            className="flex items-center justify-center space-x-1.5 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-purple-700 border border-slate-700 theme-light:border-purple-800 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105"
+            title={isAr ? 'الخروج' : 'Exit'}
           >
-            <span>{isAr ? '+ إضافة حلقة أخرى' : '+ Add Another Episode'}</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">{isAr ? 'رجوع' : 'Back'}</span>
           </button>
-        )}
-      </div>
+          
+          {onAddAnotherEpisode && (
+            <button
+              onClick={onAddAnotherEpisode}
+              className="flex items-center justify-center space-x-1.5 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-sky-900/50 theme-light:bg-sky-600 border border-sky-700/50 theme-light:border-sky-500 text-sky-200 theme-light:text-white font-black text-xs sm:text-sm shadow-sm transition hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">{isAr ? 'إضافة حلقة' : 'Add Episode'}</span>
+            </button>
+          )}
+        </div>
 
-        {/* Title & Media Type */}
-        <div className={isAr ? 'md:text-right' : 'md:text-left'}>
-          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 text-purple-200 theme-light:text-white text-xs font-black shadow-sm">
-            <Layers className="w-3.5 h-3.5 text-pink-400 theme-light:text-yellow-300" />
-            <span>{project.projectType} • {project.projectName}</span>
+        {/* Center Section: Title & Media Type */}
+        <div className={`flex-1 min-w-0 flex flex-col items-center text-center px-2`}>
+          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 px-3.5 py-1.5 rounded-full border border-purple-500/30 theme-light:border-purple-800 text-purple-200 theme-light:text-white text-xs font-black shadow-sm mb-1">
+            <Layers className="w-3 h-3 text-pink-400 theme-light:text-yellow-300" />
+            <span className="truncate max-w-[200px] sm:max-w-[400px]">{project.projectType} • {project.projectName}</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white theme-light:text-slate-950 mt-1">
+          <h2 className="text-lg sm:text-xl font-black text-white theme-light:text-slate-950 truncate max-w-full px-4">
             {project.mediaTitle}
           </h2>
         </div>
 
-        {/* Action Buttons (Delete, Export, Save) */}
-        <div className="flex items-center space-x-2.5 rtl:space-x-reverse">
+        {/* Right Section: Action Buttons */}
+        <div className="flex flex-wrap items-center justify-center xl:justify-end gap-2 sm:gap-3 w-full xl:w-auto">
           
-          {/* Delete Project Button */}
+          {/* Delete Project */}
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-2.5 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 border border-rose-500/30 text-white font-black text-xs shadow-md transition hover:scale-105 wizard-white-text"
+            className="flex items-center justify-center p-2.5 sm:px-4 sm:py-2.5 rounded-xl bg-rose-950/60 theme-light:bg-rose-600 border border-rose-500/30 text-rose-200 theme-light:text-white font-black text-xs sm:text-sm shadow-md transition hover:bg-rose-900/80 hover:scale-105"
             title={isAr ? 'حذف المشروع' : 'Delete Project'}
           >
-            <Trash2 className="w-4 h-4 text-white" />
-            <span className="hidden sm:inline">{isAr ? 'حذف' : 'Delete'}</span>
+            <Trash2 className="w-4 h-4" />
+            <span className="hidden xl:inline ltr:ml-1.5 rtl:mr-1.5">{isAr ? 'حذف' : 'Delete'}</span>
           </button>
 
-          {/* Export Button */}
+          {/* ReSubtitle */}
           <button
             onClick={() => setShowReSubtitleModal(true)}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl border-2 border-amber-500/30 text-amber-500 font-bold hover:bg-amber-950/30 transition shadow-sm"
+            className="flex items-center justify-center p-2.5 sm:px-4 sm:py-2.5 rounded-xl bg-amber-900/60 theme-light:bg-amber-500 border border-amber-500/30 text-amber-300 theme-light:text-white font-black text-xs sm:text-sm shadow-md transition hover:bg-amber-800/80 hover:scale-105"
+            title={isAr ? 'إعادة الترجمة' : 'ReSubtitle'}
           >
             <RefreshCcw className="w-4 h-4" />
-            <span className="hidden lg:inline">{isAr ? 'إعادة ترجمة الأجزاء' : 'ReSubtitle'}</span>
+            <span className="hidden lg:inline ltr:ml-1.5 rtl:mr-1.5">{isAr ? 'إعادة الترجمة' : 'ReSubtitle'}</span>
           </button>
           
+          {/* Export */}
           <button
             onClick={() => setShowExportModal(true)}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-slate-900 theme-light:bg-purple-900 border border-slate-700 theme-light:border-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105 wizard-white-text"
+            className="flex items-center justify-center p-2.5 sm:px-4 sm:py-2.5 rounded-xl bg-slate-800 theme-light:bg-slate-700 border border-slate-600 theme-light:border-slate-500 text-white font-black text-xs sm:text-sm shadow-md transition hover:bg-slate-700 hover:scale-105"
+            title={isAr ? 'تصدير الملفات' : 'Export'}
           >
-            <Download className="w-4 h-4 text-purple-300" />
-            <span className="hidden lg:inline">{isAr ? 'تصدير الملفات' : 'Export'}</span>
+            <Download className="w-4 h-4 text-purple-300 theme-light:text-purple-200" />
+            <span className="hidden lg:inline ltr:ml-1.5 rtl:mr-1.5">{isAr ? 'تصدير' : 'Export'}</span>
           </button>
 
-          {/* Approve All Button */}
+          {/* Approve All */}
           <button
             onClick={handleApproveAll}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2.5 rounded-xl bg-emerald-900/60 theme-light:bg-emerald-600 border border-emerald-500/30 text-white font-black text-xs sm:text-sm shadow-md transition hover:scale-105 wizard-white-text"
+            className="flex items-center justify-center p-2.5 sm:px-4 sm:py-2.5 rounded-xl bg-emerald-900/60 theme-light:bg-emerald-600 border border-emerald-500/30 text-emerald-200 theme-light:text-white font-black text-xs sm:text-sm shadow-md transition hover:bg-emerald-800/80 hover:scale-105"
+            title={isAr ? 'اعتماد الكل' : 'Approve All'}
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-            <span className="hidden lg:inline">{isAr ? 'اعتماد الكل' : 'Approve All'}</span>
+            <CheckCircle2 className="w-4 h-4" />
+            <span className="hidden xl:inline ltr:ml-1.5 rtl:mr-1.5">{isAr ? 'اعتماد الكل' : 'Approve All'}</span>
           </button>
 
-          {/* Save & Exit Button */}
+          {/* Save & Exit */}
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center space-x-2 rtl:space-x-reverse px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white text-xs sm:text-sm font-black shadow-lg shadow-purple-500/20 transition wizard-white-text border border-purple-400/30"
+            className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-black text-xs sm:text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50 border border-purple-400/30"
           >
             <Save className="w-4 h-4 text-pink-200" />
-            <span>{isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ التعديلات' : 'Save Changes')}</span>
+            <span className="ltr:ml-1.5 rtl:mr-1.5">{isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ' : 'Save')}</span>
           </button>
         </div>
       </div>
