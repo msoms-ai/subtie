@@ -1152,10 +1152,10 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
 
       const chunkOffset = i * 120; // 120 seconds per chunk
       jpSubtitles.forEach(sub => {
-        let sTime = parseSrtTime(sub.startTime) + chunkOffset;
-        let eTime = parseSrtTime(sub.endTime) + chunkOffset;
-        sub.startTime = formatSrtTime(sTime);
-        sub.endTime = formatSrtTime(eTime);
+        let sTime = parseTimestampToSeconds(sub.startTime) + chunkOffset;
+        let eTime = parseTimestampToSeconds(sub.endTime) + chunkOffset;
+        sub.startTime = formatSecondsToTimestamp(sTime);
+        sub.endTime = formatSecondsToTimestamp(eTime);
         sub.startSeconds = sTime;
         sub.endSeconds = eTime;
       });
@@ -1201,8 +1201,8 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
 
       finalChunkSubtitles.forEach(sub => {
         if (!sub.startSeconds) {
-          sub.startSeconds = parseSrtTime(sub.startTime);
-          sub.endSeconds = parseSrtTime(sub.endTime);
+          sub.startSeconds = parseTimestampToSeconds(sub.startTime);
+          sub.endSeconds = parseTimestampToSeconds(sub.endTime);
         }
         newSubtitles.push(sub);
       });
@@ -1211,7 +1211,7 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
     // Now merge newSubtitles into project.subtitles
     // Remove old subtitles in the time ranges of the selected chunks
     let finalSubs = project.subtitles.filter(sub => {
-      const subChunkIndex = Math.floor((sub.startSeconds || parseSrtTime(sub.startTime)) / 120);
+      const subChunkIndex = Math.floor((sub.startSeconds || parseTimestampToSeconds(sub.startTime)) / 120);
       return !chunkIndices.includes(subChunkIndex);
     });
 
@@ -1774,8 +1774,8 @@ app.get('/api/project/:id/export', (req, res) => {
     let ass = `${BOM}[Script Info]\nTitle: ${project.projectName}\nScriptType: v4.00+\nFormat: Dialogue\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
     project.subtitles.forEach((sub) => {
       const text = lang === 'en' ? (sub.englishText || '') : lang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
-      const rawStart = formatSrtTimestamp(sub.startTime || '00:00:00,000');
-      const rawEnd = formatSrtTimestamp(sub.endTime || '00:00:05,000');
+      const rawStart = formatSecondsToTimestampstamp(sub.startTime || '00:00:00,000');
+      const rawEnd = formatSecondsToTimestampstamp(sub.endTime || '00:00:05,000');
       const start = rawStart.replace(',', '.').substring(0, 10);
       const end = rawEnd.replace(',', '.').substring(0, 10);
       ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
@@ -1789,8 +1789,8 @@ app.get('/api/project/:id/export', (req, res) => {
   let srt = `${BOM}`;
   project.subtitles.forEach((sub, idx) => {
     const text = lang === 'en' ? (sub.englishText || '') : lang === 'ja' ? (sub.japaneseText || '') : (sub.arabicText || '');
-    const start = formatSrtTimestamp(sub.startTime || '00:00:00,000');
-    const end = formatSrtTimestamp(sub.endTime || '00:00:05,000');
+    const start = formatSecondsToTimestampstamp(sub.startTime || '00:00:00,000');
+    const end = formatSecondsToTimestampstamp(sub.endTime || '00:00:05,000');
     srt += `${idx + 1}\n${start} --> ${end}\n${text}\n\n`;
   });
 
@@ -1799,7 +1799,7 @@ app.get('/api/project/:id/export', (req, res) => {
   res.send(srt);
 });
 
-function formatSrtTimestamp(ts) {
+function formatSecondsToTimestampstamp(ts) {
   let str = String(ts || '00:00:00,000').trim().replace('.', ',');
   if (str.length === 8) str += ',000';
   return str;
