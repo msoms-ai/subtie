@@ -1794,8 +1794,10 @@ app.get('/api/project/:id/export', (req, res) => {
     return res.status(404).send('Project not found');
   }
 
-  const cleanProjectName = (project.mediaTitle || project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
-  const filename = `${cleanProjectName}_${lang}.${format}`;
+  const safeProj = (project.projectName || 'Project').replace(/[/\\?%*:|"<>]/g, '-').trim();
+  let safeEp = (project.mediaTitle || 'Episode').replace(/[/\\?%*:|"<>]/g, '-').trim();
+  safeEp = safeEp.replace(/\.(mp4|mkv|avi|mov|webm)$/i, '');
+  const filename = `${safeProj}-${safeEp}.${format}`;
   const encodedFilename = encodeURIComponent(filename);
 
   const BOM = '\uFEFF';
