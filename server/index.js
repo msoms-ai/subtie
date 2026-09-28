@@ -1577,7 +1577,14 @@ app.post('/api/settings/test-model', async (req, res) => {
       config: { maxOutputTokens: 10 }
     });
 
-    return res.json({ success: true, text: response.text });
+    
+    console.log('[Test Model] raw response:', JSON.stringify(response, null, 2));
+    let text = response.text || '';
+    if (!text && response.candidates && response.candidates.length > 0) {
+      text = response.candidates[0].content?.parts?.[0]?.text || '';
+    }
+    return res.json({ success: true, text: text || 'Empty response from model' });
+
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
