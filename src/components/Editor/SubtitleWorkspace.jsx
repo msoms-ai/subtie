@@ -192,8 +192,10 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       });
     }
 
-    const cleanName = String(project?.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
-    const fileName = `${cleanName}_${exportLang}.${exportFormat}`;
+    let safeProj = String(project?.projectName || 'Project').replace(/[/\\?%*:|"<>]/g, '-').trim();
+    let safeEp = String(project?.mediaTitle || 'Episode').replace(/[/\\?%*:|"<>]/g, '-').trim();
+    safeEp = safeEp.replace(/\.(mp4|mkv|avi|mov|webm)$/i, '');
+    const fileName = `[${safeProj}]-[${safeEp}].${exportFormat}`;
 
     // 3. Engine A: Direct Anchor Download with Blob
     try {

@@ -1797,7 +1797,7 @@ app.get('/api/project/:id/export', (req, res) => {
   const safeProj = (project.projectName || 'Project').replace(/[/\\?%*:|"<>]/g, '-').trim();
   let safeEp = (project.mediaTitle || 'Episode').replace(/[/\\?%*:|"<>]/g, '-').trim();
   safeEp = safeEp.replace(/\.(mp4|mkv|avi|mov|webm)$/i, '');
-  const filename = `${safeProj}-${safeEp}.${format}`;
+  const filename = `[${safeProj}]-[${safeEp}].${format}`;
   const encodedFilename = encodeURIComponent(filename);
 
   const BOM = '\uFEFF';
