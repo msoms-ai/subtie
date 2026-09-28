@@ -21,6 +21,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   // AI Processing State
   const [isProcessing, setIsProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
+  const [progressExtract, setProgressExtract] = useState(0);
+  const [progressTranscode, setProgressTranscode] = useState(0);
+  const [progressTranslate, setProgressTranslate] = useState(0);
   const [processStatusMsg, setProcessStatusMsg] = useState('');
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -188,6 +191,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     setIsProcessing(true);
     setErrorMessage(null);
     setProcessProgress(5);
+    setProgressExtract(50);
+    setProgressTranscode(0);
+    setProgressTranslate(0);
     setProcessStatusMsg(isAr ? 'جاري بدء المعالجة...' : 'Initializing processing...');
 
     // Start polling the server for real progress
@@ -200,6 +206,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           if (pData.status) {
             setProcessStatusMsg(pData.status);
           }
+          if (pData.progressExtract !== undefined) setProgressExtract(pData.progressExtract);
+          if (pData.progressTranscode !== undefined) setProgressTranscode(pData.progressTranscode);
+          if (pData.progressTranslate !== undefined) setProgressTranslate(pData.progressTranslate);
         }
       } catch (err) {
         // Ignore polling errors
@@ -661,11 +670,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               </div>
 
               <div>
-                <h3 className="text-2xl sm:text-3xl font-black text-white theme-light:text-slate-950 mb-2">
-                  {isAr ? 'معالجة وتفريغ ترجمة الفيديو بالذكاء الاصطناعي' : 'Extracting & AI Subtitling Video Track'}
+                <h3 className="text-xl sm:text-2xl font-black text-white theme-light:text-slate-950 mb-1">
+                  {isAr ? 'معالجة وتفريغ الصوت الياباني' : 'Japanese Audio Processing & Transcribing'}
                 </h3>
-                <p className="text-sm text-purple-300 theme-light:text-purple-950 font-extrabold max-w-md mx-auto">
-                  {isAr ? 'استخراج الملف الصوتي، تحليل التزامن، تفريغ الصوت الياباني بالملي ثانية، وتوليد الترجمة الإنجليزية والعربية.' : 'Extracting audio, analyzing timestamps with millisecond accuracy, transcribing Japanese speech, and building English & Arabic subtitle files.'}
+                <p className="text-sm text-purple-300 theme-light:text-purple-950 font-extrabold max-w-md mx-auto opacity-80">
+                  {isAr ? 'بدعم من ذكاء msoms الاصطناعي' : 'Powered by msoms\'s AI'}
                 </p>
               </div>
 
@@ -674,36 +683,33 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 {/* Step 1: Extracting Audio */}
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
-                    <span>{isAr ? '1. استخراج الصوت' : '1. Extracting audio'}</span>
-                    <span className="text-emerald-400">{processProgress >= 20 ? 100 : Math.round((processProgress/20)*100)}%</span>
+                    <span>{isAr ? '1. استخراج الصوت الياباني' : '1. Japanese Audio Extraction'}</span>
+                    <span className="text-emerald-400">{progressExtract}%</span>
                   </div>
-                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 1-2 دقيقة' : 'Estimated time: 1-2 mins'}</div>
-                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${Math.min((processProgress/20)*100, 100)}%` }} />
-                  </div>
-                </div>
-
-                {/* Step 2: Submitting to AI */}
-                <div>
-                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
-                    <span>{isAr ? '2. إرسال إلى الذكاء الاصطناعي' : '2. Chunking & Submitting to AI'}</span>
-                    <span className="text-pink-400">{processProgress < 20 ? 0 : processProgress >= 40 ? 100 : Math.round(((processProgress-20)/20)*100)}%</span>
-                  </div>
-                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 2-3 دقيقة' : 'Estimated time: 2-3 mins'}</div>
-                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-20)/20)*100, 100))}%` }} />
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${progressExtract}%` }} />
                   </div>
                 </div>
 
-                {/* Step 3: AI Processing */}
+                {/* Step 2: Transcoding to AI */}
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
-                    <span>{isAr ? '3. معالجة وتفريغ الذكاء الاصطناعي' : '3. AI Transcription & Translation'}</span>
-                    <span className="text-indigo-400">{processProgress < 40 ? 0 : Math.round(((processProgress-40)/60)*100)}%</span>
+                    <span>{isAr ? '2. تفريغ الصوت الياباني' : '2. Japanese Audio Transcribing'}</span>
+                    <span className="text-pink-400">{progressTranscode}%</span>
                   </div>
-                  <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 3-5 دقائق لكل ساعة من الفيديو' : 'Estimated time: 3-5 mins per hour of video'}</div>
-                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-40)/60)*100, 100))}%` }} />
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500" style={{ width: `${progressTranscode}%` }} />
+                  </div>
+                </div>
+
+                {/* Step 3: Translating AI Processing */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '3. ترجمة الصوت الياباني' : '3. Japanese Audio Translating'}</span>
+                    <span className="text-indigo-400">{progressTranslate}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${progressTranslate}%` }} />
                   </div>
                 </div>
                 

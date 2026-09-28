@@ -1296,6 +1296,16 @@ app.post('/api/process', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    // Initialize detailed progress
+    (function() {
+      const db = readProjects();
+      if(db[projectId]) {
+        db[projectId].progressExtract = 100;
+        db[projectId].progressTranscode = 0;
+        db[projectId].progressTranslate = 0;
+        writeProjects(db);
+      }
+    })();
 
     // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
     const chunkDuration = 120; // 2 minutes per chunk to prevent AI truncation
@@ -1347,7 +1357,8 @@ app.post('/api/process', async (req, res) => {
           const base = 40;
           const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
           db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.2));
-          db[projectId].processingStatus = `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}...`;
+          db[projectId].processingStatus = `...AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}`;
+          db[projectId].progressTranscode = Math.round((i / chunkFiles.length) * 100);
           writeProjects(db);
         }
       })();
@@ -1415,7 +1426,9 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
           const base = 40;
           const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
           db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.7));
-          db[projectId].processingStatus = `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}...`;
+          db[projectId].processingStatus = `...AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}`;
+          db[projectId].progressTranscode = Math.round(((i + 1) / chunkFiles.length) * 100);
+          db[projectId].progressTranslate = Math.round((i / chunkFiles.length) * 100);
           writeProjects(db);
         }
       })();
@@ -1459,6 +1472,8 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
         if(db[projectId]) {
           db[projectId].processingProgress = 90;
           db[projectId].processingStatus = "Finalizing subtitles...";
+          db[projectId].progressTranslate = 100;
+          db[projectId].progressTranscode = 100;
           writeProjects(db);
         }
       })();
@@ -1680,7 +1695,13 @@ app.get('/api/project/:id/progress', (req, res) => {
   const projects = readProjects();
   const project = projects[req.params.id];
   if (!project) return res.json({ progress: 0, status: 'Not found' });
-  return res.json({ progress: project.processingProgress || 0, status: project.processingStatus || '' });
+  return res.json({ 
+    progress: project.processingProgress || 0, 
+    status: project.processingStatus || '',
+    progressExtract: project.progressExtract || 0,
+    progressTranscode: project.progressTranscode || 0,
+    progressTranslate: project.progressTranslate || 0
+  });
 });
 
 app.post('/api/project/:id/save', (req, res) => {
