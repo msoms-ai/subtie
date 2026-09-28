@@ -1572,7 +1572,6 @@ app.get('/api/dashboard-stats', (req, res) => {
   Object.values(projects).forEach(p => {
     uniqueFolders.add(p.projectName || 'Uncategorized');
     const t = String(p.projectType || '').toLowerCase();
-    const t = String(p.projectType || '').toLowerCase();
     if (t.includes('clip') || t.includes('مقطع')) totalClips++;
     else if (t.includes('movie') || t.includes('فيلم')) totalMovies++;
     else if (t.includes('trailer') || t.includes('تريلر') || t.includes('عرض')) totalTrailers++;
