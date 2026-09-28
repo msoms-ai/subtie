@@ -7,8 +7,8 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const isAr = lang === 'ar';
 
   // Form State
-  const [projectName, setProjectName] = useState('');
-  const [projectType, setProjectType] = useState('Episode');
+  const [projectName, setProjectName] = useState(initialProjectName);
+  const [projectType, setProjectType] = useState(initialProjectType);
   const [mediaTitle, setMediaTitle] = useState('');
 
   // Upload State
@@ -675,11 +675,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
                     <span>{isAr ? '1. استخراج الصوت' : '1. Extracting audio'}</span>
-                    <span className="text-emerald-400">{processProgress >= 40 ? '100%' : Math.round((processProgress/40)*100)}%</span>
+                    <span className="text-emerald-400">{processProgress >= 20 ? 100 : Math.round((processProgress/20)*100)}%</span>
                   </div>
                   <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 1-2 دقيقة' : 'Estimated time: 1-2 mins'}</div>
                   <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${Math.min((processProgress/40)*100, 100)}%` }} />
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${Math.min((processProgress/20)*100, 100)}%` }} />
                   </div>
                 </div>
 
@@ -687,11 +687,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
                     <span>{isAr ? '2. إرسال إلى الذكاء الاصطناعي' : '2. Chunking & Submitting to AI'}</span>
-                    <span className="text-pink-400">{processProgress < 40 ? '0%' : processProgress >= 80 ? '100%' : Math.round(((processProgress-40)/40)*100)}%</span>
+                    <span className="text-pink-400">{processProgress < 20 ? 0 : processProgress >= 40 ? 100 : Math.round(((processProgress-20)/20)*100)}%</span>
                   </div>
                   <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 2-3 دقيقة' : 'Estimated time: 2-3 mins'}</div>
                   <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-40)/40)*100, 100))}%` }} />
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-20)/20)*100, 100))}%` }} />
                   </div>
                 </div>
 
@@ -699,11 +699,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
                     <span>{isAr ? '3. معالجة وتفريغ الذكاء الاصطناعي' : '3. AI Transcription & Translation'}</span>
-                    <span className="text-indigo-400">{processProgress < 80 ? '0%' : Math.round(((processProgress-80)/20)*100)}%</span>
+                    <span className="text-indigo-400">{processProgress < 40 ? 0 : Math.round(((processProgress-40)/60)*100)}%</span>
                   </div>
                   <div className="text-[10px] text-purple-400 theme-light:text-purple-800 mb-1.5">{isAr ? 'الوقت المقدر: 3-5 دقائق لكل ساعة من الفيديو' : 'Estimated time: 3-5 mins per hour of video'}</div>
                   <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
-                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-80)/20)*100, 100))}%` }} />
+                    <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(((processProgress-40)/60)*100, 100))}%` }} />
                   </div>
                 </div>
                 

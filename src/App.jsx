@@ -197,6 +197,10 @@ export default function App() {
             user={user}
             initialProject={currentProject}
             onSaveAndClose={() => setView('projects')}
+            onAddAnotherEpisode={() => {
+              setPreSelectedFolder(currentProject.projectName || '');
+              setView('wizard');
+            }}
             lang={lang}
           />
         )}

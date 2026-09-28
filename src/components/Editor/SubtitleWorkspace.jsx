@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw } from 'lucide-react';
+import ReSubtitleModal from './ReSubtitleModal.jsx';
 
-export default function SubtitleWorkspace({ initialProject, onSaveAndClose, user, lang = 'en' }) {
+export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAddAnotherEpisode, user, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
   const [subtitles, setSubtitles] = useState(initialProject?.subtitles || []);
   const [activeSubId, setActiveSubId] = useState(null);
@@ -21,6 +22,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, user
   const [isDeleting, setIsDeleting] = useState(false);
   const [exportFormat, setExportFormat] = useState('srt'); // 'srt' or 'ass'
   const [exportLang, setExportLang] = useState('ar'); // 'ar', 'en', 'ja'
+  const [showReSubtitleModal, setShowReSubtitleModal] = useState(false);
 
   const videoRef = useRef(null);
   const videoContainerRef = useRef(null);
@@ -258,16 +260,26 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, user
       )}
       
       {/* Top Header: Video Info & High-Contrast Action Buttons */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-24 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-5 rounded-3xl border border-purple-500/20 shadow-xl sticky top-4 z-30 backdrop-blur-3xl" dir={isAr ? 'rtl' : 'ltr'}>
         
         {/* Exit button */}
+      <div className="flex flex-col gap-2">
         <button
           onClick={onSaveAndClose}
-          className="flex items-center space-x-2 rtl:space-x-reverse text-xs font-black text-white bg-slate-900 theme-light:bg-purple-700 px-4 py-2.5 rounded-xl border border-slate-700 theme-light:border-purple-800 shadow-md transition hover:scale-105 wizard-white-text"
+          className="flex justify-center items-center space-x-2 rtl:space-x-reverse text-xs font-black text-white bg-slate-900 theme-light:bg-purple-700 px-4 py-2.5 rounded-xl border border-slate-700 theme-light:border-purple-800 shadow-md transition hover:scale-105 wizard-white-text"
         >
           <ArrowLeft className="w-4 h-4 text-white" />
           <span>{isAr ? 'الخروج من محرر الترجمة' : 'Exit Workspace'}</span>
         </button>
+        {onAddAnotherEpisode && (
+          <button
+            onClick={onAddAnotherEpisode}
+            className="flex justify-center items-center space-x-2 rtl:space-x-reverse text-[10px] font-bold text-sky-200 bg-sky-900/50 hover:bg-sky-800 px-4 py-1.5 rounded-lg border border-sky-700/50 shadow-sm transition hover:scale-105"
+          >
+            <span>{isAr ? '+ إضافة حلقة أخرى' : '+ Add Another Episode'}</span>
+          </button>
+        )}
+      </div>
 
         {/* Title & Media Type */}
         <div className={isAr ? 'md:text-right' : 'md:text-left'}>

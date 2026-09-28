@@ -1051,6 +1051,188 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
 });
 
 // 16. Process Audio & Transcribe/Translate with Gemini AI Engine
+app.post('/api/project/:id/resubtitle', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { chunkIndices } = req.body;
+    
+    if (!Array.isArray(chunkIndices) || chunkIndices.length === 0) {
+      return res.status(400).json({ error: 'chunkIndices array is required' });
+    }
+
+    const projects = readProjects();
+    const project = projects[id];
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const userId = project.ownerId || 'usr_guest';
+    const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
+    
+    let targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+    if (!fs.existsSync(targetDir)) {
+      targetDir = path.join(UPLOADS_DIR, userId, id);
+      if (!fs.existsSync(targetDir)) {
+        targetDir = path.join(UPLOADS_DIR, id);
+      }
+    }
+    
+    const chunksDir = path.join(targetDir, 'chunks');
+    if (!fs.existsSync(chunksDir)) {
+      return res.status(404).json({ error: 'Audio chunks not found on server' });
+    }
+
+    const chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+    
+    const settings = readSettings();
+    const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
+    const fallbackModel = 'gemini-1.5-flash';
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || settings.geminiApiKey });
+
+    let newSubtitles = [];
+
+    // Process only selected chunks
+    for (let i of chunkIndices) {
+      if (i < 0 || i >= chunkFiles.length) continue;
+      
+      const chunkPath = path.join(chunksDir, chunkFiles[i]);
+      
+      const uploadResult = await ai.files.upload({
+        file: chunkPath,
+        mimeType: 'audio/mp3'
+      });
+      await new Promise(r => setTimeout(r, 2000));
+
+      const promptStage1 = `You are an expert anime Japanese ASR engine.
+Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. Never truncate, never summarize, never stop early. If there is dialogue, you MUST output it.
+
+CRITICAL RULES:
+1. COMPLETE COVERAGE: You MUST transcribe every single word up to the final second of the audio file.
+2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
+3. SPLIT LONG SPEECHES into separate consecutive objects.
+4. PRECISE TIMING: Timings must match the actual audio exactly.
+
+For each subtitle block, provide:
+1. "startTime": Timestamp formatted as HH:MM:SS,mmm
+2. "endTime": Timestamp formatted as HH:MM:SS,mmm
+3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
+
+Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
+Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
+
+      const stage1Config = {
+        contents: [
+          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
+        ],
+        config: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
+      };
+
+      let response1;
+      try {
+        response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
+      } catch (err) {
+        response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+      }
+
+      let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let jpSubtitles = [];
+      try {
+        jpSubtitles = JSON.parse(rawText1);
+      } catch (parseErr) {
+        try {
+          const lastValidIndex = rawText1.lastIndexOf('}');
+          if (lastValidIndex !== -1) {
+            jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (jpSubtitles.length === 0) continue;
+
+      const chunkOffset = i * 120; // 120 seconds per chunk
+      jpSubtitles.forEach(sub => {
+        let sTime = parseSrtTime(sub.startTime) + chunkOffset;
+        let eTime = parseSrtTime(sub.endTime) + chunkOffset;
+        sub.startTime = formatSrtTime(sTime);
+        sub.endTime = formatSrtTime(eTime);
+        sub.startSeconds = sTime;
+        sub.endSeconds = eTime;
+      });
+
+      const promptStage2 = `You are a professional anime subtitle translator. 
+Translate the provided Japanese subtitles into natural English and high-quality Arabic.
+
+CRITICAL RULES:
+1. Maintain the exact same JSON structure, array length, and timestamps.
+2. For each object, add "englishText" (natural English for fansubbing) and "arabicText" (high quality, fluent Arabic translation - فصحى احترافية).
+3. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", and "japaneseText".
+4. COMPLETE COVERAGE: You MUST translate every single object in the array up to the very last one. Do not stop early, do not truncate.
+
+Input JSON:
+${JSON.stringify(jpSubtitles, null, 2)}`;
+
+      const stage2Config = {
+        contents: [{ role: 'user', parts: [{ text: promptStage2 }] }],
+        config: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
+      };
+
+      let response2;
+      try {
+        response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
+      } catch (err) {
+        response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+      }
+
+      let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      let finalChunkSubtitles = [];
+      try {
+        finalChunkSubtitles = JSON.parse(rawText2);
+      } catch (parseErr) {
+        try {
+          const lastValidIndex = rawText2.lastIndexOf('}');
+          if (lastValidIndex !== -1) {
+            finalChunkSubtitles = JSON.parse(rawText2.substring(0, lastValidIndex + 1) + ']');
+          }
+        } catch (e) {
+          finalChunkSubtitles = jpSubtitles;
+        }
+      }
+
+      finalChunkSubtitles.forEach(sub => {
+        if (!sub.startSeconds) {
+          sub.startSeconds = parseSrtTime(sub.startTime);
+          sub.endSeconds = parseSrtTime(sub.endTime);
+        }
+        newSubtitles.push(sub);
+      });
+    }
+
+    // Now merge newSubtitles into project.subtitles
+    // Remove old subtitles in the time ranges of the selected chunks
+    let finalSubs = project.subtitles.filter(sub => {
+      const subChunkIndex = Math.floor((sub.startSeconds || parseSrtTime(sub.startTime)) / 120);
+      return !chunkIndices.includes(subChunkIndex);
+    });
+
+    finalSubs = finalSubs.concat(newSubtitles);
+    finalSubs.sort((a, b) => (a.startSeconds || 0) - (b.startSeconds || 0));
+
+    finalSubs.forEach((sub, idx) => {
+      sub.id = idx + 1;
+    });
+
+    project.subtitles = finalSubs;
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+
+    return res.json({ success: true, project });
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/process', async (req, res) => {
   req.setTimeout(0); // Disable timeout for extremely long multi-hour video processing
   res.setTimeout(0);
@@ -1380,15 +1562,16 @@ function parseTimestampToSeconds(ts) {
 // 15b. Fetch Global Dashboard Stats
 app.get('/api/dashboard-stats', (req, res) => {
   const projects = readProjects();
-  let totalProjects = 0;
   let totalClips = 0;
   let totalEpisodes = 0;
   let totalMovies = 0;
   let totalTrailers = 0;
   let totalLines = 0;
+  const uniqueFolders = new Set();
 
   Object.values(projects).forEach(p => {
-    totalProjects++;
+    uniqueFolders.add(p.projectName || 'Uncategorized');
+    const t = String(p.projectType || '').toLowerCase();
     const t = String(p.projectType || '').toLowerCase();
     if (t.includes('clip') || t.includes('مقطع')) totalClips++;
     else if (t.includes('movie') || t.includes('فيلم')) totalMovies++;
@@ -1403,7 +1586,7 @@ app.get('/api/dashboard-stats', (req, res) => {
   res.json({
     success: true,
     stats: {
-      totalProjects,
+      totalProjects: uniqueFolders.size,
       totalClips,
       totalEpisodes,
       totalMovies,
@@ -1551,7 +1734,7 @@ app.get('/api/project/:id/export', (req, res) => {
     return res.status(404).send('Project not found');
   }
 
-  const cleanProjectName = (project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
+  const cleanProjectName = (project.mediaTitle || project.projectName || 'subtitles').replace(/[/\\?%*:|"<>]/g, '_');
   const filename = `${cleanProjectName}_${lang}.${format}`;
   const encodedFilename = encodeURIComponent(filename);
 

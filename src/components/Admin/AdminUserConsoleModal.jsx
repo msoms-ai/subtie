@@ -11,6 +11,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
   const [isSaving, setIsSaving] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [isTestingModel, setIsTestingModel] = useState(false);
 
   const isAr = lang === 'ar';
 
@@ -33,7 +34,29 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
     }
   };
 
-    const handleFetchModels = async () => {
+  
+  const handleTestModel = async () => {
+    setIsTestingModel(true);
+    try {
+      const res = await fetch('/api/settings/test-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelName: localSettings.geminiModel })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert((isAr ? 'نجاح! استجاب النموذج: ' : 'Success! Model replied: ') + data.text);
+      } else {
+        alert((isAr ? 'فشل الاختبار: ' : 'Test failed: ') + data.error);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsTestingModel(false);
+    }
+  };
+
+  const handleFetchModels = async () => {
     setIsFetchingModels(true);
     setError('');
     setMessage('');
