@@ -1108,6 +1108,7 @@ Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE 
 CRITICAL RULES:
 1. COMPLETE COVERAGE: You MUST transcribe every single word up to the final second of the audio file.
 2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
+5. ZERO-BASED TIMESTAMPS: This audio is an isolated chunk. You MUST start your timestamps from 00:00:00,000. Do NOT use timestamps from the original video.
 3. SPLIT LONG SPEECHES into separate consecutive objects.
 4. PRECISE TIMING: Timings must match the actual audio exactly.
 
@@ -1151,9 +1152,16 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
       if (jpSubtitles.length === 0) continue;
 
       const chunkOffset = i * 120; // 120 seconds per chunk
+      const maxSec = Math.max(...jpSubtitles.map(s => parseTimestampToSeconds(s.endTime || '00:00:00,000')));
+      let appliedOffset = chunkOffset;
+      if (maxSec > 150) {
+        console.warn(`[Gemini AI] Detected global timestamps in chunk ${i+1} (max ${maxSec}s > 150s). Skipping chunk offset addition.`);
+        appliedOffset = 0;
+      }
+      
       jpSubtitles.forEach(sub => {
-        let sTime = parseTimestampToSeconds(sub.startTime) + chunkOffset;
-        let eTime = parseTimestampToSeconds(sub.endTime) + chunkOffset;
+        let sTime = parseTimestampToSeconds(sub.startTime) + appliedOffset;
+        let eTime = parseTimestampToSeconds(sub.endTime) + appliedOffset;
         sub.startTime = formatSecondsToTimestamp(sTime);
         sub.endTime = formatSecondsToTimestamp(eTime);
         sub.startSeconds = sTime;
@@ -1369,6 +1377,7 @@ Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE 
 CRITICAL RULES:
 1. COMPLETE COVERAGE: You MUST transcribe every single word up to the final second of the audio file. Never truncate, never summarize, never stop early. If there is dialogue, you MUST output it.
 2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
+5. ZERO-BASED TIMESTAMPS: This audio is an isolated chunk. You MUST start your timestamps from 00:00:00,000. Do NOT use timestamps from the original video.
 3. SPLIT LONG SPEECHES into separate consecutive objects.
 4. PRECISE TIMING: Timings must match the actual audio exactly.
 
