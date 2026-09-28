@@ -1559,6 +1559,30 @@ function parseTimestampToSeconds(ts) {
 
 // 17. Get All Projects (Role-Filtered)
 
+// 16. Test Model Endpoint
+app.post('/api/settings/test-model', async (req, res) => {
+  try {
+    const { modelName } = req.body;
+    if (!modelName) {
+      return res.status(400).json({ success: false, error: 'Model name is required.' });
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const settings = readSettings();
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || settings.geminiApiKey });
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: 'Translate the word "Arigato" into Arabic. Output only the Arabic word without any extra text.',
+      config: { maxOutputTokens: 10 }
+    });
+
+    return res.json({ success: true, text: response.text });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 15b. Fetch Global Dashboard Stats
 app.get('/api/dashboard-stats', (req, res) => {
   const projects = readProjects();
