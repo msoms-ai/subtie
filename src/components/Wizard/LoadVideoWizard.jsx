@@ -13,6 +13,21 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
   // Upload State
   const [videoFile, setVideoFile] = useState(null);
+  const [videoDuration, setVideoDuration] = useState('00:00:00');
+
+  const extractDuration = (file) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src);
+      const seconds = video.duration;
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      setVideoDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+    };
+    video.src = URL.createObjectURL(file);
+  };
   const [projectId, setProjectId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -473,6 +488,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                 const file = e.dataTransfer.files[0];
                 setVideoFile(file);
+                extractDuration(file);
                 if (!mediaTitle.trim()) {
                   setMediaTitle(file.name.replace(/\.[^/.]+$/, ''));
                 }
@@ -490,7 +506,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               id="hidden-video-input"
               type="file"
               accept="video/*"
-              onChange={(e) => e.target.files?.[0] && setVideoFile(e.target.files[0])}
+              onChange={(e) => {
+                if (e.target.files?.[0]) {
+                  setVideoFile(e.target.files[0]);
+                  extractDuration(e.target.files[0]);
+                }
+              }}
               className="hidden"
             />
 
@@ -507,6 +528,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                   onClick={(e) => {
                     e.stopPropagation();
                     setVideoFile(null);
+                    setVideoDuration('00:00:00');
                   }}
                   className="px-3 py-1 rounded-xl bg-purple-900 hover:bg-rose-600 text-white text-xs font-black transition ml-auto"
                 >
@@ -606,13 +628,24 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               {isAr ? 'تم رفع الفيديو بنجاح واكتمال!' : 'Upload Successful and Completed!'}
             </h3>
             
-            {/* FILE NAME & PATH CONTAINER: SOLID PURPLE WITH BOLD WHITE TEXT (LTR) */}
-            <div className="bg-purple-950 theme-light:bg-purple-800 p-4.5 rounded-2xl border-2 border-purple-400 max-w-md mx-auto shadow-xl text-center space-y-1.5 wizard-white-text my-3" dir="ltr">
-              <span className="text-xs text-purple-200 font-bold block">{isAr ? 'مسار وتفاصيل الملف المرفوع:' : 'Uploaded File Directory:'}</span>
-              <p className="text-sm font-extrabold text-white text-left truncate">{videoFile?.name}</p>
-              <code className="text-xs font-mono font-black text-pink-300 text-left block">
-                server/uploads/{projectId}/video.mp4
-              </code>
+            {/* FILE METADATA CONTAINER */}
+            <div className="bg-purple-950 theme-light:bg-purple-800 p-4 rounded-2xl border-2 border-purple-400 max-w-md mx-auto shadow-xl text-left space-y-2 wizard-white-text my-3" dir="ltr">
+              <span className="text-xs text-purple-200 font-bold block text-center mb-3 border-b border-purple-500/30 pb-2">{isAr ? 'بيانات الملف المرفوع' : 'Uploaded File Metadata'}</span>
+              
+              <ul className="text-sm space-y-2 px-2 pb-2">
+                <li className="flex items-start">
+                  <span className="font-bold text-pink-300 mr-2 w-20">Name:</span>
+                  <span className="font-extrabold text-white break-words flex-1 leading-tight">{videoFile?.name}</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="font-bold text-pink-300 mr-2 w-20">Size:</span>
+                  <span className="font-extrabold text-white flex-1">{videoFile ? (videoFile.size / (1024 * 1024)).toFixed(2) : '0.00'} MB</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="font-bold text-pink-300 mr-2 w-20">Duration:</span>
+                  <span className="font-extrabold text-white flex-1">{videoDuration}</span>
+                </li>
+              </ul>
             </div>
           </div>
 
@@ -622,7 +655,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white font-black text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all wizard-white-text border-2 border-purple-400"
             >
               <Cpu className="w-5 h-5 text-pink-200" />
-              <span>{isAr ? 'استخراج الصوت ومعالجة الترجمة بـ Gemini AI' : 'Extract Audio & Process with Gemini AI'}</span>
+              <span>{isAr ? 'المتابعة إلى تفريغ الصوت الياباني' : 'Proceed with Japanese Audio Transcribing'}</span>
               {isAr ? <ArrowLeft className="w-5 h-5 text-white" /> : <ArrowRight className="w-5 h-5 text-white" />}
             </button>
           </div>
@@ -647,7 +680,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                   className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 to-pink-600 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
                 >
                   <RefreshCw className="w-4 h-4 text-white" />
-                  <span>{isAr ? 'إعادة المحاولة' : 'Retry Audio Extraction & Gemini AI'}</span>
+                  <span>{isAr ? 'إعادة المحاولة' : 'Retry Audio Processing'}</span>
                 </button>
               </div>
             </div>
