@@ -14,6 +14,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   // Upload State
   const [videoFile, setVideoFile] = useState(null);
   const [videoDuration, setVideoDuration] = useState('00:00:00');
+  const [videoDurationSecs, setVideoDurationSecs] = useState(0);
 
   const extractDuration = (file) => {
     const video = document.createElement('video');
@@ -21,6 +22,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     video.onloadedmetadata = () => {
       window.URL.revokeObjectURL(video.src);
       const seconds = video.duration;
+      setVideoDurationSecs(Math.ceil(seconds));
       const h = Math.floor(seconds / 3600);
       const m = Math.floor((seconds % 3600) / 60);
       const s = Math.floor(seconds % 60);
@@ -238,16 +240,22 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           projectId,
           projectName: projectName || 'Untitled Project',
           projectType,
-          mediaTitle: mediaTitle || 'Untitled Video'
+          mediaTitle: mediaTitle || 'Untitled Video',
+          videoDurationSecs
         })
       });
 
       const data = await res.json();
       clearInterval(progressTimer);
 
-      if (!data.success) {
+      if (res.status === 402 || res.status === 403) {
         setIsProcessing(false);
-        setErrorMessage(data.message || (isAr ? 'فشلت معالجة الصوت بالذكاء الاصطناعي.' : 'Audio extraction / Gemini AI Processing failed.'));
+        setErrorMessage(data.error || 'Permission denied.');
+        return;
+      }
+      if (!data.success && !data.project) {
+        setIsProcessing(false);
+        setErrorMessage(data.error || data.message || (isAr ? 'فشلت معالجة الصوت بالذكاء الاصطناعي.' : 'Audio extraction / Gemini AI Processing failed.'));
         return;
       }
 
