@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Film, Video, Tv, CheckCircle2, Star, Zap, Infinity } from 'lucide-react';
+import { Crown, Film, Video, Tv, CheckCircle2, Star, Zap, ShieldCheck } from 'lucide-react';
 
 export default function Pricing({ lang, user }) {
   const isAr = lang === 'ar';
@@ -59,7 +59,7 @@ export default function Pricing({ lang, user }) {
 
         {isAdmin && (
           <div className="mt-6 inline-flex items-center space-x-2 rtl:space-x-reverse bg-gradient-to-r from-rose-600 to-pink-600 px-6 py-3 rounded-full shadow-lg shadow-rose-500/30 border-2 border-rose-400/50">
-            <Infinity className="w-5 h-5 text-white" />
+            <ShieldCheck className="w-5 h-5 text-white" />
             <span className="text-white font-black text-sm">
               {isAr ? 'أنت مدير (Admin): رصيدك غير محدود!' : 'Admin Privilege: You have unlimited minutes!'}
             </span>
