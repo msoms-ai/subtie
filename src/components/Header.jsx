@@ -4,6 +4,7 @@ import { Sparkles, Film, Sun, Moon, Globe, FolderKanban, User, LogIn, LogOut, Sh
 export default function Header({
   onGoHome,
   onOpenProjects,
+  onOpenPricing,
   lang = 'en',
   theme = 'dark',
   onToggleLang,
