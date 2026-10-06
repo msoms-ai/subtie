@@ -79,13 +79,14 @@ export default function Header({
 
           {/* Wallet Widget */}
           {user && (
-            <div
-              className="flex items-center space-x-1 sm:space-x-1.5 rtl:space-x-reverse px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black bg-slate-900/80 theme-light:bg-white text-yellow-400 theme-light:text-amber-500 border border-yellow-500/30 shadow-inner"
-              title={isAr ? 'رصيد الدقائق المتبقية' : 'Remaining Minute Balance'}
+            <button
+              onClick={onOpenPricing}
+              className="flex items-center space-x-1 sm:space-x-1.5 rtl:space-x-reverse px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black bg-slate-900/80 theme-light:bg-white text-yellow-400 theme-light:text-amber-500 border border-yellow-500/30 shadow-inner hover:scale-105 transition cursor-pointer"
+              title={isAr ? 'شراء المزيد من الدقائق' : 'Top up Minutes'}
             >
               <span className="text-sm leading-none">🪙</span>
               <span className="font-extrabold whitespace-nowrap">{user.minuteBalance !== undefined ? user.minuteBalance : 0} {isAr ? 'دقيقة' : 'Mins'}</span>
-            </div>
+            </button>
           )}
 
           {/* My Projects Button (Only visible if logged in) */}

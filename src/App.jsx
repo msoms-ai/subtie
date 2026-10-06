@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import LandingHero from './components/LandingHero.jsx';
+import Pricing from './components/Pricing.jsx';
 import ProjectsGallery from './components/Projects/ProjectsGallery.jsx';
 import LoadVideoWizard from './components/Wizard/LoadVideoWizard.jsx';
 import SubtitleWorkspace from './components/Editor/SubtitleWorkspace.jsx';
@@ -153,6 +154,7 @@ export default function App() {
         onGoHome={handleGoHome}
         onOpenProjects={handleOpenProjects}
         onStartWizard={handleStartWizard}
+        onOpenPricing={() => { setView('pricing'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         lang={lang}
         theme={theme}
         onToggleLang={toggleLang}
@@ -166,6 +168,10 @@ export default function App() {
 
       {/* Main Content Views */}
       <main className="flex-grow">
+        {view === 'pricing' && (
+          <Pricing lang={lang} user={user} />
+        )}
+
         {view === 'landing' && (
           <LandingHero
             onStartWizard={handleStartWizard}

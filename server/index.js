@@ -1267,19 +1267,24 @@ app.post('/api/process', async (req, res) => {
     const user = users[userId];
     if (user) {
       const videoMinutes = Math.ceil((videoDurationSecs || 0) / 60) || 24; // Fallback to 24 mins if undefined
+      const isAdmin = user.role === 'Admin';
       
-      if (videoMinutes > 40 && !user.hasPurchased) {
+      if (!isAdmin && videoMinutes > 40 && !user.hasPurchased) {
         return res.status(403).json({ error: 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.' });
       }
       
-      if (user.minuteBalance < videoMinutes) {
+      if (!isAdmin && user.minuteBalance < videoMinutes) {
         return res.status(402).json({ error: `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.` });
       }
       
-      // Deduct minutes
-      user.minuteBalance -= videoMinutes;
-      writeUsers(users);
-      console.log(`[Wallet] Deducted ${videoMinutes} mins from user ${userId}. Remaining: ${user.minuteBalance} mins.`);
+      // Deduct minutes (skip for admins)
+      if (!isAdmin) {
+        user.minuteBalance -= videoMinutes;
+        writeUsers(users);
+        console.log(`[Wallet] Deducted ${videoMinutes} mins from user ${userId}. Remaining: ${user.minuteBalance} mins.`);
+      } else {
+        console.log(`[Wallet] Admin ${userId} bypassed minute deduction. Video: ${videoMinutes} mins.`);
+      }
     }
   }
   // ----------------------------------------------
