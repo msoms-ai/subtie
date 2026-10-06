@@ -325,6 +325,8 @@ app.post('/api/auth/register', async (req, res) => {
       isVerified: false,
       verificationCode,
       avatarUrl: '',
+      minuteBalance: 35, // 35 minutes free tier for new users
+      hasPurchased: false, // Tracks if user ever made a top-up
       createdAt: new Date().toISOString(),
       subscriptions: { updates: true, newsletter: true, notifications: true },
       preferences: { defaultLanguage: selectedLang, defaultTheme: 'dark' }
