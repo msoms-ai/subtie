@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Film, Video, Tv, CheckCircle2, Star, Zap, ShieldCheck } from 'lucide-react';
+import { Crown, Film, Video, Tv, Check, Star, Zap, ShieldCheck } from 'lucide-react';
 
 export default function Pricing({ lang, user }) {
   const isAr = lang === 'ar';
@@ -106,7 +106,7 @@ export default function Pricing({ lang, user }) {
             <ul className="text-sm font-bold text-slate-300 theme-light:text-slate-600 space-y-3 mb-8 w-full text-left rtl:text-right">
               {pkg.features.map((feat, idx) => (
                 <li key={idx} className="flex items-start space-x-2 rtl:space-x-reverse">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <span>{feat}</span>
                 </li>
               ))}
