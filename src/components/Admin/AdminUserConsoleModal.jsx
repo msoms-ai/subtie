@@ -1,3 +1,4 @@
+import ClusterDashboard from '../ClusterDashboard.jsx';
 import React, { useState, useEffect } from 'react';
 import { X, ShieldCheck, User, CheckCircle2, ShieldAlert, UserCheck, RefreshCw } from 'lucide-react';
 
@@ -195,6 +196,16 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
           >
             {isAr ? 'إعدادات النظام (AI)' : 'System Settings (AI)'}
           </button>
+          <button
+            onClick={() => { setError(''); setMessage(''); setActiveTab('cluster'); }}
+            className={`pb-3 px-4 transition border-b-2 ${
+              activeTab === 'cluster'
+                ? 'border-pink-500 text-pink-400 font-black'
+                : 'border-transparent text-slate-400 hover:text-white theme-light:text-slate-600 theme-light:hover:text-purple-900'
+            }`}
+          >
+            {isAr ? 'عناقيد المعالجة ومجمع API' : 'Cluster & API Pool'}
+          </button>
         </div>
 
         {/* Alerts */}
@@ -211,7 +222,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
         )}
 
         {/* TAB 1: USER TABLE */}
-        {activeTab === 'users' ? (
+        {activeTab === 'users' && (
           <div className="overflow-x-auto rounded-2xl border border-purple-500/30">
             <table className="w-full text-xs text-right rtl:text-right ltr:text-left">
               <thead className="bg-purple-950/80 theme-light:bg-purple-800 text-white font-black border-b border-purple-500/30">
@@ -273,7 +284,9 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
               </tbody>
             </table>
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'settings' && (
           /* TAB 2: SYSTEM SETTINGS */
           <div className="bg-slate-900/50 theme-light:bg-slate-100 p-5 rounded-2xl border border-purple-500/20">
             <h4 className="text-sm font-black text-white theme-light:text-slate-900 mb-4">{isAr ? 'إعدادات محرك الترجمة' : 'Translation Engine Settings'}</h4>
@@ -326,6 +339,12 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
             >
               {isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ الإعدادات' : 'Save Settings')}
             </button>
+          </div>
+        )}
+
+        {activeTab === 'cluster' && (
+          <div className="py-2">
+            <ClusterDashboard lang={lang} />
           </div>
         )}
       </div>

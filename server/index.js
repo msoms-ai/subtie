@@ -1,4 +1,9 @@
 import express from 'express';
+import http from 'http';
+import socketService from './services/socket.js';
+import queueService from './services/queue.js';
+import geminiPool from './services/geminiPool.js';
+import cloudStorage from './services/storage.js';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
@@ -1922,7 +1927,49 @@ if (fs.existsSync(distPath)) {
     }
   });
 }
-app.listen(PORT, () => {
+
+// --- Admin Cluster & API Pool Monitoring ---
+app.get('/api/admin/cluster-metrics', async (req, res) => {
+  try {
+    const queueMetrics = await queueService.getMetrics();
+    const apiPoolStatus = geminiPool.getPoolStatus();
+    res.json({
+      success: true,
+      queue: queueMetrics,
+      apiPool: apiPoolStatus,
+      storage: {
+        mode: cloudStorage.isConfigured() ? 'Cloudflare R2' : 'Local Disk',
+      },
+      serverUptime: Math.round(process.uptime()),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/gemini-keys', (req, res) => {
+  try {
+    const { key } = req.body;
+    const added = geminiPool.addKey(key);
+    res.json({ success: true, key: added });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/gemini-keys/:id', (req, res) => {
+  try {
+    const removed = geminiPool.removeKey(req.params.id);
+    res.json({ success: true, removed });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const server = http.createServer(app);
+socketService.init(server);
+
+server.listen(PORT, () => {
   console.log(`Subtie Backend running on http://localhost:${PORT}`);
 });
 
