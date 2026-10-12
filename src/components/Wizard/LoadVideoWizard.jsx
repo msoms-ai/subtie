@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
@@ -86,6 +87,26 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     };
     fetchFolders();
   }, [user]);
+
+  // Real-Time Socket.io Telemetry Listener
+  useEffect(() => {
+    if (!projectId) return;
+    const socket = io();
+    socket.emit('join_project', projectId);
+
+    socket.on('processing_progress', (data) => {
+      if (data.progress !== undefined) setProcessProgress(data.progress);
+      if (data.status) setProcessStatusMsg(data.status);
+      if (data.progressExtract !== undefined) setProgressExtract(data.progressExtract);
+      if (data.progressTranscode !== undefined) setProgressTranscode(data.progressTranscode);
+      if (data.progressTranslate !== undefined) setProgressTranslate(data.progressTranslate);
+    });
+
+    return () => {
+      socket.emit('leave_project', projectId);
+      socket.disconnect();
+    };
+  }, [projectId]);
 
   // Robust XHR Upload with Real Byte Tracking & Direct Fallback
   const handleUploadClick = () => {
@@ -216,7 +237,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     // Start polling the server for real progress
     const progressTimer = setInterval(async () => {
       try {
-        const pRes = await fetch(`/api/project/${projectId}/progress`);
+        const pRes = await fetch(`/api/project/${projectId}/progress?t=${Date.now()}`, { cache: 'no-store' });
         const pData = await pRes.json();
         if (pData.progress > 0) {
           setProcessProgress(pData.progress);

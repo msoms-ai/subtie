@@ -1323,9 +1323,52 @@ app.post('/api/process', async (req, res) => {
   const audioPath = path.join(targetDir, 'audio.mp3');
   const srtPath = path.join(targetDir, 'subtitle.srt');
 
+  const emitAndSaveProgress = (extract, transcode, translate, status, overall) => {
+    (function() {
+      const db = readProjects();
+      if (db[projectId]) {
+        if (extract !== undefined) db[projectId].progressExtract = extract;
+        if (transcode !== undefined) db[projectId].progressTranscode = transcode;
+        if (translate !== undefined) db[projectId].progressTranslate = translate;
+        if (status !== undefined) db[projectId].processingStatus = status;
+        if (overall !== undefined) db[projectId].processingProgress = overall;
+        writeProjects(db);
+      }
+    })();
+    socketService.emitProgress(projectId, {
+      progress: overall,
+      status,
+      progressExtract: extract,
+      progressTranscode: transcode,
+      progressTranslate: translate
+    });
+  };
+
+  // Background Cloudflare R2 Archival
+  if (cloudStorage.isConfigured() && videoFiles.length > 0) {
+    const vFile = videoFiles[0];
+    const r2Key = `videos/${userId}/${projectId}/${vFile}`;
+    console.log(`☁️ [Cloudflare R2] Initiating background upload: ${r2Key}...`);
+    cloudStorage.uploadFile(videoPath, r2Key, 'video/mp4')
+      .then(r2Res => {
+        console.log(`☁️ [Cloudflare R2] Successfully archived to R2: ${r2Res.publicUrl}`);
+        const db = readProjects();
+        if (db[projectId]) {
+          db[projectId].videoUrl = r2Res.publicUrl;
+          db[projectId].r2Key = r2Key;
+          writeProjects(db);
+        }
+      })
+      .catch(err => {
+        console.error(`⚠️ [Cloudflare R2] Background upload error:`, err.message);
+      });
+  }
+
   try {
     // Step 1: Extract Audio
+    emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10);
     await extractAudioTrack(videoPath, audioPath);
+    emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25);
     
 
       project.audioUrl = `${req.urlPrefix}/audio.mp3`;
@@ -1393,17 +1436,9 @@ app.post('/api/process', async (req, res) => {
 
       // --- STAGE 1: JAPANESE ASR ---
       
-      (function() {
-        const db = readProjects();
-        if(db[projectId]) {
-          const base = 40;
-          const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
-          db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.2));
-          db[projectId].processingStatus = `...AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}`;
-          db[projectId].progressTranscode = Math.round((i / chunkFiles.length) * 100);
-          writeProjects(db);
-        }
-      })();
+      const aPct = Math.round(((i + 0.5) / chunkFiles.length) * 100);
+      const overall1 = Math.round(25 + ((i + 0.5) / chunkFiles.length) * 70);
+      emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}`, overall1);
       console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
       const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
@@ -1463,18 +1498,9 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
 
       // --- STAGE 2: TRANSLATION (Text to Text) ---
       
-      (function() {
-        const db = readProjects();
-        if(db[projectId]) {
-          const base = 40;
-          const totalChunkWeight = 55 / chunkFiles.length; // From 40 to 95
-          db[projectId].processingProgress = Math.round(base + (i * totalChunkWeight) + (totalChunkWeight * 0.7));
-          db[projectId].processingStatus = `...AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}`;
-          db[projectId].progressTranscode = Math.round(((i + 1) / chunkFiles.length) * 100);
-          db[projectId].progressTranslate = Math.round((i / chunkFiles.length) * 100);
-          writeProjects(db);
-        }
-      })();
+      const tPct = Math.round(((i + 1) / chunkFiles.length) * 100);
+      const overall2 = Math.round(25 + ((i + 1) / chunkFiles.length) * 70);
+      emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}`, overall2);
       console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
       const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
 I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
@@ -1510,16 +1536,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       }
 
       
-      (function() {
-        const db = readProjects();
-        if(db[projectId]) {
-          db[projectId].processingProgress = 90;
-          db[projectId].processingStatus = "Finalizing subtitles...";
-          db[projectId].progressTranslate = 100;
-          db[projectId].progressTranscode = 100;
-          writeProjects(db);
-        }
-      })();
+      // Chunk completed successfully
       let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       let translatedSubtitles = [];
       try {
@@ -1735,6 +1752,9 @@ app.get('/api/project/:id', (req, res) => {
 
 // 19. Save Live Subtitle Edits (With optional Audit Status & Notes)
 app.get('/api/project/:id/progress', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const projects = readProjects();
   const project = projects[req.params.id];
   if (!project) return res.json({ progress: 0, status: 'Not found' });

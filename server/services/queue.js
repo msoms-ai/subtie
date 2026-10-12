@@ -30,6 +30,10 @@ redisConnection.connect().then(() => {
   console.warn(`⚠️ Redis is currently offline at ${REDIS_HOST}:${REDIS_PORT} (${err.message}). Queue jobs will wait or run in-process.`);
 });
 
+redisConnection.on('error', (err) => {
+  // Suppress unhandled event crashes when Redis is offline
+});
+
 export const subtitleQueue = new Queue('subtie-processing', {
   connection: redisConnection,
   defaultJobOptions: {
@@ -38,14 +42,18 @@ export const subtitleQueue = new Queue('subtie-processing', {
       type: 'exponential',
       delay: 5000,
     },
-    removeOnComplete: 100, // Keep last 100 completed jobs in memory
-    removeOnFail: 500,     // Keep failed jobs for inspection
+    removeOnComplete: 100,
+    removeOnFail: 500,
   },
 });
+
+subtitleQueue.on('error', () => {});
 
 export const subtitleQueueEvents = new QueueEvents('subtie-processing', {
   connection: redisConnection,
 });
+
+subtitleQueueEvents.on('error', () => {});
 
 class QueueService {
   isAvailable() {
