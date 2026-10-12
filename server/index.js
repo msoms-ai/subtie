@@ -1975,22 +1975,13 @@ app.delete('/api/project/:id', (req, res) => {
 });
 
 
-// Serve Vite frontend build (Production)
-const distPath = path.join(__dirname, '../dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-  // SPA Fallback
-  app.get(/(.*)/, (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      res.sendFile(path.join(distPath, 'index.html'));
-    }
-  });
-}
-
 // --- Admin Cluster & API Pool Monitoring ---
 app.get('/api/admin/cluster-metrics', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
+    if (req.query.rescan === '1' || req.query.rescan === 'true') {
+      geminiPool.initPool();
+    }
     const queueMetrics = await queueService.getMetrics();
     const apiPoolStatus = geminiPool.getPoolStatus();
     res.json({
@@ -2032,6 +2023,20 @@ app.delete('/api/admin/gemini-keys/:id', (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
+// Serve Vite frontend build (Production)
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  // SPA Fallback
+  app.get(/(.*)/, (req, res, next) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    } else {
+      next();
+    }
+  });
+}
 
 const server = http.createServer(app);
 socketService.init(server);

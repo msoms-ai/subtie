@@ -149,59 +149,61 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-      <div className="w-full max-w-3xl glass-panel p-6 sm:p-8 rounded-3xl border border-purple-500/40 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="w-full max-w-5xl glass-panel p-6 sm:p-8 rounded-3xl border border-purple-500/40 space-y-6 shadow-2xl relative max-h-[92vh] overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
         
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-6 left-6 rtl:left-auto rtl:right-6 text-slate-300 hover:text-white bg-purple-950 theme-light:bg-purple-800 p-2 rounded-full border border-purple-500/40 transition shadow-md"
-        >
-          <X className="w-5 h-5 text-white" />
-        </button>
+        {/* Top Header Bar */}
+        <div className="flex items-center justify-between gap-4 border-b border-purple-500/20 pb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-lg shadow-pink-500/20 shrink-0">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl sm:text-2xl font-black text-white theme-light:text-slate-950">
+                {isAr ? 'لوحة تحكم النظام والإدارة' : 'System Administration Console'}
+              </h3>
+              <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mt-0.5">
+                {isAr ? 'إدارة المستخدمين، مفاتيح الذكاء الاصطناعي، ومراقبة السيرفر' : 'Manage users, AI keys, and cluster infrastructure'}
+              </p>
+            </div>
+          </div>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-3 rtl:space-x-reverse pt-2">
-          <div className="p-3 w-12 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg self-start">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-2xl font-black text-white theme-light:text-slate-950">
-              {isAr ? 'لوحة تحكم النظام والإدارة' : 'System Administration Console'}
-            </h3>
-            <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold">
-              {isAr ? 'إدارة المستخدمين وإعدادات النظام' : 'Manage users and system settings'}
-            </p>
-          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-300 hover:text-white bg-slate-900/90 hover:bg-rose-600/80 theme-light:bg-purple-800 p-2.5 rounded-xl border border-purple-500/30 transition shadow-md shrink-0 cursor-pointer"
+            title={isAr ? 'إغلاق' : 'Close'}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-purple-500/20 text-xs font-black pt-2">
+        <div className="flex items-center gap-2 bg-slate-900/70 p-1.5 rounded-2xl border border-purple-500/20 w-fit">
           <button
             onClick={() => { setError(''); setMessage(''); setActiveTab('users'); }}
-            className={`pb-3 px-4 transition border-b-2 ${
+            className={`py-2 px-4 rounded-xl text-xs font-black transition whitespace-nowrap cursor-pointer ${
               activeTab === 'users'
-                ? 'border-pink-500 text-pink-400 font-black'
-                : 'border-transparent text-slate-400 hover:text-white theme-light:text-slate-600 theme-light:hover:text-purple-900'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             {isAr ? 'إدارة المستخدمين' : 'User Management'}
           </button>
           <button
             onClick={() => { setError(''); setMessage(''); setActiveTab('settings'); }}
-            className={`pb-3 px-4 transition border-b-2 ${
+            className={`py-2 px-4 rounded-xl text-xs font-black transition whitespace-nowrap cursor-pointer ${
               activeTab === 'settings'
-                ? 'border-pink-500 text-pink-400 font-black'
-                : 'border-transparent text-slate-400 hover:text-white theme-light:text-slate-600 theme-light:hover:text-purple-900'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             {isAr ? 'إعدادات النظام (AI)' : 'System Settings (AI)'}
           </button>
           <button
             onClick={() => { setError(''); setMessage(''); setActiveTab('cluster'); }}
-            className={`pb-3 px-4 transition border-b-2 ${
+            className={`py-2 px-4 rounded-xl text-xs font-black transition whitespace-nowrap cursor-pointer ${
               activeTab === 'cluster'
-                ? 'border-pink-500 text-pink-400 font-black'
-                : 'border-transparent text-slate-400 hover:text-white theme-light:text-slate-600 theme-light:hover:text-purple-900'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             {isAr ? 'عناقيد المعالجة ومجمع API' : 'Cluster & API Pool'}
