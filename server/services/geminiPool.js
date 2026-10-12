@@ -7,10 +7,28 @@ class GeminiPoolManager {
   }
 
   initPool() {
-    // Read from GEMINI_API_KEYS (comma separated) or fallback to single GEMINI_API_KEY
-    const rawKeys = process.env.GEMINI_API_KEYS
-      ? process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean)
-      : [process.env.GEMINI_API_KEY || ''].filter(Boolean);
+    let rawKeys = [];
+
+    // 1. Check GEMINI_API_KEYS (comma separated)
+    if (process.env.GEMINI_API_KEYS) {
+      rawKeys.push(...process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean));
+    }
+
+    // 2. Check numbered keys: GEMINI_KEY_1, GEMINI_KEY_2, etc. (bypasses Plesk 255-char limit)
+    for (let i = 1; i <= 20; i++) {
+      const keyVal = process.env[`GEMINI_KEY_${i}`] || process.env[`GEMINI_API_KEY_${i}`];
+      if (keyVal && keyVal.trim()) {
+        rawKeys.push(keyVal.trim());
+      }
+    }
+
+    // 3. Fallback to single GEMINI_API_KEY
+    if (rawKeys.length === 0 && process.env.GEMINI_API_KEY) {
+      rawKeys.push(process.env.GEMINI_API_KEY.trim());
+    }
+
+    // Remove duplicates
+    rawKeys = [...new Set(rawKeys)];
 
     this.keys = rawKeys.map((key, index) => ({
       id: `key_${index + 1}`,
