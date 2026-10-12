@@ -6,7 +6,11 @@ import { pipeline } from 'stream/promises';
 
 class StorageService {
   constructor() {
-    this.accountId = process.env.R2_ACCOUNT_ID;
+    let rawAccountId = process.env.R2_ACCOUNT_ID || '';
+    if (rawAccountId.includes('.r2.cloudflarestorage.com')) {
+      rawAccountId = rawAccountId.replace(/^https?:\/\//, '').replace(/\.r2\.cloudflarestorage\.com.*$/, '');
+    }
+    this.accountId = rawAccountId;
     this.accessKeyId = process.env.R2_ACCESS_KEY_ID;
     this.secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
     this.bucketName = process.env.R2_BUCKET_NAME;
