@@ -1,3 +1,6 @@
+import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 
 class GeminiPoolManager {
@@ -9,12 +12,34 @@ class GeminiPoolManager {
   initPool() {
     let rawKeys = [];
 
-    // 1. Check GEMINI_API_KEYS (comma separated)
+    // Helper to check env files if process.env was populated after module evaluation
+    const tryLoadEnvFile = (filePath) => {
+      try {
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf8');
+          content.split('\n').forEach(line => {
+            const m = line.match(/^\s*(GEMINI_[\w]+)\s*=\s*['"]?(.*?)['"]?\s*$/);
+            if (m) {
+              const [, keyName, val] = m;
+              if (val && val.trim()) {
+                if (keyName === 'GEMINI_API_KEYS') {
+                  rawKeys.push(...val.split(',').map(k => k.trim()).filter(Boolean));
+                } else if (keyName.startsWith('GEMINI_KEY_') || keyName.startsWith('GEMINI_API_KEY_') || keyName === 'GEMINI_API_KEY') {
+                  rawKeys.push(val.trim());
+                }
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    };
+
+    // 1. Check process.env.GEMINI_API_KEYS (comma separated)
     if (process.env.GEMINI_API_KEYS) {
       rawKeys.push(...process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean));
     }
 
-    // 2. Check numbered keys: GEMINI_KEY_1, GEMINI_KEY_2, etc. (bypasses Plesk 255-char limit)
+    // 2. Check numbered keys: GEMINI_KEY_1..20 in process.env
     for (let i = 1; i <= 20; i++) {
       const keyVal = process.env[`GEMINI_KEY_${i}`] || process.env[`GEMINI_API_KEY_${i}`];
       if (keyVal && keyVal.trim()) {
@@ -22,9 +47,16 @@ class GeminiPoolManager {
       }
     }
 
-    // 3. Fallback to single GEMINI_API_KEY
+    // 3. Fallback to single GEMINI_API_KEY in process.env
     if (rawKeys.length === 0 && process.env.GEMINI_API_KEY) {
       rawKeys.push(process.env.GEMINI_API_KEY.trim());
+    }
+
+    // 4. If still empty, directly read local and root .env files
+    if (rawKeys.length === 0) {
+      tryLoadEnvFile(path.resolve('.env'));
+      tryLoadEnvFile(path.resolve('server', '.env'));
+      tryLoadEnvFile(path.resolve('..', '.env'));
     }
 
     // Remove duplicates
@@ -118,6 +150,9 @@ class GeminiPoolManager {
    * Returns sanitized statistics for the Admin Panel
    */
   getPoolStatus() {
+    if (this.keys.length === 0) {
+      this.initPool();
+    }
     const now = Date.now();
     return this.keys.map(k => ({
       id: k.id,
