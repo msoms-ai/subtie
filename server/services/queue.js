@@ -57,7 +57,7 @@ subtitleQueueEvents.on('error', () => {});
 
 class QueueService {
   isAvailable() {
-    return isRedisConnected;
+    return isRedisConnected && redisConnection.status === 'ready';
   }
 
   /**
@@ -74,29 +74,39 @@ class QueueService {
   }
 
   /**
-   * Retrieves live metrics for the Admin Dashboard
+   * Retrieves live metrics for the Admin Dashboard with strict timeout protection
    */
   async getMetrics() {
-    if (!isRedisConnected) {
-      return { status: 'offline', waiting: 0, active: 0, completed: 0, failed: 0 };
+    if (!this.isAvailable()) {
+      return { status: 'offline', host: `${REDIS_HOST}:${REDIS_PORT}`, waiting: 0, active: 0, completed: 0, failed: 0 };
     }
 
-    const [waiting, active, completed, failed] = await Promise.all([
-      subtitleQueue.getWaitingCount(),
-      subtitleQueue.getActiveCount(),
-      subtitleQueue.getCompletedCount(),
-      subtitleQueue.getFailedCount(),
-    ]);
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Redis metrics timeout')), 800)
+      );
 
-    return {
-      status: 'online',
-      host: `${REDIS_HOST}:${REDIS_PORT}`,
-      waiting,
-      active,
-      completed,
-      failed,
-      total: waiting + active + completed + failed,
-    };
+      const countsPromise = Promise.all([
+        subtitleQueue.getWaitingCount(),
+        subtitleQueue.getActiveCount(),
+        subtitleQueue.getCompletedCount(),
+        subtitleQueue.getFailedCount(),
+      ]);
+
+      const [waiting, active, completed, failed] = await Promise.race([countsPromise, timeoutPromise]);
+
+      return {
+        status: 'online',
+        host: `${REDIS_HOST}:${REDIS_PORT}`,
+        waiting,
+        active,
+        completed,
+        failed,
+        total: waiting + active + completed + failed,
+      };
+    } catch (err) {
+      return { status: 'offline', host: `${REDIS_HOST}:${REDIS_PORT}`, waiting: 0, active: 0, completed: 0, failed: 0 };
+    }
   }
 }
 

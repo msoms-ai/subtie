@@ -1374,24 +1374,10 @@ app.post('/api/process', async (req, res) => {
 
       project.audioUrl = `${req.urlPrefix}/audio.mp3`;
 
-    // Step 2: Initialize Gemini AI Client via Gemini Pool
-    let geminiClientInfo = null;
-    try {
-      geminiClientInfo = geminiPool.acquireKey();
-    } catch (e) {
-      const fallbackKey = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
-      if (fallbackKey) {
-        geminiClientInfo = {
-          keyId: 'fallback',
-          rawKey: fallbackKey,
-          client: new GoogleGenAI({ apiKey: fallbackKey })
-        };
-      } else {
-        throw new Error('No Gemini API keys configured. Please configure keys in Admin Console or environment variables.');
-      }
+    // Step 2: Verify Gemini Pool has at least one key available
+    if (geminiPool.getPoolStatus().totalKeys === 0 && !process.env.GEMINI_API_KEY) {
+      throw new Error('No Gemini API keys configured. Please add keys in Admin Console or environment variables.');
     }
-
-    const ai = geminiClientInfo.client;
 
     // Initialize detailed progress
     (function() {
@@ -1438,21 +1424,42 @@ app.post('/api/process', async (req, res) => {
 
     for (let i = 0; i < chunkFiles.length; i++) {
       const chunkPath = path.join(chunksDir, chunkFiles[i]);
-      console.log(`[Gemini AI] Processing chunk ${i + 1}/${chunkFiles.length}...`);
-      
-      const uploadResult = await ai.files.upload({
-        file: chunkPath,
-        mimeType: 'audio/mp3'
-      });
-      await new Promise(r => setTimeout(r, 2000));
 
-      // --- STAGE 1: JAPANESE ASR ---
-      
-      const aPct = Math.round(((i + 0.5) / chunkFiles.length) * 100);
-      const overall1 = Math.round(25 + ((i + 0.5) / chunkFiles.length) * 70);
-      emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length}`, overall1);
-      console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
-      const promptStage1 = `You are an expert anime Japanese ASR engine.
+      // Acquire next available key from pool for this chunk (round-robin load balancing)
+      let chunkKeyInfo = null;
+      try {
+        chunkKeyInfo = geminiPool.acquireKey();
+      } catch (e) {
+        const fallbackKey = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+        if (fallbackKey) {
+          chunkKeyInfo = {
+            keyId: 'fallback',
+            maskedKey: 'fallback',
+            rawKey: fallbackKey,
+            client: new GoogleGenAI({ apiKey: fallbackKey })
+          };
+        } else {
+          throw e;
+        }
+      }
+
+      const ai = chunkKeyInfo.client;
+      console.log(`[Gemini AI] Processing chunk ${i + 1}/${chunkFiles.length} using ${chunkKeyInfo.keyId} (${chunkKeyInfo.maskedKey})...`);
+
+      try {
+        const uploadResult = await ai.files.upload({
+          file: chunkPath,
+          mimeType: 'audio/mp3'
+        });
+        await new Promise(r => setTimeout(r, 2000));
+
+        // --- STAGE 1: JAPANESE ASR ---
+        
+        const aPct = Math.round(((i + 0.5) / chunkFiles.length) * 100);
+        const overall1 = Math.round(25 + ((i + 0.5) / chunkFiles.length) * 70);
+        emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall1);
+        console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
+        const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
 
 CRITICAL RULES:
@@ -1470,51 +1477,52 @@ For each subtitle block, provide:
 Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
 Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
 
-      const settings = readSettings();
-      const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
-      const fallbackModel = 'gemini-1.5-flash';
-      const stage1Config = {
-        contents: [
-          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
-        ],
-        config: { 
-          responseMimeType: 'application/json', 
-          maxOutputTokens: 8192,
+        const settings = readSettings();
+        const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
+        const fallbackModel = 'gemini-1.5-flash';
+        const stage1Config = {
+          contents: [
+            { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
+          ],
+          config: { 
+            responseMimeType: 'application/json', 
+            maxOutputTokens: 8192,
 
-        }
-      };
-      
-      let response1;
-      try {
-        response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
-      } catch (err) {
-        console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
-        response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
-      }
-
-      let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-      let jpSubtitles = [];
-      try {
-        jpSubtitles = JSON.parse(rawText1);
-      } catch (parseErr) {
-        try {
-          const lastValidIndex = rawText1.lastIndexOf('}');
-          if (lastValidIndex !== -1) {
-            jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
           }
-        } catch (e) {
-          console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i}.`);
-          continue; // Skip chunk if ASR completely fails
+        };
+        
+        let response1;
+        try {
+          response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
+        } catch (err) {
+          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
+          response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
         }
-      }
 
-      // --- STAGE 2: TRANSLATION (Text to Text) ---
-      
-      const tPct = Math.round(((i + 1) / chunkFiles.length) * 100);
-      const overall2 = Math.round(25 + ((i + 1) / chunkFiles.length) * 70);
-      emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length}`, overall2);
-      console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
-      const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
+        let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+        let jpSubtitles = [];
+        try {
+          jpSubtitles = JSON.parse(rawText1);
+        } catch (parseErr) {
+          try {
+            const lastValidIndex = rawText1.lastIndexOf('}');
+            if (lastValidIndex !== -1) {
+              jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
+            }
+          } catch (e) {
+            console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i}.`);
+            if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, true);
+            continue; // Skip chunk if ASR completely fails
+          }
+        }
+
+        // --- STAGE 2: TRANSLATION (Text to Text) ---
+        
+        const tPct = Math.round(((i + 1) / chunkFiles.length) * 100);
+        const overall2 = Math.round(25 + ((i + 1) / chunkFiles.length) * 70);
+        emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall2);
+        console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
+        const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
 I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
 
 CRITICAL RULES:
@@ -1528,68 +1536,71 @@ ${JSON.stringify(jpSubtitles)}
 
 Return ONLY the updated valid JSON array. Output raw JSON array only, without markdown formatting.`;
 
-      const stage2Config = {
-        contents: [
-          { role: 'user', parts: [{ text: promptStage2 }] }
-        ],
-        config: { 
-          responseMimeType: 'application/json', 
-          maxOutputTokens: 8192,
+        const stage2Config = {
+          contents: [
+            { role: 'user', parts: [{ text: promptStage2 }] }
+          ],
+          config: { 
+            responseMimeType: 'application/json', 
+            maxOutputTokens: 8192,
 
-        }
-      };
-
-      let response2;
-      try {
-        response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
-      } catch (err) {
-        console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
-        response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
-      }
-
-      
-      // Chunk completed successfully
-      let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-      let translatedSubtitles = [];
-      try {
-        translatedSubtitles = JSON.parse(rawText2);
-      } catch (parseErr) {
-        try {
-          const lastValidIndex = rawText2.lastIndexOf('}');
-          if (lastValidIndex !== -1) {
-            translatedSubtitles = JSON.parse(rawText2.substring(0, lastValidIndex + 1) + ']');
           }
-        } catch (e) {
-          console.error(`[Gemini JSON Error] Stage 2 failed for chunk ${i}. Using Japanese only.`);
-          translatedSubtitles = jpSubtitles; // Fallback to un-translated
+        };
+
+        let response2;
+        try {
+          response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
+        } catch (err) {
+          console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
+          response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
         }
-      }
 
-      // Add offset to timestamps
-      const offsetSeconds = i * chunkDuration;
-      translatedSubtitles.forEach(sub => {
-        let sSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000') + offsetSeconds;
-        let eSec = parseTimestampToSeconds(sub.endTime || '00:00:02,000') + offsetSeconds;
-        
-        allParsedSubtitles.push({
-          id: globalId++,
-          startTime: formatSecondsToTimestamp(sSec),
-          endTime: formatSecondsToTimestamp(eSec),
-          startSeconds: sSec,
-          endSeconds: eSec,
-          japaneseText: sub.japaneseText || '',
-          englishText: sub.englishText || '',
-          arabicText: sub.arabicText || '',
-          approved: false,
-          auditNotes: ''
+        // Chunk completed successfully
+        let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+        let translatedSubtitles = [];
+        try {
+          translatedSubtitles = JSON.parse(rawText2);
+        } catch (parseErr) {
+          try {
+            const lastValidIndex = rawText2.lastIndexOf('}');
+            if (lastValidIndex !== -1) {
+              translatedSubtitles = JSON.parse(rawText2.substring(0, lastValidIndex + 1) + ']');
+            }
+          } catch (e) {
+            console.error(`[Gemini JSON Error] Stage 2 failed for chunk ${i}. Using Japanese only.`);
+            translatedSubtitles = jpSubtitles; // Fallback to un-translated
+          }
+        }
+
+        // Add offset to timestamps
+        const offsetSeconds = i * chunkDuration;
+        translatedSubtitles.forEach(sub => {
+          let sSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000') + offsetSeconds;
+          let eSec = parseTimestampToSeconds(sub.endTime || '00:00:02,000') + offsetSeconds;
+          
+          allParsedSubtitles.push({
+            id: globalId++,
+            startTime: formatSecondsToTimestamp(sSec),
+            endTime: formatSecondsToTimestamp(eSec),
+            startSeconds: sSec,
+            endSeconds: eSec,
+            japaneseText: sub.japaneseText || '',
+            englishText: sub.englishText || '',
+            arabicText: sub.arabicText || '',
+            approved: false,
+            auditNotes: ''
+          });
         });
-      });
-      
-    }
 
-    // Release key from pool
-    if (geminiClientInfo && geminiClientInfo.keyId !== 'fallback') {
-      geminiPool.releaseKey(geminiClientInfo.keyId, true);
+        if (chunkKeyInfo.keyId !== 'fallback') {
+          geminiPool.releaseKey(chunkKeyInfo.keyId, true);
+        }
+      } catch (chunkErr) {
+        if (chunkKeyInfo && chunkKeyInfo.keyId !== 'fallback') {
+          geminiPool.releaseKey(chunkKeyInfo.keyId, false, chunkErr);
+        }
+        throw chunkErr;
+      }
     }
 
     // Await R2 upload completion if in progress

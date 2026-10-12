@@ -100,18 +100,24 @@ class GeminiPoolManager {
     // Remove duplicates and blanks
     rawKeys = [...new Set(rawKeys.map(k => k.trim()).filter(Boolean))];
 
-    this.keys = rawKeys.map((key, index) => ({
-      id: `key_${index + 1}`,
-      rawKey: key,
-      maskedKey: this.maskKey(key),
-      status: 'active', // active, rate_limited, exhausted, disabled
-      activeRequests: 0,
-      totalRequests: 0,
-      errorsCount: 0,
-      lastError: null,
-      cooldownUntil: 0,
-      lastUsed: null,
-    }));
+    // Preserve existing runtime telemetry for keys already in memory
+    const existingMap = new Map(this.keys.map(k => [k.rawKey, k]));
+
+    this.keys = rawKeys.map((key, index) => {
+      const prev = existingMap.get(key);
+      return {
+        id: `key_${index + 1}`,
+        rawKey: key,
+        maskedKey: this.maskKey(key),
+        status: prev ? prev.status : 'active',
+        activeRequests: prev ? prev.activeRequests : 0,
+        totalRequests: prev ? prev.totalRequests : 0,
+        errorsCount: prev ? prev.errorsCount : 0,
+        lastError: prev ? prev.lastError : null,
+        cooldownUntil: prev ? prev.cooldownUntil : 0,
+        lastUsed: prev ? prev.lastUsed : null,
+      };
+    });
 
     console.log(`🤖 GeminiPoolManager initialized with ${this.keys.length} API key(s). Detected env variables: [${this.detectedEnvNames.join(', ')}]`);
   }
@@ -122,9 +128,12 @@ class GeminiPoolManager {
   }
 
   /**
-   * Selects the best available key (least active requests, not in cooldown)
+   * Selects the best available key (least active requests, then least total requests for round-robin balance)
    */
   acquireKey() {
+    if (this.keys.length === 0) {
+      this.initPool();
+    }
     const now = Date.now();
 
     // Recover keys whose cooldown period has passed
@@ -138,22 +147,29 @@ class GeminiPoolManager {
     const availableKeys = this.keys.filter(k => k.status === 'active');
 
     if (availableKeys.length === 0) {
-      // If all are rate limited, find the one with the shortest remaining cooldown
+      if (this.keys.length === 0) {
+        throw new Error('No Gemini API keys configured in pool.');
+      }
       const soonestKey = [...this.keys].sort((a, b) => a.cooldownUntil - b.cooldownUntil)[0];
       const waitMs = Math.max(0, (soonestKey?.cooldownUntil || now) - now);
       throw new Error(`All Gemini API keys are currently rate-limited. Retry in ${Math.ceil(waitMs / 1000)}s.`);
     }
 
-    // Pick key with least active requests
-    availableKeys.sort((a, b) => a.activeRequests - b.activeRequests);
+    // Sort by least active requests first, then least total requests (round-robin rotation)
+    availableKeys.sort((a, b) => {
+      if (a.activeRequests !== b.activeRequests) return a.activeRequests - b.activeRequests;
+      return a.totalRequests - b.totalRequests;
+    });
     const chosen = availableKeys[0];
 
     chosen.activeRequests += 1;
     chosen.totalRequests += 1;
     chosen.lastUsed = new Date().toISOString();
+    this.lastUsedKeyId = chosen.id;
 
     return {
       keyId: chosen.id,
+      maskedKey: chosen.maskedKey,
       rawKey: chosen.rawKey,
       client: new GoogleGenAI({ apiKey: chosen.rawKey }),
     };
@@ -203,37 +219,62 @@ class GeminiPoolManager {
         lastError: k.lastError,
         cooldownSecondsRemaining: Math.max(0, Math.ceil((k.cooldownUntil - now) / 1000)),
         lastUsed: k.lastUsed,
+        isLastUsed: this.lastUsedKeyId === k.id,
       })),
       totalKeys: this.keys.length,
+      lastUsedKeyId: this.lastUsedKeyId || null,
       detectedEnvNames: this.detectedEnvNames || []
     };
   }
 
-  addKey(newKey) {
-    if (!newKey || this.keys.some(k => k.rawKey === newKey)) {
-      throw new Error('Key is empty or already in the pool.');
+  addKey(newKeyInput) {
+    if (!newKeyInput || typeof newKeyInput !== 'string') {
+      throw new Error('Key input cannot be empty.');
     }
-    const keyEntry = {
-      id: `key_${this.keys.length + 1}`,
-      rawKey: newKey,
-      maskedKey: this.maskKey(newKey),
-      status: 'active',
-      activeRequests: 0,
-      totalRequests: 0,
-      errorsCount: 0,
-      lastError: null,
-      cooldownUntil: 0,
-      lastUsed: null,
-    };
-    this.keys.push(keyEntry);
+    // Support pasting a single key or comma/newline-separated multiple keys
+    const candidates = newKeyInput
+      .split(/[,;\n\r]+/)
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    if (candidates.length === 0) {
+      throw new Error('Key input cannot be empty.');
+    }
+
+    const addedEntries = [];
+    for (const candidate of candidates) {
+      if (!this.keys.some(k => k.rawKey === candidate)) {
+        const keyEntry = {
+          id: `key_${this.keys.length + 1}`,
+          rawKey: candidate,
+          maskedKey: this.maskKey(candidate),
+          status: 'active',
+          activeRequests: 0,
+          totalRequests: 0,
+          errorsCount: 0,
+          lastError: null,
+          cooldownUntil: 0,
+          lastUsed: null,
+        };
+        this.keys.push(keyEntry);
+        addedEntries.push(keyEntry);
+      }
+    }
+
+    if (addedEntries.length === 0) {
+      throw new Error('Key(s) already exist in the pool.');
+    }
+
     this.saveStoredKeys(this.keys);
-    return keyEntry;
+    return addedEntries.length === 1 ? addedEntries[0] : addedEntries;
   }
 
   removeKey(idOrMasked) {
     const index = this.keys.findIndex(k => k.id === idOrMasked || k.maskedKey === idOrMasked);
     if (index !== -1) {
       const removed = this.keys.splice(index, 1);
+      // Re-index remaining keys cleanly
+      this.keys.forEach((k, idx) => { k.id = `key_${idx + 1}`; });
       this.saveStoredKeys(this.keys);
       return removed[0];
     }

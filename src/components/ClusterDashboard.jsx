@@ -17,11 +17,26 @@ export default function ClusterDashboard({ lang }) {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
+  const formatLastUsed = (ts) => {
+    if (!ts) return '—';
+    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (diffSec < 5) return isAr ? 'الآن' : 'Just now';
+    if (diffSec < 60) return isAr ? `منذ ${diffSec}ث` : `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return isAr ? `منذ ${diffMin}د` : `${diffMin}m ago`;
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
   const fetchMetrics = async (isManual = false, forceRescan = false) => {
     if (isManual) setRefreshing(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     try {
       const qs = forceRescan ? `rescan=1&t=${Date.now()}` : `t=${Date.now()}`;
-      const res = await fetch(`/api/admin/cluster-metrics?${qs}`, { cache: 'no-store' });
+      const res = await fetch(`/api/admin/cluster-metrics?${qs}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       if (!res.ok) throw new Error(isAr ? 'تعذر الاتصال بخادم المراقبة' : 'Failed to load cluster metrics');
       const data = await res.json();
       setMetrics(data);
@@ -33,11 +48,16 @@ export default function ClusterDashboard({ lang }) {
         showToast(isAr ? 'تم تحديث البيانات بنجاح' : 'Telemetry synced');
       }
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') {
+        setError(isAr ? 'انتهت مهلة الاتصال بالخادم (تحقق من تشغيل الخدمة)' : 'Server metrics request timed out');
+      } else {
+        setError(err.message);
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
       if (isManual) {
-        setTimeout(() => setRefreshing(false), 400);
+        setTimeout(() => setRefreshing(false), 300);
       }
     }
   };
@@ -46,7 +66,10 @@ export default function ClusterDashboard({ lang }) {
     setRescanning(true);
     setError(null);
     try {
-      await fetch('/api/admin/gemini-keys/rescan', { method: 'POST' }).catch(() => {});
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 4000);
+      await fetch('/api/admin/gemini-keys/rescan', { method: 'POST', signal: ctrl.signal }).catch(() => {});
+      clearTimeout(tid);
       await fetchMetrics(true, true);
     } finally {
       setRescanning(false);
@@ -75,7 +98,11 @@ export default function ClusterDashboard({ lang }) {
         throw new Error(data.error || (isAr ? 'فشل إضافة المفتاح' : 'Failed to add key'));
       }
       setNewKey('');
-      showToast(isAr ? 'تمت إضافة المفتاح بنجاح' : 'API key added to pool');
+      showToast(
+        isAr
+          ? `تم حفظ المفاتيح بنجاح (الإجمالي: ${data.totalKeys || ''})`
+          : `Saved to pool (${data.totalKeys || ''} keys active)`
+      );
       await fetchMetrics(true, false);
     } catch (err) {
       setError(err.message);
@@ -97,6 +124,7 @@ export default function ClusterDashboard({ lang }) {
 
   const poolKeys = Array.isArray(metrics?.apiPool) ? metrics.apiPool : (metrics?.apiPool?.keys || []);
   const storageStatus = metrics?.storage || {};
+  const activeKeyCount = poolKeys.filter((k) => k.activeRequests > 0).length;
 
   return (
     <div className="space-y-6 animate-fade-in-up" dir={isAr ? 'rtl' : 'ltr'}>
@@ -233,6 +261,11 @@ export default function ClusterDashboard({ lang }) {
               <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-xs font-black text-purple-200 whitespace-nowrap">
                 {poolKeys.length} {isAr ? 'مفتاح' : 'Keys'}
               </span>
+              {activeKeyCount > 0 && (
+                <span className="px-2.5 py-0.5 rounded-full bg-pink-500/20 border border-pink-500/40 text-xs font-black text-pink-300 animate-pulse whitespace-nowrap">
+                  {activeKeyCount} {isAr ? 'قيد الاستخدام الآن' : 'In Use Now'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -241,10 +274,10 @@ export default function ClusterDashboard({ lang }) {
             <form onSubmit={handleAddKey} className="flex items-center gap-2 w-full sm:w-auto">
               <input
                 type="password"
-                placeholder={isAr ? 'أدخل مفتاح Gemini API جديد...' : 'Paste Gemini API key...'}
+                placeholder={isAr ? 'الصق مفتاحاً أو عدة مفاتيح مفصولة بفاصلة...' : 'Paste 1 or comma-separated keys...'}
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
-                className="w-full sm:w-56 bg-slate-950 border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
+                className="w-full sm:w-64 bg-slate-950 border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
               />
               <button
                 type="submit"
@@ -276,60 +309,98 @@ export default function ClusterDashboard({ lang }) {
                 <th className="py-3 px-4 font-extrabold whitespace-nowrap">#</th>
                 <th className="py-3 px-4 font-extrabold whitespace-nowrap">{isAr ? 'المفتاح' : 'API Key'}</th>
                 <th className="py-3 px-4 font-extrabold whitespace-nowrap">{isAr ? 'الحالة' : 'Status'}</th>
-                <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'النشطة' : 'Active'}</th>
-                <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'إجمالي الطلبات' : 'Total Reqs'}</th>
+                <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'النشطة الآن' : 'In Flight'}</th>
+                <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'إجمالي الطلبات' : 'Total Calls'}</th>
+                <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'آخر استخدام' : 'Last Used'}</th>
                 <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'التهدئة' : 'Cooldown'}</th>
                 <th className="py-3 px-4 font-extrabold whitespace-nowrap text-center">{isAr ? 'حذف' : 'Remove'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-500/10">
-              {poolKeys.map((key, idx) => (
-                <tr key={key.id} className="hover:bg-purple-950/25 transition">
-                  <td className="py-3 px-4 font-mono text-slate-500 font-bold">{idx + 1}</td>
-                  <td className="py-3 px-4 font-mono font-bold text-white whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
-                      <span>{key.maskedKey}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        key.status === 'active'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : key.status === 'rate_limited'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      }`}
-                    >
-                      {key.status === 'active' ? (isAr ? 'نشط' : 'Active') : key.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-bold text-slate-300 text-center">{key.activeRequests}</td>
-                  <td className="py-3 px-4 font-bold text-slate-300 text-center">{key.totalRequests}</td>
-                  <td className="py-3 px-4 text-slate-400 font-mono text-center">
-                    {key.cooldownSecondsRemaining > 0 ? (
-                      <span className="text-amber-400 font-bold">{key.cooldownSecondsRemaining}s</span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={() => handleRemoveKey(key.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition cursor-pointer"
-                      title={isAr ? 'حذف المفتاح' : 'Delete key'}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {poolKeys.map((key, idx) => {
+                const isBusy = key.activeRequests > 0;
+                return (
+                  <tr
+                    key={key.id}
+                    className={`transition ${
+                      isBusy
+                        ? 'bg-pink-950/30 hover:bg-pink-950/40'
+                        : key.isLastUsed
+                        ? 'bg-purple-950/20 hover:bg-purple-950/30'
+                        : 'hover:bg-purple-950/25'
+                    }`}
+                  >
+                    <td className="py-3 px-4 font-mono text-slate-500 font-bold">{idx + 1}</td>
+                    <td className="py-3 px-4 font-mono font-bold text-white whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            isBusy
+                              ? 'bg-pink-400 animate-ping'
+                              : key.isLastUsed
+                              ? 'bg-emerald-400'
+                              : 'bg-purple-400'
+                          }`}
+                        />
+                        <span>{key.maskedKey}</span>
+                        {isBusy && (
+                          <span className="px-2 py-0.5 rounded-md bg-pink-500/25 border border-pink-500/50 text-[10px] font-black text-pink-300 uppercase tracking-wider animate-pulse">
+                            {isAr ? 'يعمل الآن' : 'IN USE'}
+                          </span>
+                        )}
+                        {!isBusy && key.isLastUsed && (
+                          <span className="px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/40 text-[10px] font-bold text-purple-300 uppercase">
+                            {isAr ? 'آخر مفتاح مستخدم' : 'LAST CALLED'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          key.status === 'active'
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : key.status === 'rate_limited'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        }`}
+                      >
+                        {key.status === 'active' ? (isAr ? 'نشط' : 'Active') : key.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-center">
+                      <span className={isBusy ? 'text-pink-400 font-black' : 'text-slate-400'}>
+                        {key.activeRequests}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-slate-200 text-center">{key.totalRequests}</td>
+                    <td className="py-3 px-4 text-slate-300 font-mono text-center whitespace-nowrap">
+                      {formatLastUsed(key.lastUsed)}
+                    </td>
+                    <td className="py-3 px-4 text-slate-400 font-mono text-center">
+                      {key.cooldownSecondsRemaining > 0 ? (
+                        <span className="text-amber-400 font-bold">{key.cooldownSecondsRemaining}s</span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => handleRemoveKey(key.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition cursor-pointer"
+                        title={isAr ? 'حذف المفتاح' : 'Delete key'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {poolKeys.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="py-8 px-4 text-center text-slate-400">
+                  <td colSpan="8" className="py-8 px-4 text-center text-slate-400">
                     <p className="font-bold text-xs text-slate-300">
-                      {isAr ? 'لا توجد مفاتيح مضافة حالياً — أضف مفتاحاً من الحقل أعلاه أو اضغط "إعادة فحص".' : 'No API keys in pool — paste a key above or click "Rescan Env".'}
+                      {isAr ? 'لا توجد مفاتيح مضافة حالياً — الصق مفاتيحك في الحقل أعلاه أو اضغط "إعادة فحص".' : 'No API keys in pool — paste your key(s) above or click "Rescan Env".'}
                     </p>
                   </td>
                 </tr>
