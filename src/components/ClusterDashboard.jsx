@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Server, Cpu, Key, Plus, Trash2, RefreshCw, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Activity, Server, Cpu, Key, Plus, Trash2, RefreshCw, AlertTriangle, CheckCircle, Clock, Cloud, ShieldAlert } from 'lucide-react';
 
 export default function ClusterDashboard({ lang }) {
   const isAr = lang === 'ar';
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [addingKey, setAddingKey] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (isManual = false) => {
+    if (isManual) setRefreshing(true);
     try {
-      const res = await fetch('/api/admin/cluster-metrics');
+      const res = await fetch(`/api/admin/cluster-metrics?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to load cluster metrics');
       const data = await res.json();
       setMetrics(data);
@@ -20,12 +23,28 @@ export default function ClusterDashboard({ lang }) {
       setError(err.message);
     } finally {
       setLoading(false);
+      if (isManual) {
+        setTimeout(() => setRefreshing(false), 600);
+      }
+    }
+  };
+
+  const handleRescanKeys = async () => {
+    setRescanning(true);
+    try {
+      const res = await fetch('/api/admin/gemini-keys/rescan', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to rescan keys');
+      await fetchMetrics(true);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setRescanning(false);
     }
   };
 
   useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 3000);
+    fetchMetrics(false);
+    const interval = setInterval(() => fetchMetrics(false), 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -44,7 +63,7 @@ export default function ClusterDashboard({ lang }) {
         throw new Error(err.error || 'Failed to add key');
       }
       setNewKey('');
-      fetchMetrics();
+      fetchMetrics(true);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -56,11 +75,15 @@ export default function ClusterDashboard({ lang }) {
     if (!window.confirm(isAr ? 'هل أنت متأكد من حذف هذا المفتاح؟' : 'Remove this API key from the pool?')) return;
     try {
       await fetch(`/api/admin/gemini-keys/${id}`, { method: 'DELETE' });
-      fetchMetrics();
+      fetchMetrics(true);
     } catch (err) {
       alert(err.message);
     }
   };
+
+  const poolKeys = Array.isArray(metrics?.apiPool) ? metrics.apiPool : (metrics?.apiPool?.keys || []);
+  const detectedEnvNames = metrics?.apiPool?.detectedEnvNames || [];
+  const storageStatus = metrics?.storage || {};
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 animate-fade-in-up" dir={isAr ? 'rtl' : 'ltr'}>
@@ -69,21 +92,22 @@ export default function ClusterDashboard({ lang }) {
         <div>
           <h2 className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 flex items-center gap-3">
             <Activity className="w-8 h-8 text-pink-400" />
-            <span>{isAr ? 'لوحة مراقبة السيرفر ومعالجة المهام (V2 Cluster)' : 'Cluster & Worker Dashboard (V2)'}</span>
+            <span>{isAr ? 'لوحة مراقبة السيرفر والتوزيع السحابي (V2 Cluster)' : 'Cluster & Worker Dashboard (V2)'}</span>
           </h2>
           <p className="text-slate-400 text-sm mt-1">
             {isAr
-              ? 'مراقبة فورية لطابور المهام (Redis BullMQ) ومجمع مفاتيح Gemini AI وحالة السيرفر.'
-              : 'Real-time telemetry for Redis BullMQ queue, Gemini AI Key Pool, and distributed worker nodes.'}
+              ? 'مراقبة فورية لطابور المهام (Redis BullMQ) ومجمع مفاتيح Gemini AI والتخزين السحابي Cloudflare R2.'
+              : 'Real-time telemetry for Redis BullMQ queue, Gemini AI Key Pool, and Cloudflare R2 storage.'}
           </p>
         </div>
 
         <button
-          onClick={fetchMetrics}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/30 rounded-xl text-xs font-bold text-purple-300 hover:text-white hover:border-pink-500 transition shadow-inner"
+          onClick={() => fetchMetrics(true)}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/30 rounded-xl text-xs font-bold text-purple-300 hover:text-white hover:border-pink-500 transition shadow-inner cursor-pointer disabled:opacity-50"
         >
-          <RefreshCw className="w-4 h-4 animate-spin-slow" />
-          <span>{isAr ? 'تحديث فوري' : 'Live Sync'}</span>
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-pink-400' : ''}`} />
+          <span>{isAr ? (refreshing ? 'جاري المزامنة...' : 'تحديث فوري') : (refreshing ? 'Syncing...' : 'Live Sync')}</span>
         </button>
       </div>
 
@@ -94,33 +118,33 @@ export default function ClusterDashboard({ lang }) {
         </div>
       )}
 
-      {/* Grid: Redis Queues & System Health */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Grid: Redis Queues, Cloudflare R2 & System Health */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Active Jobs */}
         <div className="bg-slate-900/80 border border-purple-500/20 rounded-2xl p-5 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400">{isAr ? 'المهام قيد المعالجة' : 'Active Jobs'}</span>
+            <span className="text-xs font-bold text-slate-400">{isAr ? 'المهام النشطة' : 'Active Jobs'}</span>
             <Cpu className="w-5 h-5 text-indigo-400" />
           </div>
           <div className="text-3xl font-black text-white">
             {metrics?.queue?.active ?? 0}
           </div>
           <span className="text-[10px] text-indigo-300 mt-1 block">
-            {isAr ? 'تتم معالجتها بواسطة Worker Nodes' : 'Processing on Worker Nodes'}
+            {isAr ? 'تتم معالجتها في السيرفر' : 'Processing in background'}
           </span>
         </div>
 
         {/* Waiting Jobs */}
         <div className="bg-slate-900/80 border border-purple-500/20 rounded-2xl p-5 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400">{isAr ? 'في الانتظار (الطابور)' : 'Waiting in Queue'}</span>
+            <span className="text-xs font-bold text-slate-400">{isAr ? 'في الانتظار' : 'Waiting in Queue'}</span>
             <Clock className="w-5 h-5 text-amber-400" />
           </div>
           <div className="text-3xl font-black text-amber-400">
             {metrics?.queue?.waiting ?? 0}
           </div>
           <span className="text-[10px] text-amber-300/80 mt-1 block">
-            {isAr ? 'تنتظر توفر العقد الشاغرة' : 'Queued in Redis memory'}
+            {isAr ? 'طابور انتظار Redis' : 'Queued in Redis'}
           </span>
         </div>
 
@@ -134,19 +158,42 @@ export default function ClusterDashboard({ lang }) {
             {metrics?.queue?.completed ?? 0}
           </div>
           <span className="text-[10px] text-emerald-300/80 mt-1 block">
-            {isAr ? 'تمت ترجمتها بنجاح' : 'Finished & translated'}
+            {isAr ? 'تمت بنجاح' : 'Finished & ready'}
+          </span>
+        </div>
+
+        {/* Cloudflare R2 Storage Status */}
+        <div className={`border rounded-2xl p-5 shadow-lg relative overflow-hidden ${
+          storageStatus.configured
+            ? 'bg-slate-900/80 border-emerald-500/40'
+            : 'bg-amber-950/20 border-amber-500/40'
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-400">{isAr ? 'تخزين الفيديوهات' : 'Storage Engine'}</span>
+            <Cloud className={`w-5 h-5 ${storageStatus.configured ? 'text-emerald-400' : 'text-amber-400'}`} />
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`w-2.5 h-2.5 rounded-full ${storageStatus.configured ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="text-sm font-black text-white">
+              {storageStatus.configured ? 'Cloudflare R2' : 'Local Fallback'}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400 mt-1 block truncate">
+            {storageStatus.configured
+              ? (storageStatus.bucketName || 'subtie-vault')
+              : (storageStatus.missingKeys?.length > 0 ? `Missing: ${storageStatus.missingKeys.join(', ')}` : 'Local Disk')}
           </span>
         </div>
 
         {/* Redis Status */}
         <div className="bg-slate-900/80 border border-purple-500/20 rounded-2xl p-5 shadow-lg relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400">{isAr ? 'حالة Redis Broker' : 'Redis Queue Broker'}</span>
+            <span className="text-xs font-bold text-slate-400">{isAr ? 'حالة Redis Broker' : 'Redis Queue'}</span>
             <Server className="w-5 h-5 text-pink-400" />
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`w-3 h-3 rounded-full ${metrics?.queue?.status === 'online' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50' : 'bg-amber-500'}`} />
-            <span className="text-lg font-black text-white">
+            <span className={`w-2.5 h-2.5 rounded-full ${metrics?.queue?.status === 'online' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            <span className="text-sm font-black text-white">
               {metrics?.queue?.status === 'online' ? 'Connected' : 'Standalone'}
             </span>
           </div>
@@ -164,35 +211,63 @@ export default function ClusterDashboard({ lang }) {
               <Key className="w-5 h-5 text-purple-300" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-white">
-                {isAr ? 'مجمع مفاتيح Gemini AI (Key Pool)' : 'Gemini AI API Key Pool'}
-              </h3>
-              <p className="text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-black text-white">
+                  {isAr ? 'مجمع مفاتيح Gemini AI (Key Pool)' : 'Gemini AI API Key Pool'}
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-[11px] font-black text-purple-300 font-mono">
+                  {poolKeys.length} {isAr ? 'مفاتيح' : 'Keys'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
                 {isAr
                   ? 'توزيع الحمل التلقائي وتدوير المفاتيح في حال تجاوز حدود الاستخدام (429).'
                   : 'Automatic load-balancing, rotation, and cooldown management.'}
               </p>
+              {detectedEnvNames.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-bold">{isAr ? 'المتغيرات المكتشفة:' : 'Detected Env:'}</span>
+                  {detectedEnvNames.map(name => (
+                    <span key={name} className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-indigo-300 font-mono">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Add Key Form */}
-          <form onSubmit={handleAddKey} className="flex items-center gap-2">
-            <input
-              type="password"
-              placeholder={isAr ? 'أدخل مفتاح API جديد...' : 'Paste new Gemini API key...'}
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              className="bg-slate-950 border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
-            />
+          {/* Form Actions */}
+          <div className="flex items-center gap-2">
             <button
-              type="submit"
-              disabled={addingKey}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-black rounded-xl hover:scale-105 transition shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              onClick={handleRescanKeys}
+              disabled={rescanning}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-purple-500/30 text-purple-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title={isAr ? 'إعادة فحص متغيرات البيئة' : 'Rescan Environment Variables'}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isAr ? 'إضافة مفتاح' : 'Add Key'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${rescanning ? 'animate-spin text-pink-400' : ''}`} />
+              <span>{isAr ? 'إعادة فحص' : 'Rescan'}</span>
             </button>
-          </form>
+
+            {/* Add Key Form */}
+            <form onSubmit={handleAddKey} className="flex items-center gap-2">
+              <input
+                type="password"
+                placeholder={isAr ? 'أدخل مفتاح API جديد...' : 'Paste new Gemini API key...'}
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                className="bg-slate-950 border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
+              />
+              <button
+                type="submit"
+                disabled={addingKey}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-black rounded-xl hover:scale-105 transition shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isAr ? 'إضافة مفتاح' : 'Add Key'}</span>
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Table of Keys */}
@@ -209,7 +284,7 @@ export default function ClusterDashboard({ lang }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-500/10">
-              {metrics?.apiPool?.map((key) => (
+              {poolKeys.map((key) => (
                 <tr key={key.id} className="hover:bg-purple-950/20 transition">
                   <td className="py-3 font-mono font-bold text-white flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-purple-400" />
@@ -248,10 +323,17 @@ export default function ClusterDashboard({ lang }) {
                   </td>
                 </tr>
               ))}
-              {(!metrics?.apiPool || metrics.apiPool.length === 0) && (
+              {poolKeys.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-6 text-center text-slate-500">
-                    {isAr ? 'لا توجد مفاتيح في المجمع حالياً.' : 'No API keys configured in pool.'}
+                  <td colSpan="6" className="py-8 text-center text-slate-400 space-y-2">
+                    <p className="font-bold text-sm text-slate-300">
+                      {isAr ? 'لم يتم العثور على مفاتيح في مجمع Gemini AI حالياً.' : 'No API keys currently in pool.'}
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {isAr
+                        ? 'يمكنك إضافة المفاتيح مباشرة عبر حقل "إضافة مفتاح" أعلاه، أو إضافتها في متغيرات بيئة Plesk بأسماء (GEMINI_KEY_1..10) ثم الضغط على "إعادة فحص".'
+                        : 'You can paste keys directly above, or add them as environment variables (GEMINI_KEY_1..10) and click "Rescan".'}
+                    </p>
                   </td>
                 </tr>
               )}

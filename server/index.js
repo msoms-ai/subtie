@@ -1345,24 +1345,24 @@ app.post('/api/process', async (req, res) => {
     });
   };
 
-  // Background Cloudflare R2 Archival
+  // Parallel Cloudflare R2 Archival
+  let r2UploadPromise = null;
   if (cloudStorage.isConfigured() && videoFiles.length > 0) {
     const vFile = videoFiles[0];
     const r2Key = `videos/${userId}/${projectId}/${vFile}`;
-    console.log(`☁️ [Cloudflare R2] Initiating background upload: ${r2Key}...`);
-    cloudStorage.uploadFile(videoPath, r2Key, 'video/mp4')
+    console.log(`☁️ [Cloudflare R2] Initiating parallel upload: ${r2Key}...`);
+    r2UploadPromise = cloudStorage.uploadFile(videoPath, r2Key, 'video/mp4')
       .then(r2Res => {
-        console.log(`☁️ [Cloudflare R2] Successfully archived to R2: ${r2Res.publicUrl}`);
-        const db = readProjects();
-        if (db[projectId]) {
-          db[projectId].videoUrl = r2Res.publicUrl;
-          db[projectId].r2Key = r2Key;
-          writeProjects(db);
-        }
+        console.log(`☁️ [Cloudflare R2] Successfully uploaded to R2: ${r2Res.publicUrl}`);
+        return r2Res;
       })
       .catch(err => {
-        console.error(`⚠️ [Cloudflare R2] Background upload error:`, err.message);
+        console.error(`⚠️ [Cloudflare R2] Upload error:`, err.message);
+        return null;
       });
+  } else {
+    const r2Status = cloudStorage.getStatus();
+    console.log(`📁 [StorageService] Cloudflare R2 not active (${r2Status.mode}). Missing credentials: [${(r2Status.missingKeys || []).join(', ')}]`);
   }
 
   try {
@@ -1374,13 +1374,24 @@ app.post('/api/process', async (req, res) => {
 
       project.audioUrl = `${req.urlPrefix}/audio.mp3`;
 
-    // Step 2: Initialize Gemini AI Client
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured in .env file.');
+    // Step 2: Initialize Gemini AI Client via Gemini Pool
+    let geminiClientInfo = null;
+    try {
+      geminiClientInfo = geminiPool.acquireKey();
+    } catch (e) {
+      const fallbackKey = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+      if (fallbackKey) {
+        geminiClientInfo = {
+          keyId: 'fallback',
+          rawKey: fallbackKey,
+          client: new GoogleGenAI({ apiKey: fallbackKey })
+        };
+      } else {
+        throw new Error('No Gemini API keys configured. Please configure keys in Admin Console or environment variables.');
+      }
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = geminiClientInfo.client;
 
     // Initialize detailed progress
     (function() {
@@ -1576,6 +1587,25 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       
     }
 
+    // Release key from pool
+    if (geminiClientInfo && geminiClientInfo.keyId !== 'fallback') {
+      geminiPool.releaseKey(geminiClientInfo.keyId, true);
+    }
+
+    // Await R2 upload completion if in progress
+    if (r2UploadPromise) {
+      try {
+        const r2Res = await r2UploadPromise;
+        if (r2Res && r2Res.publicUrl) {
+          project.videoUrl = r2Res.publicUrl;
+          project.r2Key = r2Res.key;
+          console.log(`🎬 [Process] Attached Cloudflare R2 videoUrl to project: ${project.videoUrl}`);
+        }
+      } catch (uploadErr) {
+        console.warn('⚠️ [Process] R2 upload wait failed:', uploadErr.message);
+      }
+    }
+
     project.subtitles = allParsedSubtitles;
 
     // Write SRT file to project folder
@@ -1589,15 +1619,22 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     project.processingProgress = 100;
     project.processingStatus = "Completed";
 
-    writeProjects(projects);
+    // Read fresh DB to avoid overwriting R2 URL or concurrent updates
+    const freshDb = readProjects();
+    freshDb[projectId] = {
+      ...(freshDb[projectId] || {}),
+      ...project
+    };
+    writeProjects(freshDb);
+    const finalProject = freshDb[projectId];
 
     return res.json({
       success: true,
       projectId,
-      audioUrl: project.audioUrl,
-      srtUrl: project.srtUrl,
+      audioUrl: finalProject.audioUrl,
+      srtUrl: finalProject.srtUrl,
       subtitles: allParsedSubtitles,
-      project
+      project: finalProject
     });
 
   } catch (err) {
@@ -1668,6 +1705,7 @@ app.post('/api/settings/test-model', async (req, res) => {
 
 // 15b. Fetch Global Dashboard Stats
 app.get('/api/dashboard-stats', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const projects = readProjects();
   let totalClips = 0;
   let totalEpisodes = 0;
@@ -1951,6 +1989,7 @@ if (fs.existsSync(distPath)) {
 
 // --- Admin Cluster & API Pool Monitoring ---
 app.get('/api/admin/cluster-metrics', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const queueMetrics = await queueService.getMetrics();
     const apiPoolStatus = geminiPool.getPoolStatus();
@@ -1958,11 +1997,18 @@ app.get('/api/admin/cluster-metrics', async (req, res) => {
       success: true,
       queue: queueMetrics,
       apiPool: apiPoolStatus,
-      storage: {
-        mode: cloudStorage.isConfigured() ? 'Cloudflare R2' : 'Local Disk',
-      },
+      storage: cloudStorage.getStatus(),
       serverUptime: Math.round(process.uptime()),
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/gemini-keys/rescan', (req, res) => {
+  try {
+    geminiPool.initPool();
+    res.json({ success: true, apiPool: geminiPool.getPoolStatus() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

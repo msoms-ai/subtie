@@ -3,14 +3,46 @@ import fs from 'fs';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 
+const KEYS_STORE_PATH = path.resolve('server', 'data', 'gemini_keys.json');
+
 class GeminiPoolManager {
   constructor() {
     this.keys = [];
+    this.detectedEnvNames = [];
     this.initPool();
+  }
+
+  loadStoredKeys() {
+    try {
+      if (fs.existsSync(KEYS_STORE_PATH)) {
+        const raw = fs.readFileSync(KEYS_STORE_PATH, 'utf8');
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return list.filter(k => typeof k === 'string' && k.trim());
+      }
+    } catch (e) {}
+    return [];
+  }
+
+  saveStoredKeys(keysArray) {
+    try {
+      const dir = path.dirname(KEYS_STORE_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const rawList = keysArray.map(k => k.rawKey || k).filter(Boolean);
+      fs.writeFileSync(KEYS_STORE_PATH, JSON.stringify([...new Set(rawList)], null, 2), 'utf8');
+    } catch (e) {
+      console.error('[GeminiPool] Failed to persist keys:', e.message);
+    }
   }
 
   initPool() {
     let rawKeys = [];
+    this.detectedEnvNames = [];
+
+    // 0. Load persistent keys added through Admin Console
+    const stored = this.loadStoredKeys();
+    if (stored.length > 0) {
+      rawKeys.push(...stored);
+    }
 
     // Helper to check env files if process.env was populated after module evaluation
     const tryLoadEnvFile = (filePath) => {
@@ -18,13 +50,15 @@ class GeminiPoolManager {
         if (fs.existsSync(filePath)) {
           const content = fs.readFileSync(filePath, 'utf8');
           content.split('\n').forEach(line => {
-            const m = line.match(/^\s*(GEMINI_[\w]+)\s*=\s*['"]?(.*?)['"]?\s*$/);
+            const m = line.match(/^\s*(GEMINI_[\w]+)\s*=\s*['"]?(.*?)['"]?\s*$/i);
             if (m) {
               const [, keyName, val] = m;
+              const upper = keyName.toUpperCase();
               if (val && val.trim()) {
-                if (keyName === 'GEMINI_API_KEYS') {
+                if (!this.detectedEnvNames.includes(upper)) this.detectedEnvNames.push(upper);
+                if (upper === 'GEMINI_API_KEYS' || upper === 'GEMINI_KEYS') {
                   rawKeys.push(...val.split(',').map(k => k.trim()).filter(Boolean));
-                } else if (keyName.startsWith('GEMINI_KEY_') || keyName.startsWith('GEMINI_API_KEY_') || keyName === 'GEMINI_API_KEY') {
+                } else if (upper.startsWith('GEMINI_KEY_') || upper.startsWith('GEMINI_API_KEY_') || upper === 'GEMINI_API_KEY') {
                   rawKeys.push(val.trim());
                 }
               }
@@ -34,33 +68,37 @@ class GeminiPoolManager {
       } catch (e) {}
     };
 
-    // 1. Check process.env.GEMINI_API_KEYS (comma separated)
-    if (process.env.GEMINI_API_KEYS) {
-      rawKeys.push(...process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean));
-    }
-
-    // 2. Check numbered keys: GEMINI_KEY_1..20 in process.env
-    for (let i = 1; i <= 20; i++) {
-      const keyVal = process.env[`GEMINI_KEY_${i}`] || process.env[`GEMINI_API_KEY_${i}`];
-      if (keyVal && keyVal.trim()) {
-        rawKeys.push(keyVal.trim());
+    // 1. Case-insensitive search across all process.env keys
+    Object.keys(process.env).forEach(envKey => {
+      const upper = envKey.toUpperCase().trim();
+      if (upper === 'GEMINI_API_KEYS' || upper === 'GEMINI_KEYS') {
+        if (!this.detectedEnvNames.includes(upper)) this.detectedEnvNames.push(upper);
+        rawKeys.push(...process.env[envKey].split(',').map(k => k.trim()).filter(Boolean));
+      } else if (upper.startsWith('GEMINI_KEY_') || upper.startsWith('GEMINI_API_KEY_') || upper === 'GEMINI_API_KEY') {
+        if (!this.detectedEnvNames.includes(upper)) this.detectedEnvNames.push(upper);
+        const val = process.env[envKey];
+        if (val && val.trim()) rawKeys.push(val.trim());
       }
-    }
+    });
 
-    // 3. Fallback to single GEMINI_API_KEY in process.env
-    if (rawKeys.length === 0 && process.env.GEMINI_API_KEY) {
-      rawKeys.push(process.env.GEMINI_API_KEY.trim());
-    }
+    // 2. Check settings.json
+    try {
+      const settingsPath = path.resolve('server', 'data', 'settings.json');
+      if (fs.existsSync(settingsPath)) {
+        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (s.geminiApiKey && s.geminiApiKey.trim()) rawKeys.push(s.geminiApiKey.trim());
+      }
+    } catch (e) {}
 
-    // 4. If still empty, directly read local and root .env files
-    if (rawKeys.length === 0) {
-      tryLoadEnvFile(path.resolve('.env'));
-      tryLoadEnvFile(path.resolve('server', '.env'));
-      tryLoadEnvFile(path.resolve('..', '.env'));
-    }
+    // 3. Fallback: Parse .env files across all possible directories
+    tryLoadEnvFile(path.resolve('.env'));
+    tryLoadEnvFile(path.resolve('server', '.env'));
+    tryLoadEnvFile(path.resolve('..', '.env'));
+    tryLoadEnvFile('/var/www/vhosts/msoms.ai/subtie.msoms.ai/.env');
+    tryLoadEnvFile('/var/www/vhosts/msoms.ai/subtie.msoms.ai/server/.env');
 
-    // Remove duplicates
-    rawKeys = [...new Set(rawKeys)];
+    // Remove duplicates and blanks
+    rawKeys = [...new Set(rawKeys.map(k => k.trim()).filter(Boolean))];
 
     this.keys = rawKeys.map((key, index) => ({
       id: `key_${index + 1}`,
@@ -75,7 +113,7 @@ class GeminiPoolManager {
       lastUsed: null,
     }));
 
-    console.log(`🤖 GeminiPoolManager initialized with ${this.keys.length} API key(s).`);
+    console.log(`🤖 GeminiPoolManager initialized with ${this.keys.length} API key(s). Detected env variables: [${this.detectedEnvNames.join(', ')}]`);
   }
 
   maskKey(key) {
@@ -154,17 +192,21 @@ class GeminiPoolManager {
       this.initPool();
     }
     const now = Date.now();
-    return this.keys.map(k => ({
-      id: k.id,
-      maskedKey: k.maskedKey,
-      status: k.status,
-      activeRequests: k.activeRequests,
-      totalRequests: k.totalRequests,
-      errorsCount: k.errorsCount,
-      lastError: k.lastError,
-      cooldownSecondsRemaining: Math.max(0, Math.ceil((k.cooldownUntil - now) / 1000)),
-      lastUsed: k.lastUsed,
-    }));
+    return {
+      keys: this.keys.map(k => ({
+        id: k.id,
+        maskedKey: k.maskedKey,
+        status: k.status,
+        activeRequests: k.activeRequests,
+        totalRequests: k.totalRequests,
+        errorsCount: k.errorsCount,
+        lastError: k.lastError,
+        cooldownSecondsRemaining: Math.max(0, Math.ceil((k.cooldownUntil - now) / 1000)),
+        lastUsed: k.lastUsed,
+      })),
+      totalKeys: this.keys.length,
+      detectedEnvNames: this.detectedEnvNames || []
+    };
   }
 
   addKey(newKey) {
@@ -184,6 +226,7 @@ class GeminiPoolManager {
       lastUsed: null,
     };
     this.keys.push(keyEntry);
+    this.saveStoredKeys(this.keys);
     return keyEntry;
   }
 
@@ -191,6 +234,7 @@ class GeminiPoolManager {
     const index = this.keys.findIndex(k => k.id === idOrMasked || k.maskedKey === idOrMasked);
     if (index !== -1) {
       const removed = this.keys.splice(index, 1);
+      this.saveStoredKeys(this.keys);
       return removed[0];
     }
     return null;
