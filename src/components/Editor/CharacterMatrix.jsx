@@ -241,7 +241,7 @@ export default function CharacterMatrix({
 
       {/* 2-Column Responsive Character Card Grid */}
       {safeList.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[520px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {safeList.map((char) => (
             <CharacterCard
               key={char.id}

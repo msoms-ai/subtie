@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
 import CharacterMatrix from './CharacterMatrix.jsx';
 
@@ -9,6 +9,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
   const [characters, setCharacters] = useState(initialProject?.characters || []);
   const [isDetectingCharacters, setIsDetectingCharacters] = useState(false);
   const [isSavingCharacter, setIsSavingCharacter] = useState(false);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('subtitles'); // 'subtitles' or 'characters'
   const [activeSubId, setActiveSubId] = useState(null);
 
   // Video Duration & Time update state for active subtitle preview overlay
@@ -556,21 +557,59 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
               </div>
             </div>
           </div>
-
-          {/* Character Named Entity & Glossary Matrix (Under Video Preview & Controls) */}
-          <CharacterMatrix
-            characters={characters}
-            onSaveCharacter={handleSaveCharacter}
-            onDetectCharacters={handleDetectCharacters}
-            isDetecting={isDetectingCharacters}
-            isSaving={isSavingCharacter}
-            lang={lang}
-          />
         </div>
 
-        {/* Right Side: High-Contrast 3-Field Subtitle Line Cards */}
+        {/* Right Side: Tabbed Workspace (Subtitles vs Character Matrix) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="flex items-center justify-between glass-panel px-5 py-3.5 rounded-2xl border border-slate-800 theme-light:border-purple-600" dir={isAr ? 'rtl' : 'ltr'}>
+          {/* Dual Tab Switcher Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 glass-panel p-2.5 rounded-2xl border border-purple-500/25 shadow-md" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveWorkspaceTab('subtitles')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+                  activeWorkspaceTab === 'subtitles'
+                    ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/40'
+                    : 'text-slate-400 hover:text-white hover:bg-purple-950/40 border border-transparent'
+                }`}
+              >
+                <Languages className="w-4 h-4 text-purple-200" />
+                <span>{isAr ? 'أسطر الترجمة' : 'Subtitle Script'}</span>
+                <span className="px-2 py-0.5 rounded-full bg-black/40 text-[10px] font-bold text-purple-200">
+                  {totalLines}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveWorkspaceTab('characters')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+                  activeWorkspaceTab === 'characters'
+                    ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/40'
+                    : 'text-slate-400 hover:text-white hover:bg-purple-950/40 border border-transparent'
+                }`}
+              >
+                <Users className="w-4 h-4 text-pink-300" />
+                <span>{isAr ? 'مصفوفة أسماء الشخصيات' : 'Character Matrix'}</span>
+                <span className="px-2 py-0.5 rounded-full bg-black/40 text-[10px] font-bold text-pink-300">
+                  {characters.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-2 px-3 text-[11px] font-bold text-purple-300/80">
+              {activeWorkspaceTab === 'subtitles' ? (
+                <span>{isAr ? 'توقيت وتعديل أسطر الحوار' : 'Millisecond timing & 3-language editor'}</span>
+              ) : (
+                <span>{isAr ? 'تعديل وتوحيد أسماء الشخصيات' : 'Batch replace character names in script'}</span>
+              )}
+            </div>
+          </div>
+
+          {/* TAB 1: SUBTITLE SCRIPT */}
+          {activeWorkspaceTab === 'subtitles' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between glass-panel px-5 py-3.5 rounded-2xl border border-slate-800 theme-light:border-purple-600" dir={isAr ? 'rtl' : 'ltr'}>
             <div className="flex items-center space-x-2 rtl:space-x-reverse">
               <Languages className="w-5 h-5 text-purple-400 theme-light:text-purple-700" />
               <h3 className="text-sm font-black text-white theme-light:text-slate-950">
@@ -684,8 +723,24 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
             })}
           </div>
         </div>
+      )}
 
-      </div>
+      {/* TAB 2: CHARACTER MATRIX */}
+      {activeWorkspaceTab === 'characters' && (
+        <div className="space-y-4">
+          <CharacterMatrix
+            characters={characters}
+            onSaveCharacter={handleSaveCharacter}
+            onDetectCharacters={handleDetectCharacters}
+            isDetecting={isDetectingCharacters}
+            isSaving={isSavingCharacter}
+            lang={lang}
+          />
+        </div>
+      )}
+    </div>
+
+  </div>
 
       {/* DELETE PROJECT CONFIRMATION MODAL */}
       {showDeleteModal && (
