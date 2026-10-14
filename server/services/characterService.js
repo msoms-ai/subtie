@@ -74,20 +74,63 @@ CRITICAL INSTRUCTIONS:
 
   let keyInfo = null;
   try {
-    keyInfo = geminiPool.acquireKey();
-    const ai = keyInfo.client;
-    const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    try {
+      keyInfo = geminiPool.acquireKey();
+    } catch (e) {
+      const fallbackKey = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+      if (fallbackKey) {
+        keyInfo = {
+          keyId: 'fallback',
+          maskedKey: 'fallback',
+          rawKey: fallbackKey,
+          client: new GoogleGenAI({ apiKey: fallbackKey })
+        };
+      } else {
+        throw e;
+      }
+    }
 
-    const response = await ai.models.generateContent({
-      model,
+    const ai = keyInfo.client;
+
+    // Read configured model from settings.json or env, default to active gemini-3.8-flash
+    let configuredModel = 'gemini-3.8-flash';
+    try {
+      const settingsPath = path.resolve('server', 'data', 'settings.json');
+      if (fs.existsSync(settingsPath)) {
+        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (s.geminiModel && !s.geminiModel.includes('1.5') && !s.geminiModel.includes('2.5')) {
+          configuredModel = s.geminiModel.trim();
+        }
+      }
+    } catch (e) {}
+
+    const targetModel = (process.env.GEMINI_MODEL || configuredModel || 'gemini-3.8-flash').trim();
+    const fallbackModel = 'gemini-3.5-flash';
+
+    const reqConfig = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: 'application/json',
         maxOutputTokens: 4096,
       }
-    });
+    };
 
-    geminiPool.releaseKey(keyInfo.keyId, true);
+    let response;
+    try {
+      response = await ai.models.generateContent({ model: targetModel, ...reqConfig });
+    } catch (err) {
+      console.warn(`[CharacterService] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+      try {
+        response = await ai.models.generateContent({ model: fallbackModel, ...reqConfig });
+      } catch (err2) {
+        console.warn(`[CharacterService] Fallback to ${fallbackModel} failed: ${err2.message}. Trying gemini-flash-latest...`);
+        response = await ai.models.generateContent({ model: 'gemini-flash-latest', ...reqConfig });
+      }
+    }
+
+    if (keyInfo.keyId !== 'fallback') {
+      geminiPool.releaseKey(keyInfo.keyId, true);
+    }
 
     const rawText = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
     let characters = [];
