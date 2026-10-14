@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
+import CharacterMatrix from './CharacterMatrix.jsx';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAddAnotherEpisode, user, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
   const [subtitles, setSubtitles] = useState(initialProject?.subtitles || []);
+  const [characters, setCharacters] = useState(initialProject?.characters || []);
+  const [isDetectingCharacters, setIsDetectingCharacters] = useState(false);
+  const [isSavingCharacter, setIsSavingCharacter] = useState(false);
   const [activeSubId, setActiveSubId] = useState(null);
 
   // Video Duration & Time update state for active subtitle preview overlay
@@ -107,7 +111,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
           'Content-Type': 'application/json',
           ...(user?.id ? { 'x-user-id': user.id } : {})
         },
-        body: JSON.stringify({ subtitles })
+        body: JSON.stringify({ subtitles, characters })
       });
       const data = await res.json();
       if (data.success) {
@@ -121,6 +125,73 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       alert('Failed to save project state.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Character Matrix: Global Search & Replace across all subtitle lines
+  const handleSaveCharacter = async (characterId, oldNames, newNames) => {
+    setIsSavingCharacter(true);
+    try {
+      const res = await fetch(`/api/project/${project.id}/characters/replace`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({ characterId, oldNames, newNames })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.subtitles)) setSubtitles(data.subtitles);
+        if (Array.isArray(data.characters)) setCharacters(data.characters);
+        setToastMsg(
+          isAr
+            ? `تم تحديث اسم الشخصية واستبدالها في ${data.updatedCount || 0} سطراً!`
+            : `Updated character and replaced in ${data.updatedCount || 0} line(s)!`
+        );
+        setTimeout(() => setToastMsg(null), 3500);
+        return true;
+      } else {
+        alert(data.error || 'Failed to update character');
+        return false;
+      }
+    } catch (err) {
+      console.error('Character replace error:', err);
+      alert('Failed to replace character names');
+      return false;
+    } finally {
+      setIsSavingCharacter(false);
+    }
+  };
+
+  // Character Matrix: Re-detect / scan characters using Gemini
+  const handleDetectCharacters = async () => {
+    setIsDetectingCharacters(true);
+    try {
+      const res = await fetch(`/api/project/${project.id}/characters/detect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        }
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.characters)) {
+        setCharacters(data.characters);
+        setToastMsg(
+          isAr
+            ? `تم استخراج ${data.characters.length} شخصية بنجاح!`
+            : `Successfully detected ${data.characters.length} characters!`
+        );
+        setTimeout(() => setToastMsg(null), 3500);
+      } else {
+        alert(data.error || 'Failed to extract characters');
+      }
+    } catch (err) {
+      console.error('Character detect error:', err);
+      alert('Failed to extract characters');
+    } finally {
+      setIsDetectingCharacters(false);
     }
   };
 
@@ -486,6 +557,15 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
             </div>
           </div>
 
+          {/* Character Named Entity & Glossary Matrix (Under Video Preview & Controls) */}
+          <CharacterMatrix
+            characters={characters}
+            onSaveCharacter={handleSaveCharacter}
+            onDetectCharacters={handleDetectCharacters}
+            isDetecting={isDetectingCharacters}
+            isSaving={isSavingCharacter}
+            lang={lang}
+          />
         </div>
 
         {/* Right Side: High-Contrast 3-Field Subtitle Line Cards */}

@@ -15,6 +15,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
+import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from './services/characterService.js';
 
 // Set ffmpeg binary path from installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -1460,21 +1461,28 @@ app.post('/api/process', async (req, res) => {
         emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall1);
         console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
         const promptStage1 = `You are an expert anime Japanese ASR engine.
-Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. DO NOT stop early!
+Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE and AUDIBLE SONG VOCAL from the very first second to the absolute end of the audio file. DO NOT stop early!
 
 CRITICAL RULES:
-1. COMPLETE COVERAGE: You MUST transcribe every single word up to the final second of the audio file. Never truncate, never summarize, never stop early. If there is dialogue, you MUST output it.
-2. MAXIMUM DURATION: A single subtitle must NOT exceed 5 seconds of screen time.
-5. ZERO-BASED TIMESTAMPS: This audio is an isolated chunk. You MUST start your timestamps from 00:00:00,000. Do NOT use timestamps from the original video.
-3. SPLIT LONG SPEECHES into separate consecutive objects.
-4. PRECISE TIMING: Timings must match the actual audio exactly.
+1. COMPLETE COVERAGE: Transcribe every spoken word and audible song vocal up to the final second. Never truncate, never summarize, never stop early.
+2. DUAL-TRACK SIMULTANEOUS AUDIO RULE:
+   - When a character speaks while an insert song or background song has audible singing/lyrics:
+     You MUST transcribe BOTH events as separate objects! NEVER choose one over the other!
+     - Set "track": "dialogue" for the character's speech.
+     - Set "track": "song" for song lyrics, and prefix/suffix the Japanese text with musical notes (e.g. '♪ [Lyrics] ♪').
+   - Overlapping timestamps between dialogue and song tracks are expected and encouraged.
+3. MAXIMUM DURATION: A single subtitle block must NOT exceed 5 seconds of screen time.
+4. ZERO-BASED TIMESTAMPS: Start timestamps from 00:00:00,000 for this chunk.
+5. SPLIT LONG SPEECHES into separate consecutive objects.
+6. PRECISE TIMING: Timings must match the actual audio exactly.
 
 For each subtitle block, provide:
 1. "startTime": Timestamp formatted as HH:MM:SS,mmm
 2. "endTime": Timestamp formatted as HH:MM:SS,mmm
 3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
+4. "track": "dialogue" or "song"
 
-Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText".
+Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "track".
 Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
 
         const settings = readSettings();
@@ -1526,10 +1534,11 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
 I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
 
 CRITICAL RULES:
-1. Maintain the exact same JSON structure, array length, and timestamps.
+1. Maintain the exact same JSON structure, array length, track, and timestamps.
 2. For each object, add "englishText" (natural English for fansubbing) and "arabicText" (high quality, fluent Arabic translation - فصحى احترافية).
-3. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", and "japaneseText".
-4. COMPLETE COVERAGE: You MUST translate every single object in the array up to the very last one. Do not stop early, do not truncate.
+3. If "track" is "song" or text contains musical notes (♪), translate the song lyrics poetically and maintain the musical notes.
+4. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", "japaneseText", and "track".
+5. COMPLETE COVERAGE: You MUST translate every single object in the array up to the very last one. Do not stop early, do not truncate.
 
 Input JSON:
 ${JSON.stringify(jpSubtitles)}
@@ -1584,6 +1593,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
             endTime: formatSecondsToTimestamp(eSec),
             startSeconds: sSec,
             endSeconds: eSec,
+            track: sub.track || 'dialogue',
             japaneseText: sub.japaneseText || '',
             englishText: sub.englishText || '',
             arabicText: sub.arabicText || '',
@@ -1618,6 +1628,22 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     }
 
     project.subtitles = allParsedSubtitles;
+
+    // Detect Anime Characters and generate Avatar Thumbnails
+    try {
+      const charactersDir = path.join(targetDir, 'characters');
+      console.log(`[CharacterService] Extracting character entities & avatars for ${projectId}...`);
+      const detectedCharacters = await detectCharactersFromSubtitles(allParsedSubtitles, geminiPool, {
+        videoPath,
+        charactersDir,
+        urlPrefix: req.urlPrefix
+      });
+      project.characters = detectedCharacters;
+      console.log(`[CharacterService] Identified ${detectedCharacters.length} character(s).`);
+    } catch (charErr) {
+      console.warn('[CharacterService] Character extraction warning:', charErr.message);
+      project.characters = [];
+    }
 
     // Write SRT file to project folder
     let srtContent = '';
@@ -1820,7 +1846,7 @@ app.get('/api/project/:id/progress', (req, res) => {
 app.post('/api/project/:id/save', (req, res) => {
   const { id } = req.params;
   const userId = req.headers['x-user-id'];
-  const { subtitles, auditStatus } = req.body;
+  const { subtitles, auditStatus, characters } = req.body;
   const projects = readProjects();
   const users = readUsers();
   const user = users[userId];
@@ -1842,6 +1868,10 @@ app.post('/api/project/:id/save', (req, res) => {
     project.subtitles = subtitles;
   }
 
+  if (Array.isArray(characters)) {
+    project.characters = characters;
+  }
+
   if (auditStatus) {
     project.auditStatus = auditStatus;
   }
@@ -1850,6 +1880,87 @@ app.post('/api/project/:id/save', (req, res) => {
   writeProjects(projects);
 
   return res.json({ success: true, project });
+});
+
+// Character Named Entity Management Endpoints
+app.post('/api/project/:id/characters/detect', async (req, res) => {
+  const { id } = req.params;
+  const projects = readProjects();
+  const project = projects[id];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const userId = project.ownerId || 'usr_guest';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
+  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const charactersDir = path.join(targetDir, 'characters');
+  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
+  const videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
+  const urlPrefix = `/uploads/${userId}/${safeFolderName}/${id}`;
+
+  try {
+    const characters = await detectCharactersFromSubtitles(project.subtitles || [], geminiPool, {
+      videoPath,
+      charactersDir,
+      urlPrefix
+    });
+    project.characters = characters;
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+    return res.json({ success: true, characters });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/project/:id/characters/replace', (req, res) => {
+  const { id } = req.params;
+  const { characterId, oldNames, newNames } = req.body;
+  const projects = readProjects();
+  const project = projects[id];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { updatedSubtitles, updatedCount } = replaceCharacterNamesInSubtitles(project.subtitles || [], oldNames, newNames);
+  project.subtitles = updatedSubtitles;
+
+  if (Array.isArray(project.characters)) {
+    project.characters = project.characters.map(c => {
+      if (c.id === characterId) {
+        return {
+          ...c,
+          japaneseName: (newNames.japanese || newNames.japaneseName || c.japaneseName).trim(),
+          englishName: (newNames.english || newNames.englishName || c.englishName).trim(),
+          arabicName: (newNames.arabic || newNames.arabicName || c.arabicName).trim(),
+        };
+      }
+      return c;
+    });
+  }
+
+  // Update SRT file on disk
+  const userId = project.ownerId || 'usr_guest';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
+  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const srtPath = path.join(targetDir, 'subtitle.srt');
+  if (fs.existsSync(targetDir)) {
+    let srtContent = '';
+    project.subtitles.forEach((sub, idx) => {
+      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
+    });
+    try {
+      fs.writeFileSync(srtPath, srtContent, 'utf8');
+    } catch (e) {}
+  }
+
+  project.updatedAt = new Date().toISOString();
+  writeProjects(projects);
+
+  return res.json({
+    success: true,
+    updatedCount,
+    characters: project.characters,
+    subtitles: project.subtitles,
+    project
+  });
 });
 
 // 20. Assign Auditor to Project
