@@ -319,8 +319,9 @@ class TorrentService {
       // Find downloaded file on disk
       const sourceVideoPath = path.join(downloadDir, videoFile.path);
 
-      // Target project dir: server/uploads/{userId}/{projectId}
-      const projectTargetDir = path.join(__dirname, '..', 'uploads', userId || 'guest', projectId);
+      // Target project dir: server/uploads/{userId}/{safeFolderName}/{projectId}
+      const safeFolderName = (jobData.projectMeta?.safeFolderName || jobData.projectMeta?.projectName || 'Uncategorized').replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const projectTargetDir = path.join(__dirname, '..', 'uploads', userId || 'guest', safeFolderName, projectId);
       if (!fs.existsSync(projectTargetDir)) {
         fs.mkdirSync(projectTargetDir, { recursive: true });
       }

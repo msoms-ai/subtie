@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video, Link as LinkIcon, Radio, Globe, AlertTriangle } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
@@ -42,6 +42,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCompleted, setUploadCompleted] = useState(false);
+  const hasCompletedProcessRef = useRef(false);
 
   // AI Processing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -112,6 +113,28 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       if (data.progressExtract !== undefined) setProgressExtract(data.progressExtract);
       if (data.progressTranscode !== undefined) setProgressTranscode(data.progressTranscode);
       if (data.progressTranslate !== undefined) setProgressTranslate(data.progressTranslate);
+
+      // Automatic transition to editor when AI processing reaches 100%
+      if ((data.progress === 100 || data.status === 'Completed') && !hasCompletedProcessRef.current) {
+        hasCompletedProcessRef.current = true;
+        fetch(`/api/project/${projectId}`)
+          .then(r => r.json())
+          .then(proj => {
+            if (proj && !proj.error) {
+              setProcessStatusMsg(isAr ? 'اكتملت المعالجة بنجاح! جاري فتح محرر الترجمة...' : 'Processing complete! Opening subtitle workspace...');
+              setTimeout(() => {
+                setIsProcessing(false);
+                onCompleteProcess(proj);
+              }, 800);
+            } else {
+              hasCompletedProcessRef.current = false;
+            }
+          })
+          .catch(err => {
+            console.error('Error fetching final project:', err);
+            hasCompletedProcessRef.current = false;
+          });
+      }
 
       // Handle Torrent Telemetry
       if (data.stage && data.stage.startsWith('torrent_')) {
@@ -1230,9 +1253,29 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                   </div>
                 </div>
                 
-                {/* Overall Status Text */}
-                <div className="text-center pt-2">
+                {/* Overall Status Text & Immediate Action */}
+                <div className="text-center pt-2 space-y-3">
                   <span className="text-xs font-black text-purple-400 theme-light:text-purple-900 bg-purple-950/50 theme-light:bg-purple-100 px-4 py-1.5 rounded-xl inline-block border border-purple-500/20">{processStatusMsg}</span>
+
+                  {processProgress === 100 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const prjRes = await fetch(`/api/project/${projectId}`);
+                            const pData = await prjRes.json();
+                            if (pData && !pData.error) onCompleteProcess(pData);
+                          } catch (e) {
+                            console.error('Manual open error:', e);
+                          }
+                        }}
+                        className="px-8 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:scale-105 text-white font-black text-sm shadow-xl shadow-emerald-500/30 border-2 border-emerald-400 transition cursor-pointer"
+                      >
+                        {isAr ? 'فتح محرر الترجمة الآن' : 'Open Subtitle Workspace Now'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

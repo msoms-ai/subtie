@@ -18,6 +18,7 @@ import nodemailer from 'nodemailer';
 import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from './services/characterService.js';
 import { torrentService } from './services/torrentService.js';
 import { detectVisualSignsFromVideo } from './services/visionOcrService.js';
+import { getAllFolderCovers, generateFolderCover } from './services/folderCoverService.js';
 
 // Set ffmpeg binary path from installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -211,6 +212,29 @@ function readProjects() {
 
 function writeProjects(data) {
   fs.writeFileSync(PROJECTS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function findProjectDirectories(userId, projectName, projectId) {
+  const safeFolderName = projectName ? projectName.replace(/[\/\\?%*:|"<>]/g, '_').trim() : 'Uncategorized';
+  const newNestedDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
+  const oldFlatDir = path.join(UPLOADS_DIR, userId, projectId);
+  const rootDir = path.join(UPLOADS_DIR, projectId);
+
+  let targetDir = newNestedDir;
+  let urlPrefix = `/uploads/${userId}/${safeFolderName}/${projectId}`;
+
+  if (!fs.existsSync(newNestedDir) || !fs.readdirSync(newNestedDir).some(f => f.startsWith('video.'))) {
+    if (fs.existsSync(oldFlatDir) && fs.readdirSync(oldFlatDir).some(f => f.startsWith('video.'))) {
+      targetDir = oldFlatDir;
+      urlPrefix = `/uploads/${userId}/${projectId}`;
+    } else if (fs.existsSync(rootDir) && fs.readdirSync(rootDir).some(f => f.startsWith('video.'))) {
+      targetDir = rootDir;
+      urlPrefix = `/uploads/${projectId}`;
+    }
+  }
+
+  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
+  return { targetDir, urlPrefix, safeFolderName, videoFiles };
 }
 
 // Extract Audio Track from MP4 Video File locally
@@ -1941,12 +1965,9 @@ app.post('/api/project/:id/characters/detect', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const userId = project.ownerId || 'usr_guest';
-  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
-  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id);
   const charactersDir = path.join(targetDir, 'characters');
-  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
   const videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
-  const urlPrefix = `/uploads/${userId}/${safeFolderName}/${id}`;
 
   try {
     const characters = await detectCharactersFromSubtitles(project.subtitles || [], geminiPool, {
@@ -2025,12 +2046,27 @@ app.post('/api/project/:id/visual-signs/detect', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const userId = project.ownerId || 'usr_guest';
-  const safeFolderName = project.projectName ? project.projectName.replace(/[/\\?%*:|"<>]/g, '_').trim() : 'Uncategorized';
-  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id);
   const signsDir = path.join(targetDir, 'visual_signs');
-  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
-  const videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
-  const urlPrefix = `/uploads/${userId}/${safeFolderName}/${id}`;
+  let videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
+
+  // Cloudflare R2 / CDN Fallback: If local video was purged, re-fetch it to targetDir
+  if (!videoPath && project.videoUrl && project.videoUrl.startsWith('http')) {
+    try {
+      console.log(`☁️ [VisionOCR] Local video missing on disk, retrieving from Cloud storage: ${project.videoUrl}`);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      const downloadTarget = path.join(targetDir, 'video.mp4');
+      const dlRes = await fetch(project.videoUrl);
+      if (dlRes.ok) {
+        const buf = await dlRes.arrayBuffer();
+        fs.writeFileSync(downloadTarget, Buffer.from(buf));
+        videoPath = downloadTarget;
+        console.log(`✅ [VisionOCR] Retrieved video from Cloud storage: ${downloadTarget} (${(buf.byteLength / (1024*1024)).toFixed(1)} MB)`);
+      }
+    } catch (dlErr) {
+      console.warn(`⚠️ [VisionOCR] Could not fetch video from Cloud storage:`, dlErr.message);
+    }
+  }
 
   if (!videoPath) {
     return res.status(404).json({ error: 'Video file not found on server to perform Visual OCR' });
@@ -2123,6 +2159,29 @@ app.post('/api/project/:id/visual-signs/add-to-subtitles', (req, res) => {
     subtitles: project.subtitles,
     visualSigns: project.visualSigns
   });
+});
+
+// ====================================================
+// AI FOLDER COVER ART ENDPOINTS
+// ====================================================
+
+app.get('/api/folders/covers', (req, res) => {
+  const covers = getAllFolderCovers();
+  return res.json({ success: true, covers });
+});
+
+app.post('/api/folders/generate-cover', async (req, res) => {
+  try {
+    const { folderName } = req.body;
+    if (!folderName) {
+      return res.status(400).json({ error: 'Folder name is required' });
+    }
+    const result = await generateFolderCover(folderName, geminiPool);
+    return res.json(result);
+  } catch (err) {
+    console.error('[FolderCover Error]', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ====================================================

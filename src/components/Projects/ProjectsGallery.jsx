@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
 
 export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAssignAuditor, user, lang = 'en' }) {
+  const isAr = lang === 'ar';
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -9,11 +10,47 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
   const [sortOption, setSortOption] = useState('newest');
   const [viewMode, setViewMode] = useState('folders');
   const [selectedFolder, setSelectedFolder] = useState(null); // 'all', 'episode', 'movie', 'trailer', 'clip'
+
+  // AI Folder Covers State
+  const [folderCovers, setFolderCovers] = useState({});
+  const [generatingCovers, setGeneratingCovers] = useState({});
   
   // Deletion modal states
   const [deletingProjectId, setDeletingProjectId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
+
+  const fetchFolderCovers = async () => {
+    try {
+      const res = await fetch('/api/folders/covers');
+      const data = await res.json();
+      if (data?.success && data?.covers) {
+        setFolderCovers(data.covers);
+      }
+    } catch (e) {
+      console.warn('Failed to load folder covers:', e);
+    }
+  };
+
+  const handleGenerateCover = async (e, folderName) => {
+    if (e?.stopPropagation) e.stopPropagation();
+    setGeneratingCovers(prev => ({ ...prev, [folderName]: true }));
+    try {
+      const res = await fetch('/api/folders/generate-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName })
+      });
+      const data = await res.json();
+      if (data?.success && data?.coverUrl) {
+        setFolderCovers(prev => ({ ...prev, [folderName]: data.coverUrl }));
+      }
+    } catch (err) {
+      console.error('Generate cover error:', err);
+    } finally {
+      setGeneratingCovers(prev => ({ ...prev, [folderName]: false }));
+    }
+  };
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -35,7 +72,22 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
 
   useEffect(() => {
     fetchProjects();
+    fetchFolderCovers();
   }, [user]);
+
+  // Proactive background auto-generation for folders missing covers
+  useEffect(() => {
+    if (viewMode === 'folders' && projects.length > 0) {
+      const folderNames = [...new Set(projects.map(p => p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')))];
+      folderNames.forEach((folder, idx) => {
+        if (!folderCovers[folder] && !generatingCovers[folder]) {
+          setTimeout(() => {
+            handleGenerateCover(null, folder);
+          }, idx * 1200);
+        }
+      });
+    }
+  }, [projects, viewMode, folderCovers]);
 
   const handleDeleteConfirm = async () => {
     if (!deletingProjectId) return;
@@ -63,8 +115,6 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
       setIsDeleting(false);
     }
   };
-
-  const isAr = lang === 'ar';
 
   // Arabic category translation helper
   const getCategoryLabel = (type) => {
@@ -252,13 +302,63 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                {folderNames.map(folder => {
                  const folderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === folder);
+                 const coverUrl = folderCovers[folder];
+                 const isGenerating = generatingCovers[folder];
+
                  return (
-                   <div key={folder} onClick={() => setSelectedFolder(folder)} className="glass-panel-glow p-6 rounded-3xl border border-purple-500/30 cursor-pointer hover:scale-105 transition shadow-xl group bg-slate-900/50 theme-light:bg-white">
-                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-800 flex items-center justify-center mb-4 group-hover:-translate-y-1 transition shadow-lg">
-                       <Layers className="w-7 h-7 text-white" />
+                   <div
+                     key={folder}
+                     onClick={() => setSelectedFolder(folder)}
+                     className="group relative rounded-3xl overflow-hidden border border-purple-500/30 hover:border-pink-500/80 cursor-pointer hover:scale-[1.03] transition-all duration-300 shadow-xl h-60 flex flex-col justify-between p-5 bg-slate-950"
+                     style={
+                       coverUrl
+                         ? {
+                             backgroundImage: `url(${coverUrl})`,
+                             backgroundSize: 'cover',
+                             backgroundPosition: 'center',
+                           }
+                         : {
+                             background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
+                           }
+                     }
+                   >
+                     {/* Cinematic Dark Gradient Film Overlay */}
+                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-purple-950/30 group-hover:via-slate-950/45 transition-all duration-300 pointer-events-none" />
+
+                     {/* Top Bar: Folder Icon Badge & AI Regenerate Action */}
+                     <div className="relative z-10 flex items-center justify-between" dir={isAr ? 'rtl' : 'ltr'}>
+                       <div className="w-12 h-12 rounded-2xl bg-purple-950/85 backdrop-blur-md border border-purple-400/40 flex items-center justify-center shadow-lg group-hover:scale-110 transition">
+                         <Layers className="w-6 h-6 text-pink-300" />
+                       </div>
+
+                       <button
+                         type="button"
+                         title={isAr ? 'إعادة توليد غلاف أنمي بالذكاء الاصطناعي' : 'Regenerate AI Anime Background Art'}
+                         onClick={(e) => handleGenerateCover(e, folder)}
+                         disabled={isGenerating}
+                         className="flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1.5 rounded-xl bg-slate-950/75 hover:bg-purple-900/90 text-purple-200 hover:text-white border border-purple-400/40 backdrop-blur-md text-[11px] font-black transition shadow-md"
+                       >
+                         <Sparkles className={`w-3.5 h-3.5 text-yellow-300 ${isGenerating ? 'animate-spin' : ''}`} />
+                         <span>
+                           {isGenerating ? (isAr ? 'جاري التوليد...' : 'Generating...') : (isAr ? 'توليد غلاف' : 'AI Cover')}
+                         </span>
+                       </button>
                      </div>
-                     <h3 className="text-lg font-black text-white theme-light:text-slate-950 mb-1 line-clamp-1">{folder}</h3>
-                     <p className="text-xs text-purple-300 theme-light:text-purple-700 font-bold">{folderProjects.length} {isAr ? 'عنصر' : 'items'}</p>
+
+                     {/* Bottom: Folder Title & Item Counter */}
+                     <div className="relative z-10 space-y-2 text-right" dir={isAr ? 'rtl' : 'ltr'}>
+                       <h3 className="text-lg font-black text-white drop-shadow-lg line-clamp-1 group-hover:text-pink-300 transition">
+                         {folder}
+                       </h3>
+                       <div className="flex items-center justify-between">
+                         <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-950/85 backdrop-blur-md border border-purple-400/30 text-xs font-black text-purple-200 shadow-sm">
+                           {folderProjects.length} {isAr ? 'عنصر' : 'items'}
+                         </span>
+                         <span className="text-[11px] font-extrabold text-pink-300 opacity-0 group-hover:opacity-100 transition duration-200">
+                           {isAr ? 'فتح المجلد ←' : 'Open Folder →'}
+                         </span>
+                       </div>
+                     </div>
                    </div>
                  );
                })}
