@@ -98,7 +98,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   // Real-Time Socket.io Telemetry Listener
   useEffect(() => {
     if (!projectId) return;
-    const socket = io();
+
+    // Connect to port 3001 directly in dev or through origin
+    const socketUrl = window.location.port === '5173'
+      ? `${window.location.protocol}//${window.location.hostname}:3001`
+      : undefined;
+    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
     socket.emit('join_project', projectId);
 
     socket.on('processing_progress', (data) => {
@@ -132,6 +137,37 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       socket.disconnect();
     };
   }, [projectId]);
+
+  // Dual Fallback: Poll torrent status endpoint every 1.5s during download
+  useEffect(() => {
+    if (!projectId || currentStep !== 4 || sourceType === 'direct') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/torrent/${projectId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.success && data?.status) {
+          const st = data.status;
+          setTorrentTelemetry(prev => ({ ...(prev || {}), ...st }));
+          if (st.progress !== undefined) setUploadProgress(st.progress);
+          if (st.status === 'completed') {
+            clearInterval(pollInterval);
+            setCurrentStep(6);
+            setIsProcessing(true);
+          } else if (st.status === 'failed') {
+            clearInterval(pollInterval);
+            setErrorMessage(st.error || 'Torrent download failed');
+            setCurrentStep(6);
+          }
+        }
+      } catch (err) {
+        // Silently ignore polling glitch
+      }
+    }, 1500);
+
+    return () => clearInterval(pollInterval);
+  }, [projectId, currentStep, sourceType]);
 
   // Handle Torrent & Magnet Link Ingestion
   const handleTorrentIngest = async () => {

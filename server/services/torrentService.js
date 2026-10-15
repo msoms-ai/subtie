@@ -18,6 +18,34 @@ const MAX_TORRENT_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
 // 30-minute stalled limit in milliseconds
 const STALLED_SEED_TIMEOUT_MS = 30 * 60 * 1000;
 
+// High-speed public BitTorrent trackers
+const HIGH_SPEED_TRACKERS = [
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://exodus.desync.com:6969/announce',
+  'udp://explodie.org:6969/announce',
+  'http://nyaa.tracker.wf:7777/announce',
+  'udp://tracker.openbittorrent.com:6969/announce',
+  'udp://tracker.bittor.pw:1337/announce',
+  'udp://p4p.arenabg.com:1337/announce',
+  'wss://tracker.openwebtorrent.com',
+  'wss://tracker.btorrent.xyz'
+];
+
+function formatEta(ms) {
+  if (!ms || ms === Infinity || isNaN(ms) || ms < 0) return '--';
+  const totalSecs = Math.round(ms / 1000);
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return `${h}h ${remM}m`;
+  }
+  return `${m}m ${s}s`;
+}
+
 class TorrentService {
   constructor() {
     this.client = new WebTorrent({
@@ -38,14 +66,6 @@ class TorrentService {
 
   /**
    * Starts ingestion of a torrent from a .torrent buffer/file path or magnet URI.
-   *
-   * @param {Object} params
-   * @param {string} params.projectId
-   * @param {string} params.userId
-   * @param {string|Buffer} params.torrentSource - Magnet URI string or Buffer of .torrent file
-   * @param {Object} params.projectMeta - Project metadata (title, name, type)
-   * @param {Function} params.onSuccess - Callback when video is fully downloaded and moved
-   * @param {Function} params.onFail - Callback when torrent fails or is rejected
    */
   async ingestTorrent({ projectId, userId, torrentSource, projectMeta = {}, onSuccess, onFail }) {
     if (this.activeJobs.has(projectId)) {
@@ -55,6 +75,17 @@ class TorrentService {
     const downloadDir = path.join(TORRENTS_BASE_DIR, projectId);
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir, { recursive: true });
+    }
+
+    // Safeguard: Check if this torrent is already active in WebTorrent client to prevent duplicate error
+    try {
+      const existing = this.client.get(torrentSource);
+      if (existing) {
+        console.log(`♻️ [TorrentService] Removing pre-existing torrent instance (${existing.infoHash}) before re-adding...`);
+        existing.destroy({ destroyStore: false });
+      }
+    } catch (e) {
+      // Ignored
     }
 
     const jobData = {
@@ -74,24 +105,38 @@ class TorrentService {
       projectMeta,
       createdAt: Date.now(),
       lastEmitTime: 0,
+      telemetryInterval: null,
     };
 
     this.activeJobs.set(projectId, jobData);
 
     console.log(`🧲 [TorrentService] Adding torrent for project ${projectId}...`);
 
+    // Immediate initial telemetry emission
     socketService.emitProgress(projectId, {
       stage: 'torrent_connecting',
       progress: 0,
-      message: 'Connecting to torrent swarm and fetching metadata...',
+      downloadSpeed: '0.00',
+      downloadedMb: '0.0',
+      totalMb: '...',
+      numPeers: 0,
+      numSeeds: 0,
+      eta: '--',
+      message: 'Connecting to BitTorrent swarm and finding seeds...',
       status: 'fetching_metadata',
     });
+
+    // Start 1-second continuous telemetry heartbeat
+    jobData.telemetryInterval = setInterval(() => {
+      this.emitTelemetryUpdate(jobData);
+    }, 1000);
 
     try {
       this.client.add(
         torrentSource,
         {
           path: downloadDir,
+          announce: HIGH_SPEED_TRACKERS,
           destroyStoreOnDestroy: true,
         },
         (torrent) => {
@@ -105,6 +150,74 @@ class TorrentService {
     }
 
     return { success: true, projectId, status: 'fetching_metadata' };
+  }
+
+  /**
+   * Continuous live telemetry broadcaster (every 1 second)
+   */
+  emitTelemetryUpdate(jobData) {
+    const { projectId, videoFile, torrent } = jobData;
+    if (!torrent) {
+      socketService.emitProgress(projectId, {
+        stage: 'torrent_connecting',
+        progress: 0,
+        downloadSpeed: '0.00',
+        downloadedMb: '0.0',
+        totalMb: '...',
+        numPeers: 0,
+        numSeeds: 0,
+        eta: '--',
+        message: 'Connecting to BitTorrent swarm and discovering seeds...',
+        status: 'fetching_metadata',
+      });
+      return;
+    }
+
+    const numPeers = torrent.numPeers || 0;
+    jobData.numPeers = numPeers;
+
+    // Track zero-seeds stall watchdog
+    const now = Date.now();
+    if (numPeers === 0) {
+      if (!jobData.zeroSeedsStartTime) {
+        jobData.zeroSeedsStartTime = now;
+      }
+    } else {
+      jobData.zeroSeedsStartTime = null;
+    }
+
+    const downloaded = torrent.downloaded || 0;
+    const total = videoFile ? videoFile.length : (torrent.length || 0);
+    const pct = total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : 0;
+    const speedBytes = torrent.downloadSpeed || 0;
+    const speedMb = (speedBytes / (1024 * 1024)).toFixed(2);
+    const downloadedMb = (downloaded / (1024 * 1024)).toFixed(1);
+    const totalMb = total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...';
+
+    const etaFormatted = formatEta(torrent.timeRemaining);
+    const numSeeds = numPeers; // in webtorrent, numPeers is total active peers in swarm
+
+    jobData.progress = pct;
+    jobData.downloadedBytes = downloaded;
+    jobData.downloadSpeed = speedBytes;
+
+    socketService.emitProgress(projectId, {
+      stage: jobData.status === 'fetching_metadata' ? 'torrent_connecting' : 'torrent_downloading',
+      progress: pct,
+      downloadedBytes: downloaded,
+      totalBytes: total,
+      downloadedMb,
+      totalMb,
+      downloadSpeed: speedMb,
+      numPeers,
+      numSeeds,
+      eta: etaFormatted,
+      fileName: videoFile?.name || '',
+      message: jobData.status === 'fetching_metadata'
+        ? `جاري الاتصال بالسرب وجلب بيانات الملف (${numPeers} متصلين)...`
+        : `جاري تحميل التورنت: ${pct}% (${downloadedMb} / ${totalMb} MB) بسرعة ${speedMb} MB/s`,
+      status: jobData.status,
+    });
   }
 
   /**
@@ -160,19 +273,8 @@ class TorrentService {
 
     console.log(`🎬 [TorrentService] Selected single video: "${targetVideo.name}" (${(targetVideo.length / (1024 * 1024)).toFixed(1)} MB)`);
 
-    socketService.emitProgress(projectId, {
-      stage: 'torrent_downloading',
-      progress: 0,
-      fileName: targetVideo.name,
-      totalBytes: targetVideo.length,
-      message: `بدء تحميل الفيديو: ${targetVideo.name} (${(targetVideo.length / (1024 * 1024)).toFixed(1)} MB)`,
-      status: 'downloading',
-    });
-
-    // Listen for download progress
-    torrent.on('download', () => {
-      this.handleTorrentProgress(jobData, torrent);
-    });
+    // Force immediate telemetry refresh
+    this.emitTelemetryUpdate(jobData);
 
     // Listen for completion
     torrent.on('done', () => {
@@ -186,56 +288,16 @@ class TorrentService {
   }
 
   /**
-   * Throttled progress telemetry handler
-   */
-  handleTorrentProgress(jobData, torrent) {
-    const { projectId, videoFile } = jobData;
-    const now = Date.now();
-
-    // Check seeders
-    const numPeers = torrent.numPeers || 0;
-    jobData.numPeers = numPeers;
-
-    if (numPeers === 0) {
-      if (!jobData.zeroSeedsStartTime) {
-        jobData.zeroSeedsStartTime = now;
-      }
-    } else {
-      jobData.zeroSeedsStartTime = null; // Reset stall timer when peers are active
-    }
-
-    // Throttle socket emissions to once every 800ms
-    if (now - jobData.lastEmitTime < 800) return;
-    jobData.lastEmitTime = now;
-
-    const downloaded = torrent.downloaded;
-    const total = videoFile ? videoFile.length : torrent.length;
-    const pct = total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : 0;
-    const speed = torrent.downloadSpeed || 0; // bytes/sec
-
-    jobData.progress = pct;
-    jobData.downloadedBytes = downloaded;
-    jobData.downloadSpeed = speed;
-
-    socketService.emitProgress(projectId, {
-      stage: 'torrent_downloading',
-      progress: pct,
-      downloadedBytes: downloaded,
-      totalBytes: total,
-      downloadSpeed: speed,
-      numPeers,
-      fileName: videoFile?.name || '',
-      message: `جاري تحميل التورنت: ${pct}% (${(downloaded / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MB)`,
-      status: 'downloading',
-    });
-  }
-
-  /**
    * Finalizes the downloaded video file and triggers pipeline
    */
   async handleTorrentCompleted(jobData, torrent) {
     const { projectId, userId, downloadDir, videoFile, onSuccess } = jobData;
     console.log(`✅ [TorrentService] Project ${projectId} finished downloading "${videoFile.name}"!`);
+
+    if (jobData.telemetryInterval) {
+      clearInterval(jobData.telemetryInterval);
+      jobData.telemetryInterval = null;
+    }
 
     jobData.status = 'completed';
     jobData.progress = 100;
@@ -243,6 +305,12 @@ class TorrentService {
     socketService.emitProgress(projectId, {
       stage: 'torrent_completed',
       progress: 100,
+      downloadSpeed: '0.00',
+      downloadedMb: (videoFile.length / (1024 * 1024)).toFixed(1),
+      totalMb: (videoFile.length / (1024 * 1024)).toFixed(1),
+      numPeers: torrent.numPeers || 0,
+      numSeeds: torrent.numPeers || 0,
+      eta: '0m 0s',
       message: 'اكتمل تحميل ملف الفيديو بنجاح! جاري النقل وبدء المعالجة الذكية...',
       status: 'completed',
     });
@@ -319,6 +387,11 @@ class TorrentService {
     const jobData = this.activeJobs.get(projectId);
     if (!jobData) return;
 
+    if (jobData.telemetryInterval) {
+      clearInterval(jobData.telemetryInterval);
+      jobData.telemetryInterval = null;
+    }
+
     jobData.status = 'failed';
 
     socketService.emitProgress(projectId, {
@@ -351,6 +424,11 @@ class TorrentService {
     if (!job) return false;
 
     console.log(`🛑 [TorrentService] Cancelling torrent for project ${projectId} on user request.`);
+    if (job.telemetryInterval) {
+      clearInterval(job.telemetryInterval);
+      job.telemetryInterval = null;
+    }
+
     if (job.torrent) {
       try {
         job.torrent.destroy({ destroyStore: true }, () => {});
@@ -368,20 +446,33 @@ class TorrentService {
     const job = this.activeJobs.get(projectId);
     if (!job) return null;
 
+    const torrent = job.torrent;
+    const numPeers = torrent?.numPeers || job.numPeers || 0;
+    const downloaded = torrent?.downloaded || job.downloadedBytes || 0;
+    const total = job.videoFile ? job.videoFile.length : (torrent?.length || job.totalBytes || 0);
+    const speedBytes = torrent?.downloadSpeed || job.downloadSpeed || 0;
+    const pct = total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : job.progress;
+
     return {
       projectId: job.projectId,
       status: job.status,
-      progress: job.progress,
-      downloadSpeed: job.downloadSpeed,
-      downloadedBytes: job.downloadedBytes,
-      totalBytes: job.totalBytes,
-      numPeers: job.numPeers,
+      progress: pct,
+      downloadSpeed: (speedBytes / (1024 * 1024)).toFixed(2),
+      downloadedMb: (downloaded / (1024 * 1024)).toFixed(1),
+      totalMb: total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...',
+      numPeers,
+      numSeeds: numPeers,
+      eta: formatEta(torrent?.timeRemaining),
       videoFileName: job.videoFile?.name || '',
     };
   }
 
   cleanupJob(projectId, removeFiles = false) {
     const job = this.activeJobs.get(projectId);
+    if (job?.telemetryInterval) {
+      clearInterval(job.telemetryInterval);
+      job.telemetryInterval = null;
+    }
     if (removeFiles && job?.downloadDir && fs.existsSync(job.downloadDir)) {
       try {
         fs.rmSync(job.downloadDir, { recursive: true, force: true });
