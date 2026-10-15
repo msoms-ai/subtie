@@ -1,3 +1,4 @@
 {
-  "geminiModel": "gemini-3.8-flash"
+  "geminiModel": "gemini-3.8-flash",
+  "visionOcrModel": "gemini-3.8-flash"
 }

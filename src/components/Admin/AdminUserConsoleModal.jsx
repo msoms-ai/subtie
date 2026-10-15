@@ -295,7 +295,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
             
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-400 theme-light:text-slate-600 flex items-center justify-between">
-                <span>{isAr ? 'معرف نموذج جيميناي (Gemini Model Identifier)' : 'Gemini Model Identifier'}</span>
+                <span>{isAr ? 'معرف نموذج جيميناي (Gemini Model Identifier - الصوت والترجمة)' : 'Gemini Model Identifier (Audio & Translation)'}</span>
                 <button 
                   onClick={handleFetchModels}
                   disabled={isFetchingModels}
@@ -312,7 +312,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
                   value={settings.geminiModel || ''}
                   onChange={(e) => setSettings({...settings, geminiModel: e.target.value})}
                   className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-slate-300 rounded-xl px-4 py-2.5 text-sm text-white theme-light:text-slate-900 font-mono outline-none focus:border-purple-500"
-                  placeholder="e.g. gemini-1.5-pro"
+                  placeholder="e.g. gemini-3.8-flash"
                 />
                 <button
                   onClick={handleTestModel}
@@ -322,22 +322,70 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
                   {isTestingModel ? (isAr ? 'جاري الاختبار...' : 'Testing...') : (isAr ? 'اختبار النموذج' : 'Test Model')}
                 </button>
               </div>
+              <p className="text-[10px] text-slate-500 theme-light:text-slate-400 leading-relaxed pt-1">
+                {isAr 
+                  ? 'نموذج تحويل الصوت إلى نصوص وترجمة الحوارات (يوصى بـ gemini-3.8-flash).' 
+                  : 'Primary model used for audio ASR and subtitle translation (recommended: gemini-3.8-flash).'}
+              </p>
+            </div>
+
+            {/* VISION OCR MODEL */}
+            <div className="space-y-2 pt-4 border-t border-purple-500/20">
+              <label className="text-xs font-bold text-slate-400 theme-light:text-slate-600 flex items-center justify-between">
+                <span>{isAr ? 'نموذج قراءة النصوص المرئية في الفيديو (Vision OCR Model)' : 'On-Screen Vision OCR Model (Visual Signs & Titles)'}</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  list="gemini-models-list"
+                  value={settings.visionOcrModel || 'gemini-3.8-flash'}
+                  onChange={(e) => setSettings({...settings, visionOcrModel: e.target.value})}
+                  className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-slate-300 rounded-xl px-4 py-2.5 text-sm text-white theme-light:text-slate-900 font-mono outline-none focus:border-pink-500"
+                  placeholder="e.g. gemini-3.8-flash"
+                />
+                <button
+                  onClick={async () => {
+                    setIsTestingModel(true);
+                    try {
+                      const res = await fetch('/api/settings/test-model', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ modelName: settings.visionOcrModel || 'gemini-3.8-flash' })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        alert((isAr ? 'نجاح! استجاب نموذج الرؤية: ' : 'Success! Vision model replied: ') + data.text);
+                      } else {
+                        alert((isAr ? 'فشل الاختبار: ' : 'Test failed: ') + data.error);
+                      }
+                    } catch (err) {
+                      alert('Error: ' + err.message);
+                    } finally {
+                      setIsTestingModel(false);
+                    }
+                  }}
+                  disabled={isTestingModel || !settings.visionOcrModel}
+                  className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {isTestingModel ? (isAr ? 'جاري الاختبار...' : 'Testing...') : (isAr ? 'اختبار نموذج الرؤية' : 'Test Vision')}
+                </button>
+              </div>
               <datalist id="gemini-models-list">
                 {availableModels.map(m => (
                   <option key={m} value={m} />
                 ))}
               </datalist>
-              <p className="text-[10px] text-slate-500 theme-light:text-slate-400 leading-relaxed pt-2">
+              <p className="text-[10px] text-slate-500 theme-light:text-slate-400 leading-relaxed pt-1">
                 {isAr 
-                  ? 'أدخل المعرف الدقيق للنموذج (مثال: gemini-1.5-pro-002). سيتم الانتقال تلقائياً إلى gemini-1.5-flash في حال فشل هذا النموذج.' 
-                  : 'Enter the exact model ID (e.g. gemini-1.5-pro-002). The system will automatically fallback to gemini-1.5-flash if this model fails or is unavailable.'}
+                  ? 'النموذج متعدد الوسائط المسؤول عن مسح لافتات وعناوين الحلقات في الفيديو (افتراضي: gemini-3.8-flash أو gemini-2.5-flash).' 
+                  : 'Multimodal vision model scanning video frames for titles, signs, and notes (default: gemini-3.8-flash).'}
               </p>
             </div>
             
             <button
               onClick={handleSaveSettings}
               disabled={isSaving}
-              className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition text-sm disabled:opacity-50"
+              className="mt-6 w-full bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-bold py-3 rounded-xl transition text-sm disabled:opacity-50 shadow-lg shadow-purple-500/25"
             >
               {isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ الإعدادات' : 'Save Settings')}
             </button>

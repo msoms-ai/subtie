@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users, Eye } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
 import CharacterMatrix from './CharacterMatrix.jsx';
+import VisualSignsMatrix from './VisualSignsMatrix.jsx';
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAddAnotherEpisode, user, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
   const [subtitles, setSubtitles] = useState(initialProject?.subtitles || []);
   const [characters, setCharacters] = useState(initialProject?.characters || []);
+  const [visualSigns, setVisualSigns] = useState(initialProject?.visualSigns || []);
   const [isDetectingCharacters, setIsDetectingCharacters] = useState(false);
   const [isSavingCharacter, setIsSavingCharacter] = useState(false);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('subtitles'); // 'subtitles' or 'characters'
+  const [isDetectingVisualSigns, setIsDetectingVisualSigns] = useState(false);
+  const [isAddingSignToSubtitles, setIsAddingSignToSubtitles] = useState(false);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('subtitles'); // 'subtitles', 'visual_signs', or 'characters'
   const [activeSubId, setActiveSubId] = useState(null);
 
   // Video Duration & Time update state for active subtitle preview overlay
@@ -193,6 +197,88 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       alert('Failed to extract characters');
     } finally {
       setIsDetectingCharacters(false);
+    }
+  };
+
+  // Visual OCR: Re-scan / detect on-screen signs across video
+  const handleDetectVisualSigns = async () => {
+    setIsDetectingVisualSigns(true);
+    try {
+      const res = await fetch(`/api/project/${project.id}/visual-signs/detect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        }
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.visualSigns)) {
+        setVisualSigns(data.visualSigns);
+        setToastMsg(
+          isAr
+            ? `تم استخراج ${data.visualSigns.length} لوحة ونص في الفيديو بنجاح!`
+            : `Detected ${data.visualSigns.length} on-screen visual signs!`
+        );
+        setTimeout(() => setToastMsg(null), 3500);
+      } else {
+        alert(data.error || 'Failed to detect visual signs');
+      }
+    } catch (err) {
+      console.error('Visual signs detect error:', err);
+      alert('Failed to detect visual signs');
+    } finally {
+      setIsDetectingVisualSigns(false);
+    }
+  };
+
+  // Visual OCR: Update a visual sign (Arabic text / ASS position)
+  const handleUpdateVisualSign = async (signId, updates) => {
+    const updatedList = visualSigns.map(s => s.id === signId ? { ...s, ...updates } : s);
+    setVisualSigns(updatedList);
+    try {
+      await fetch(`/api/project/${project.id}/visual-signs`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({ visualSigns: updatedList })
+      });
+    } catch (err) {
+      console.error('Failed to save visual sign updates:', err);
+    }
+  };
+
+  // Visual OCR: Convert visual sign to subtitle line
+  const handleAddSignToSubtitles = async (sign) => {
+    setIsAddingSignToSubtitles(true);
+    try {
+      const res = await fetch(`/api/project/${project.id}/visual-signs/add-to-subtitles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({ sign })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.subtitles)) setSubtitles(data.subtitles);
+        if (Array.isArray(data.visualSigns)) setVisualSigns(data.visualSigns);
+        setToastMsg(
+          isAr
+            ? 'تم إدراج اللوحة في أسطر الترجمة بنجاح!'
+            : 'Visual sign successfully added to subtitle script!'
+        );
+        setTimeout(() => setToastMsg(null), 3500);
+      } else {
+        alert(data.error || 'Failed to add sign to subtitles');
+      }
+    } catch (err) {
+      console.error('Add sign to subtitles error:', err);
+      alert('Failed to add sign to subtitles');
+    } finally {
+      setIsAddingSignToSubtitles(false);
     }
   };
 
@@ -561,13 +647,14 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
 
         {/* Right Side: Tabbed Workspace (Subtitles vs Character Matrix) */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Dual Tab Switcher Bar */}
+          {/* 3-Tab Workspace Switcher Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 glass-panel p-2.5 rounded-2xl border border-purple-500/25 shadow-md" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Tab 1: Subtitle Script */}
               <button
                 type="button"
                 onClick={() => setActiveWorkspaceTab('subtitles')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
                   activeWorkspaceTab === 'subtitles'
                     ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/40'
                     : 'text-slate-400 hover:text-white hover:bg-purple-950/40 border border-transparent'
@@ -580,26 +667,46 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
                 </span>
               </button>
 
+              {/* Tab 2: Visual Signs & OCR */}
+              <button
+                type="button"
+                onClick={() => setActiveWorkspaceTab('visual_signs')}
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+                  activeWorkspaceTab === 'visual_signs'
+                    ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/40'
+                    : 'text-slate-400 hover:text-white hover:bg-purple-950/40 border border-transparent'
+                }`}
+              >
+                <Eye className="w-4 h-4 text-indigo-300" />
+                <span>{isAr ? 'نصوص ولافتات المشهد' : 'Visual Signs & OCR'}</span>
+                <span className="px-2 py-0.5 rounded-full bg-black/40 text-[10px] font-bold text-indigo-300">
+                  {visualSigns.length}
+                </span>
+              </button>
+
+              {/* Tab 3: Character Glossary Matrix */}
               <button
                 type="button"
                 onClick={() => setActiveWorkspaceTab('characters')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
                   activeWorkspaceTab === 'characters'
                     ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/40'
                     : 'text-slate-400 hover:text-white hover:bg-purple-950/40 border border-transparent'
                 }`}
               >
                 <Users className="w-4 h-4 text-pink-300" />
-                <span>{isAr ? 'مصفوفة أسماء الشخصيات' : 'Character Matrix'}</span>
+                <span>{isAr ? 'مصفوفة الشخصيات' : 'Character Matrix'}</span>
                 <span className="px-2 py-0.5 rounded-full bg-black/40 text-[10px] font-bold text-pink-300">
                   {characters.length}
                 </span>
               </button>
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 px-3 text-[11px] font-bold text-purple-300/80">
+            <div className="hidden xl:flex items-center gap-2 px-3 text-[11px] font-bold text-purple-300/80">
               {activeWorkspaceTab === 'subtitles' ? (
                 <span>{isAr ? 'توقيت وتعديل أسطر الحوار' : 'Millisecond timing & 3-language editor'}</span>
+              ) : activeWorkspaceTab === 'visual_signs' ? (
+                <span>{isAr ? 'قراءة وترجمة لافتات وعناوين الحلقة' : 'Full-video visual signs & titles'}</span>
               ) : (
                 <span>{isAr ? 'تعديل وتوحيد أسماء الشخصيات' : 'Batch replace character names in script'}</span>
               )}
@@ -725,7 +832,28 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
         </div>
       )}
 
-      {/* TAB 2: CHARACTER MATRIX */}
+      {/* TAB 2: VISUAL SIGNS & OCR */}
+      {activeWorkspaceTab === 'visual_signs' && (
+        <div className="space-y-4">
+          <VisualSignsMatrix
+            visualSigns={visualSigns}
+            onSeek={(sec) => {
+              if (videoRef.current) {
+                videoRef.current.currentTime = sec;
+                videoRef.current.play();
+              }
+            }}
+            onAddToSubtitles={handleAddSignToSubtitles}
+            onUpdateSign={handleUpdateVisualSign}
+            onDetectVisualSigns={handleDetectVisualSigns}
+            isDetecting={isDetectingVisualSigns}
+            isAdding={isAddingSignToSubtitles}
+            lang={lang}
+          />
+        </div>
+      )}
+
+      {/* TAB 3: CHARACTER MATRIX */}
       {activeWorkspaceTab === 'characters' && (
         <div className="space-y-4">
           <CharacterMatrix

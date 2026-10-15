@@ -16,6 +16,8 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
 import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from './services/characterService.js';
+import { torrentService } from './services/torrentService.js';
+import { detectVisualSignsFromVideo } from './services/visionOcrService.js';
 
 // Set ffmpeg binary path from installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -284,6 +286,25 @@ const avatarStorage = multer.diskStorage({
 const avatarUpload = multer({
   storage: avatarStorage,
   limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+// Configure Multer for Incoming .torrent Files (Max 30MB)
+const torrentIncomingDir = path.join(UPLOADS_DIR, 'torrents_incoming');
+if (!fs.existsSync(torrentIncomingDir)) fs.mkdirSync(torrentIncomingDir, { recursive: true });
+
+const torrentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, torrentIncomingDir);
+  },
+  filename: (req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `torrent_${Date.now()}_${safeName}`);
+  }
+});
+
+const torrentUpload = multer({
+  storage: torrentStorage,
+  limits: { fileSize: 30 * 1024 * 1024 }
 });
 
 // ====================================================
@@ -1250,13 +1271,10 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
   }
 });
 
-app.post('/api/process', async (req, res) => {
-  req.setTimeout(0); // Disable timeout for extremely long multi-hour video processing
-  res.setTimeout(0);
-  const { projectId, videoDurationSecs } = req.body;
-
+async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes = null) {
   if (!projectId) {
-    return res.status(400).json({ error: 'projectId is required' });
+    if (optionalRes) return optionalRes.status(400).json({ error: 'projectId is required' });
+    throw new Error('projectId is required');
   }
 
   const projects = readProjects();
@@ -1314,11 +1332,10 @@ app.post('/api/process', async (req, res) => {
     }
   }
   
-  req.urlPrefix = urlPrefix; // Store for later use
-
   const videoFiles = fs.readdirSync(targetDir).filter(f => f.startsWith('video.'));
   if (videoFiles.length === 0) {
-    return res.status(404).json({ error: 'Video file not found for this project' });
+    if (optionalRes) return optionalRes.status(404).json({ error: 'Video file not found for this project' });
+    throw new Error('Video file not found for this project');
   }
 
   const videoPath = path.join(targetDir, videoFiles[0]);
@@ -1373,7 +1390,7 @@ app.post('/api/process', async (req, res) => {
     emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25);
     
 
-      project.audioUrl = `${req.urlPrefix}/audio.mp3`;
+    project.audioUrl = `${urlPrefix}/audio.mp3`;
 
     // Step 2: Verify Gemini Pool has at least one key available
     if (geminiPool.getPoolStatus().totalKeys === 0 && !process.env.GEMINI_API_KEY) {
@@ -1636,7 +1653,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       const detectedCharacters = await detectCharactersFromSubtitles(allParsedSubtitles, geminiPool, {
         videoPath,
         charactersDir,
-        urlPrefix: req.urlPrefix
+        urlPrefix
       });
       project.characters = detectedCharacters;
       console.log(`[CharacterService] Identified ${detectedCharacters.length} character(s).`);
@@ -1645,13 +1662,30 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       project.characters = [];
     }
 
+    // Detect On-Screen Visual Signs & Titles (Full-Video OCR)
+    try {
+      const signsDir = path.join(targetDir, 'visual_signs');
+      console.log(`[VisionOCR] Extracting on-screen signs, titles & notes for ${projectId}...`);
+      const currentSettings = readSettings();
+      const detectedSigns = await detectVisualSignsFromVideo(videoPath, geminiPool, {
+        signsDir,
+        urlPrefix,
+        modelName: currentSettings.visionOcrModel || 'gemini-3.8-flash'
+      });
+      project.visualSigns = detectedSigns;
+      console.log(`[VisionOCR] Identified ${detectedSigns.length} on-screen sign(s).`);
+    } catch (visErr) {
+      console.warn('[VisionOCR] Visual OCR warning:', visErr.message);
+      project.visualSigns = [];
+    }
+
     // Write SRT file to project folder
     let srtContent = '';
     allParsedSubtitles.forEach((sub, idx) => {
       srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
     });
     fs.writeFileSync(srtPath, srtContent, 'utf8');
-    project.srtUrl = `${req.urlPrefix}/subtitle.srt`;
+    project.srtUrl = `${urlPrefix}/subtitle.srt`;
     project.updatedAt = new Date().toISOString();
     project.processingProgress = 100;
     project.processingStatus = "Completed";
@@ -1665,21 +1699,38 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     writeProjects(freshDb);
     const finalProject = freshDb[projectId];
 
-    return res.json({
+    const resultPayload = {
       success: true,
       projectId,
       audioUrl: finalProject.audioUrl,
       srtUrl: finalProject.srtUrl,
       subtitles: allParsedSubtitles,
+      visualSigns: finalProject.visualSigns || [],
+      characters: finalProject.characters || [],
       project: finalProject
-    });
+    };
+
+    if (optionalRes) {
+      return optionalRes.json(resultPayload);
+    }
+    return resultPayload;
 
   } catch (err) {
     console.error('[Process AI Error]', err);
-    return res.status(500).json({
-      error: 'AI Transcription Error: ' + err.message
-    });
+    if (optionalRes) {
+      return optionalRes.status(500).json({
+        error: 'AI Transcription Error: ' + err.message
+      });
+    }
+    throw err;
   }
+}
+
+app.post('/api/process', async (req, res) => {
+  req.setTimeout(0);
+  res.setTimeout(0);
+  const { projectId, videoDurationSecs } = req.body;
+  await executeVideoProcessing(projectId, videoDurationSecs, res);
 });
 
 function parseTimestampToSeconds(ts) {
@@ -1961,6 +2012,244 @@ app.post('/api/project/:id/characters/replace', (req, res) => {
     subtitles: project.subtitles,
     project
   });
+});
+
+// ====================================================
+// VISUAL OCR & ON-SCREEN SIGNS ENDPOINTS
+// ====================================================
+
+app.post('/api/project/:id/visual-signs/detect', async (req, res) => {
+  const { id } = req.params;
+  const projects = readProjects();
+  const project = projects[id];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const userId = project.ownerId || 'usr_guest';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[/\\?%*:|"<>]/g, '_').trim() : 'Uncategorized';
+  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const signsDir = path.join(targetDir, 'visual_signs');
+  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
+  const videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
+  const urlPrefix = `/uploads/${userId}/${safeFolderName}/${id}`;
+
+  if (!videoPath) {
+    return res.status(404).json({ error: 'Video file not found on server to perform Visual OCR' });
+  }
+
+  try {
+    const currentSettings = readSettings();
+    const detectedSigns = await detectVisualSignsFromVideo(videoPath, geminiPool, {
+      signsDir,
+      urlPrefix,
+      modelName: currentSettings.visionOcrModel || 'gemini-3.8-flash'
+    });
+    project.visualSigns = detectedSigns;
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+    return res.json({ success: true, visualSigns: detectedSigns });
+  } catch (err) {
+    console.error('[VisionOCR Endpoint Error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/project/:id/visual-signs', (req, res) => {
+  const { id } = req.params;
+  const { visualSigns } = req.body;
+  const projects = readProjects();
+  const project = projects[id];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  if (Array.isArray(visualSigns)) {
+    project.visualSigns = visualSigns;
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+  }
+  return res.json({ success: true, visualSigns: project.visualSigns });
+});
+
+app.post('/api/project/:id/visual-signs/add-to-subtitles', (req, res) => {
+  const { id } = req.params;
+  const { sign } = req.body;
+  const projects = readProjects();
+  const project = projects[id];
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!sign) return res.status(400).json({ error: 'Sign data is required' });
+
+  if (!Array.isArray(project.subtitles)) project.subtitles = [];
+
+  const newSub = {
+    id: project.subtitles.length + 1,
+    startTime: sign.startTime,
+    endTime: sign.endTime,
+    startSeconds: sign.startSeconds,
+    endSeconds: sign.endSeconds,
+    track: 'sign',
+    category: sign.category || 'sign',
+    japaneseText: sign.japaneseText || '',
+    englishText: sign.englishText || '',
+    arabicText: (sign.arabicText || sign.englishText || '').trim(),
+    assPosition: sign.assPosition || '\\an8',
+    approved: true,
+    auditNotes: `On-screen sign: ${sign.category || 'sign'}`
+  };
+
+  project.subtitles.push(newSub);
+  project.subtitles.sort((a, b) => (a.startSeconds || 0) - (b.startSeconds || 0));
+  project.subtitles.forEach((s, idx) => { s.id = idx + 1; });
+
+  if (Array.isArray(project.visualSigns)) {
+    project.visualSigns = project.visualSigns.map(s => s.id === sign.id ? { ...s, addedToSubtitles: true } : s);
+  }
+
+  // Update SRT on disk
+  const userId = project.ownerId || 'usr_guest';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[/\\?%*:|"<>]/g, '_').trim() : 'Uncategorized';
+  const targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  const srtPath = path.join(targetDir, 'subtitle.srt');
+  if (fs.existsSync(targetDir)) {
+    let srtContent = '';
+    project.subtitles.forEach((sub, idx) => {
+      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
+    });
+    try { fs.writeFileSync(srtPath, srtContent, 'utf8'); } catch (e) {}
+  }
+
+  project.updatedAt = new Date().toISOString();
+  writeProjects(projects);
+
+  return res.json({
+    success: true,
+    subtitles: project.subtitles,
+    visualSigns: project.visualSigns
+  });
+});
+
+// ====================================================
+// TORRENT & MAGNET LINK INGESTION ENDPOINTS
+// ====================================================
+
+app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req, res) => {
+  try {
+    const { projectName, projectType, mediaTitle, magnetLink } = req.body;
+    const userId = req.headers['x-user-id'] || req.body?.userId || 'usr_guest';
+    const users = readUsers();
+    const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
+
+    const projectId = 'subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const safeFolderName = (projectName || 'Uncategorized').replace(/[/\\?%*:|"<>]/g, '_').trim();
+
+    const torrentSource = req.file ? req.file.path : (magnetLink || '').trim();
+    if (!torrentSource) {
+      return res.status(400).json({ error: 'Please provide either a .torrent file or a valid magnet link.' });
+    }
+
+    const projects = readProjects();
+    projects[projectId] = {
+      id: projectId,
+      ownerId: userId,
+      ownerName: `${ownerUser.firstName} ${ownerUser.lastName}`.trim() || ownerUser.email,
+      auditorId: '',
+      auditorName: '',
+      auditStatus: 'Pending',
+      projectName: projectName || 'Torrent Project',
+      projectType: projectType || 'Episode',
+      mediaTitle: mediaTitle || (req.file ? req.file.originalname : 'Torrent Media'),
+      uploadDate: new Date().toISOString(),
+      videoUrl: '',
+      audioUrl: '',
+      srtUrl: '',
+      subtitles: [],
+      characters: [],
+      visualSigns: [],
+      sourceType: req.file ? 'torrent_file' : 'magnet',
+      status: 'downloading_torrent',
+      processingStatus: 'Connecting to swarm and verifying video contents...',
+      processingProgress: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    writeProjects(projects);
+
+    // Start background torrent ingestion
+    torrentService.ingestTorrent({
+      projectId,
+      userId,
+      torrentSource,
+      projectMeta: { projectName, projectType, mediaTitle, safeFolderName },
+      onSuccess: async ({ videoPath, videoFileName, originalName, fileSize }) => {
+        console.log(`🎬 [Torrent Ingest Success] Downloaded: ${originalName} (${(fileSize / (1024*1024)).toFixed(1)} MB)`);
+        const db = readProjects();
+        if (db[projectId]) {
+          db[projectId].videoUrl = `/uploads/${userId}/${safeFolderName}/${projectId}/${videoFileName}`;
+          db[projectId].status = 'processing';
+          db[projectId].processingStatus = 'Torrent downloaded. Starting Japanese audio and visual OCR analysis...';
+          writeProjects(db);
+        }
+
+        // Auto trigger full processing pipeline
+        try {
+          await executeVideoProcessing(projectId, 0, null);
+        } catch (procErr) {
+          console.error(`⚠️ [Torrent Auto-Process Error] ${projectId}:`, procErr.message);
+        }
+      },
+      onFail: async (err, reasonCode) => {
+        console.error(`❌ [Torrent Ingest Fail] ${projectId}: ${err.message} (${reasonCode})`);
+        const db = readProjects();
+        if (db[projectId]) {
+          db[projectId].status = 'failed';
+          db[projectId].processingStatus = `فشل تحميل التورنت: ${err.message}`;
+          db[projectId].torrentError = err.message;
+          db[projectId].torrentReason = reasonCode;
+          writeProjects(db);
+        }
+
+        // Send email notification if stalled with 0 seeds for 30 mins
+        if (reasonCode === 'failed_no_seeds') {
+          const user = users[userId];
+          if (user && user.email) {
+            const emailSubject = 'منصة Subtie — تعذر إكمال تحميل ملف التورنت';
+            const emailHtml = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; background-color: #0f172a; color: #ffffff;">
+                <h2 style="color: #c084fc;">منصة Subtie — تنبيه التورنت</h2>
+                <p>مرحباً ${user.firstName || 'المترجم'}،</p>
+                <p>نود إعلامك بتعذر إكمال تحميل ملف التورنت للمشروع <strong>${mediaTitle || 'حلقة أنمي'}</strong> نظراً لعدم توفر متصلين (Seeds) لأكثر من 30 دقيقة متواصلة.</p>
+                <p style="color: #f43f5e;">تم إيقاف المهمة وتنظيف المساحة التخزينية على السيرفر تلقائياً.</p>
+              </div>
+            `;
+            sendMailNotification(user.email, emailSubject, emailHtml);
+          }
+        }
+      }
+    });
+
+    return res.json({
+      success: true,
+      projectId,
+      status: 'downloading_torrent',
+      message: 'Torrent ingestion started in background.'
+    });
+  } catch (err) {
+    console.error('[Torrent Ingest Error]', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/torrent/:id/status', (req, res) => {
+  const status = torrentService.getJobStatus(req.params.id);
+  res.json({ success: true, status });
+});
+
+app.post('/api/torrent/:id/cancel', (req, res) => {
+  const cancelled = torrentService.cancelJob(req.params.id);
+  const projects = readProjects();
+  if (projects[req.params.id]) {
+    projects[req.params.id].status = 'cancelled';
+    projects[req.params.id].processingStatus = 'Torrent cancelled by user';
+    writeProjects(projects);
+  }
+  res.json({ success: true, cancelled });
 });
 
 // 20. Assign Auditor to Project

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video } from 'lucide-react';
+import { Upload, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, FileVideo, Layers, Cpu, AlertCircle, RefreshCw, Film, MessageSquare, Volume2, Clapperboard, Subtitles, Tv, Video, Link as LinkIcon, Radio, Globe, AlertTriangle } from 'lucide-react';
 import CloudUploadAnimation from './CloudUploadAnimation.jsx';
 
 export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lang = 'en', initialProjectName = '', initialProjectType = 'Episode' }) {
@@ -11,6 +11,13 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const [projectName, setProjectName] = useState(initialProjectName);
   const [projectType, setProjectType] = useState(initialProjectType);
   const [mediaTitle, setMediaTitle] = useState('');
+
+  // Source Type: 'direct' (Local MP4), 'torrent' (.torrent file), 'magnet' (Magnet URI)
+  const [sourceType, setSourceType] = useState('direct');
+  const [torrentFile, setTorrentFile] = useState(null);
+  const [magnetLink, setMagnetLink] = useState('');
+  const [torrentTelemetry, setTorrentTelemetry] = useState(null);
+  const [isIngestingTorrent, setIsIngestingTorrent] = useState(false);
 
   // Upload State
   const [videoFile, setVideoFile] = useState(null);
@@ -100,6 +107,24 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       if (data.progressExtract !== undefined) setProgressExtract(data.progressExtract);
       if (data.progressTranscode !== undefined) setProgressTranscode(data.progressTranscode);
       if (data.progressTranslate !== undefined) setProgressTranslate(data.progressTranslate);
+
+      // Handle Torrent Telemetry
+      if (data.stage && data.stage.startsWith('torrent_')) {
+        setTorrentTelemetry(data);
+        if (data.progress !== undefined) setUploadProgress(data.progress);
+        if (data.message) setUploadStatusText(data.message);
+
+        if (data.stage === 'torrent_completed') {
+          setTimeout(() => {
+            setCurrentStep(6);
+            setIsProcessing(true);
+            setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! بدء المعالجة بالذكاء الاصطناعي...' : 'Torrent downloaded! Starting AI transcription...');
+          }, 1500);
+        } else if (data.stage === 'torrent_failed') {
+          setErrorMessage(data.error || 'Failed to download torrent.');
+          setCurrentStep(6);
+        }
+      }
     });
 
     return () => {
@@ -107,6 +132,85 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       socket.disconnect();
     };
   }, [projectId]);
+
+  // Handle Torrent & Magnet Link Ingestion
+  const handleTorrentIngest = async () => {
+    if (sourceType === 'torrent' && !torrentFile) {
+      alert(isAr ? 'الرجاء اختيار ملف .torrent أولاً' : 'Please select a .torrent file first.');
+      return;
+    }
+    if (sourceType === 'magnet' && !magnetLink.trim().startsWith('magnet:?')) {
+      alert(isAr ? 'الرجاء إدخال رابط تورنت Magnet صالح يبدأ بـ magnet:?' : 'Please enter a valid magnet link starting with magnet:?');
+      return;
+    }
+
+    setIsIngestingTorrent(true);
+    setCurrentStep(4);
+    setUploadProgress(5);
+    setUploadStatusText(isAr ? 'جاري الاتصال بسرب التورنت وفحص ملفات الفيديو...' : 'Connecting to torrent swarm and verifying video contents...');
+
+    try {
+      let res;
+      if (sourceType === 'torrent') {
+        const fd = new FormData();
+        if (user?.id) fd.append('userId', user.id);
+        if (projectName) fd.append('projectName', projectName);
+        if (projectType) fd.append('projectType', projectType);
+        if (mediaTitle) fd.append('mediaTitle', mediaTitle);
+        fd.append('torrentFile', torrentFile);
+
+        res = await fetch('/api/torrent/ingest', {
+          method: 'POST',
+          headers: user?.id ? { 'x-user-id': user.id } : {},
+          body: fd
+        });
+      } else {
+        res = await fetch('/api/torrent/ingest', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(user?.id ? { 'x-user-id': user.id } : {})
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            projectName,
+            projectType,
+            mediaTitle,
+            magnetLink: magnetLink.trim()
+          })
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to initialize torrent ingestion');
+      }
+
+      setProjectId(data.projectId);
+      setUploadStatusText(isAr ? 'تم بدء الاتصال بالسرب والتحميل في الخلفية...' : 'Connected to swarm. Downloading video in background...');
+    } catch (err) {
+      console.error('Torrent ingest error:', err);
+      setErrorMessage(err.message);
+      setCurrentStep(6);
+    } finally {
+      setIsIngestingTorrent(false);
+    }
+  };
+
+  const handleCancelTorrent = async () => {
+    if (!projectId) {
+      onCancel();
+      return;
+    }
+    if (confirm(isAr ? 'هل أنت متأكد من إلغاء تحميل التورنت؟' : 'Are you sure you want to cancel this torrent download?')) {
+      try {
+        await fetch(`/api/torrent/${projectId}/cancel`, { method: 'POST' });
+      } catch (e) {
+        console.error('Cancel torrent error:', e);
+      }
+      onCancel();
+    }
+  };
 
   // Robust XHR Upload with Real Byte Tracking & Direct Fallback
   const handleUploadClick = () => {
@@ -497,92 +601,277 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         </div>
       )}
 
-      {/* STEP 3: Upload MP4 Video Dropzone */}
+      {/* STEP 3: Multi-Source Video Selection (Direct, .torrent, or Magnet Link) */}
       {currentStep === 3 && (
         <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/20 space-y-6">
           <div>
             <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
-              {isAr ? 'الخطوة 3: اختيار ملف الفيديو' : 'Step 3: Select Video File'}
+              {isAr ? 'الخطوة 3: اختيار مصدر الفيديو' : 'Step 3: Select Video Source'}
             </h3>
             <p className="text-xs text-slate-300 theme-light:text-purple-950 font-bold">
-              {isAr ? 'اختر ملف الفيديو بصيغة (.mp4) من جهازك ثم اضغط رفع.' : 'Select your video file from your local drive (.mp4 format) and click Upload.'}
+              {isAr ? 'اختر طريقة تزويد الفيديو: رفع مباشر، أو ملف تورنت، أو رابط مغناطيسي Magnet.' : 'Choose how you want to provide your video: direct file upload, .torrent file, or magnet link.'}
             </p>
           </div>
 
-          <div
-            onClick={() => document.getElementById('hidden-video-input')?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                const file = e.dataTransfer.files[0];
-                setVideoFile(file);
-                extractDuration(file);
-                if (!mediaTitle.trim()) {
-                  setMediaTitle(file.name.replace(/\.[^/.]+$/, ''));
-                }
-              }
-            }}
-            className="border-3 border-dashed border-purple-500/60 theme-light:border-purple-600 hover:border-pink-500 bg-purple-950/40 theme-light:bg-purple-100/90 rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center text-center transition cursor-pointer group shadow-inner"
-          >
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition">
-              <div className="w-full h-full bg-slate-950 theme-light:bg-purple-900 rounded-[22px] flex items-center justify-center">
-                <Upload className="w-8 h-8 text-pink-300 animate-bounce" />
-              </div>
-            </div>
+          {/* 3-Tab Source Switcher */}
+          <div className="grid grid-cols-3 gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-purple-500/30">
+            <button
+              type="button"
+              onClick={() => setSourceType('direct')}
+              className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
+                sourceType === 'direct'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <FileVideo className="w-4 h-4 shrink-0" />
+              <span className="truncate">{isAr ? 'ملف فيديو MP4' : 'Direct MP4 File'}</span>
+            </button>
 
-            <input
-              id="hidden-video-input"
-              type="file"
-              accept="video/*"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  setVideoFile(e.target.files[0]);
-                  extractDuration(e.target.files[0]);
+            <button
+              type="button"
+              onClick={() => setSourceType('torrent')}
+              className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
+                sourceType === 'torrent'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Radio className="w-4 h-4 shrink-0" />
+              <span className="truncate">{isAr ? 'ملف تورنت (.torrent)' : 'Torrent File'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSourceType('magnet')}
+              className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
+                sourceType === 'magnet'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <LinkIcon className="w-4 h-4 shrink-0" />
+              <span className="truncate">{isAr ? 'رابط مغناطيسي (Magnet)' : 'Magnet Link'}</span>
+            </button>
+          </div>
+
+          {/* TAB 1: Direct File Dropzone */}
+          {sourceType === 'direct' && (
+            <div
+              onClick={() => document.getElementById('hidden-video-input')?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  const file = e.dataTransfer.files[0];
+                  setVideoFile(file);
+                  extractDuration(file);
+                  if (!mediaTitle.trim()) {
+                    setMediaTitle(file.name.replace(/\.[^/.]+$/, ''));
+                  }
                 }
               }}
-              className="hidden"
-            />
-
-            {/* SOLID PURPLE CARD WITH PURE WHITE BOLD TEXT FOR SELECTED FILE (LTR) */}
-            {videoFile ? (
-              <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
-                <FileVideo className="w-7 h-7 text-pink-300 shrink-0" />
-                <div className="text-left">
-                  <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{videoFile.name}</p>
-                  <p className="text-xs text-purple-200 font-bold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+              className="border-3 border-dashed border-purple-500/60 theme-light:border-purple-600 hover:border-pink-500 bg-purple-950/40 theme-light:bg-purple-100/90 rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center text-center transition cursor-pointer group shadow-inner"
+            >
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                <div className="w-full h-full bg-slate-950 theme-light:bg-purple-900 rounded-[22px] flex items-center justify-center">
+                  <Upload className="w-8 h-8 text-pink-300 animate-bounce" />
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setVideoFile(null);
-                    setVideoDuration('00:00:00');
-                  }}
-                  className="px-3 py-1 rounded-xl bg-purple-900 hover:bg-rose-600 text-white text-xs font-black transition ml-auto"
-                >
-                  {isAr ? 'تغيير الملف' : 'Change'}
-                </button>
               </div>
-            ) : (
-              <>
-                <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
-                  {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
-                </h4>
-                <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
-                  {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
-                </p>
 
-                <button
-                  type="button"
-                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-purple-500/30 flex items-center space-x-2 rtl:space-x-reverse border border-purple-400/40 wizard-white-text hover:scale-105 transition"
-                >
-                  <Upload className="w-4 h-4 text-white" />
-                  <span>{isAr ? 'تصفح واختيار ملف من الجهاز' : 'Browse MP4 Video File'}</span>
-                </button>
-              </>
-            )}
-          </div>
+              <input
+                id="hidden-video-input"
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    setVideoFile(e.target.files[0]);
+                    extractDuration(e.target.files[0]);
+                    if (!mediaTitle.trim()) {
+                      setMediaTitle(e.target.files[0].name.replace(/\.[^/.]+$/, ''));
+                    }
+                  }
+                }}
+                className="hidden"
+              />
+
+              {videoFile ? (
+                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
+                  <FileVideo className="w-7 h-7 text-pink-300 shrink-0" />
+                  <div className="text-left">
+                    <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{videoFile.name}</p>
+                    <p className="text-xs text-purple-200 font-bold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVideoFile(null);
+                      setVideoDuration('00:00:00');
+                    }}
+                    className="px-3 py-1 rounded-xl bg-purple-900 hover:bg-rose-600 text-white text-xs font-black transition ml-auto"
+                  >
+                    {isAr ? 'تغيير الملف' : 'Change'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
+                    {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
+                  </h4>
+                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
+                    {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
+                  </p>
+
+                  <button
+                    type="button"
+                    className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-purple-500/30 flex items-center space-x-2 rtl:space-x-reverse border border-purple-400/40 wizard-white-text hover:scale-105 transition"
+                  >
+                    <Upload className="w-4 h-4 text-white" />
+                    <span>{isAr ? 'تصفح واختيار ملف من الجهاز' : 'Browse MP4 Video File'}</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: Torrent File Dropzone */}
+          {sourceType === 'torrent' && (
+            <div
+              onClick={() => document.getElementById('hidden-torrent-input')?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  const file = e.dataTransfer.files[0];
+                  if (!file.name.endsWith('.torrent')) {
+                    alert(isAr ? 'يجب اختيار ملف بامتداد .torrent' : 'Please select a valid .torrent file');
+                    return;
+                  }
+                  setTorrentFile(file);
+                  if (!mediaTitle.trim()) {
+                    setMediaTitle(file.name.replace(/\.[^/.]+$/, ''));
+                  }
+                }
+              }}
+              className="border-3 border-dashed border-purple-500/60 theme-light:border-purple-600 hover:border-pink-500 bg-purple-950/40 theme-light:bg-purple-100/90 rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center text-center transition cursor-pointer group shadow-inner"
+            >
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                <div className="w-full h-full bg-slate-950 theme-light:bg-purple-900 rounded-[22px] flex items-center justify-center">
+                  <Radio className="w-8 h-8 text-pink-300 animate-pulse" />
+                </div>
+              </div>
+
+              <input
+                id="hidden-torrent-input"
+                type="file"
+                accept=".torrent"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    setTorrentFile(e.target.files[0]);
+                    if (!mediaTitle.trim()) {
+                      setMediaTitle(e.target.files[0].name.replace(/\.[^/.]+$/, ''));
+                    }
+                  }
+                }}
+                className="hidden"
+              />
+
+              {torrentFile ? (
+                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
+                  <Radio className="w-7 h-7 text-pink-300 shrink-0" />
+                  <div className="text-left">
+                    <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{torrentFile.name}</p>
+                    <p className="text-xs text-purple-200 font-bold">{(torrentFile.size / 1024).toFixed(1)} KB (Torrent Metadata)</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTorrentFile(null);
+                    }}
+                    className="px-3 py-1 rounded-xl bg-purple-900 hover:bg-rose-600 text-white text-xs font-black transition ml-auto"
+                  >
+                    {isAr ? 'تغيير الملف' : 'Change'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
+                    {isAr ? 'انقر أو اسحب ملف تورنت (.torrent) هنا' : 'Click or Drag & Drop .torrent File Here'}
+                  </h4>
+                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
+                    {isAr ? 'يجب أن يحتوي التورنت على ملف فيديو واحد فقط بحد أقصى 2 جيجابايت' : 'Single video torrent only, maximum size 2GB (Non-video files ignored)'}
+                  </p>
+
+                  <button
+                    type="button"
+                    className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-purple-500/30 flex items-center space-x-2 rtl:space-x-reverse border border-purple-400/40 wizard-white-text hover:scale-105 transition"
+                  >
+                    <Radio className="w-4 h-4 text-white" />
+                    <span>{isAr ? 'تصفح ملف التورنت' : 'Browse .torrent File'}</span>
+                  </button>
+                </>
+              )}
+
+              {/* Requirement pill */}
+              <div className="mt-4 flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>{isAr ? 'حد أقصى 2GB • ملف فيديو فردي فقط • حماية انقطاع الموزعين لمدة 30 دقيقة' : 'Max 2GB • Single video file only • 30-min zero-seed safeguard active'}</span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: Magnet Link Input */}
+          {sourceType === 'magnet' && (
+            <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/30 space-y-4">
+              <div className="flex items-center space-x-3 rtl:space-x-reverse mb-2">
+                <div className="p-2.5 rounded-2xl bg-purple-600/30 text-pink-300 border border-purple-400/30">
+                  <LinkIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white">
+                    {isAr ? 'رابط التورنت المغناطيسي (Magnet URI)' : 'BitTorrent Magnet Link URI'}
+                  </h4>
+                  <p className="text-[11px] text-purple-300 font-bold">
+                    {isAr ? 'ألصق رابط التورنت المغناطيسي الذي يبدأ بـ magnet:?' : 'Paste the torrent magnet link starting with magnet:?'}
+                  </p>
+                </div>
+              </div>
+
+              <textarea
+                rows={3}
+                value={magnetLink}
+                onChange={(e) => {
+                  setMagnetLink(e.target.value);
+                  const dnMatch = e.target.value.match(/dn=([^&]+)/);
+                  if (dnMatch && dnMatch[1] && !mediaTitle.trim()) {
+                    try {
+                      setMediaTitle(decodeURIComponent(dnMatch[1]).replace(/\.[^/.]+$/, ''));
+                    } catch (err) {
+                      // fallback
+                    }
+                  }
+                }}
+                placeholder="magnet:?xt=urn:btih:..."
+                dir="ltr"
+                className="w-full bg-slate-950/80 border-2 border-purple-500/40 focus:border-pink-500 rounded-2xl p-4 text-white text-xs font-mono tracking-wide placeholder-slate-500 focus:outline-none transition"
+              />
+
+              {magnetLink && !magnetLink.trim().startsWith('magnet:?') && (
+                <p className="text-xs text-rose-400 font-bold flex items-center space-x-1.5 rtl:space-x-reverse">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{isAr ? 'الرابط غير صالح؛ يجب أن يبدأ بـ magnet:?' : 'Invalid link format; must start with magnet:?'}</span>
+                </p>
+              )}
+
+              {/* Requirement pill */}
+              <div className="flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-2 rounded-xl">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>{isAr ? 'حد أقصى 2GB • ملف فيديو واحد • حماية انقطاع الموزعين (Seeds) لمدة 30 دقيقة' : 'Max 2GB • Single video file only • 30-min zero-seed timeout safeguard'}</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-between pt-4">
             <button
@@ -592,56 +881,165 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               {isAr ? <ArrowRight className="w-4 h-4 text-white" /> : <ArrowLeft className="w-4 h-4 text-white" />}
               <span>{isAr ? 'السابق' : 'Back'}</span>
             </button>
-            <button
-              disabled={!videoFile}
-              onClick={handleUploadClick}
-              className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
-            >
-              <Upload className="w-4 h-4 text-white" />
-              <span>{isAr ? 'رفع الفيديو' : 'Upload Video'}</span>
-            </button>
+
+            {sourceType === 'direct' ? (
+              <button
+                disabled={!videoFile}
+                onClick={handleUploadClick}
+                className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
+              >
+                <Upload className="w-4 h-4 text-white" />
+                <span>{isAr ? 'رفع الفيديو' : 'Upload Video'}</span>
+              </button>
+            ) : sourceType === 'torrent' ? (
+              <button
+                disabled={!torrentFile || isIngestingTorrent}
+                onClick={handleTorrentIngest}
+                className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
+              >
+                <Radio className="w-4 h-4 text-white" />
+                <span>{isIngestingTorrent ? (isAr ? 'جاري الاتصال...' : 'Connecting...') : (isAr ? 'بدء معالجة التورنت' : 'Start Torrent Ingest')}</span>
+              </button>
+            ) : (
+              <button
+                disabled={!magnetLink.trim().startsWith('magnet:?') || isIngestingTorrent}
+                onClick={handleTorrentIngest}
+                className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 hover:opacity-90 disabled:opacity-50 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
+              >
+                <LinkIcon className="w-4 h-4 text-white" />
+                <span>{isIngestingTorrent ? (isAr ? 'جاري الاتصال...' : 'Connecting...') : (isAr ? 'بدء معالجة المغناطيس' : 'Start Magnet Ingest')}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* STEP 4: Uploading Progress with Cloud Motion & LTR File Name */}
+      {/* STEP 4: Live Upload or Torrent Ingestion Telemetry */}
       {currentStep === 4 && (
         <div className="glass-panel-glow rounded-3xl p-8 sm:p-10 border border-purple-500/30 text-center space-y-6">
-          <div>
-            <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
-              {isAr ? 'جاري رفع الفيديو إلى السيرفر' : 'Uploading Video to Server'}
-            </h3>
-            <p className="text-xs text-purple-300 theme-light:text-purple-950 font-extrabold">
-              {isAr ? 'يرجى الانتظار بينما يتم نقل الفيديو للسيرفر...' : 'Please wait while your video file is being uploaded...'}
-            </p>
-          </div>
+          {sourceType === 'direct' ? (
+            /* Direct File Upload Progress View */
+            <>
+              <div>
+                <h3 className="text-2xl font-extrabold text-white theme-light:text-slate-950 mb-1">
+                  {isAr ? 'جاري رفع الفيديو إلى السيرفر' : 'Uploading Video to Server'}
+                </h3>
+                <p className="text-xs text-purple-300 theme-light:text-purple-950 font-extrabold">
+                  {isAr ? 'يرجى الانتظار بينما يتم نقل الفيديو للسيرفر...' : 'Please wait while your video file is being uploaded...'}
+                </p>
+              </div>
 
-          <CloudUploadAnimation />
+              <CloudUploadAnimation />
 
-          <div className="max-w-md mx-auto space-y-3">
-            <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
-              <div
-                className="h-full rounded-full shimmer-bar transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              />
+              <div className="max-w-md mx-auto space-y-3">
+                <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
+                  <div
+                    className="h-full rounded-full shimmer-bar transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-extrabold" dir="ltr">
+                  <span className="text-white font-black bg-purple-950 theme-light:bg-purple-800 px-4 py-1 rounded-xl border border-purple-400 shadow-sm text-left truncate max-w-xs">
+                    {videoFile?.name}
+                  </span>
+                  <span className="text-white bg-purple-950 theme-light:bg-purple-800 px-3 py-1 rounded-full border border-purple-400 wizard-white-text">
+                    {uploadProgress}%
+                  </span>
+                </div>
+
+                {uploadStatusText && (
+                  <p className="text-xs font-extrabold text-pink-300 bg-purple-950/80 theme-light:bg-purple-900/90 py-1.5 px-4 rounded-xl border border-pink-400/40 inline-block">
+                    {uploadStatusText}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            /* BitTorrent Swarm Live Ingestion Telemetry View */
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-xl shadow-purple-500/30 flex items-center justify-center mb-3">
+                  <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
+                    <Radio className="w-7 h-7 text-pink-300 animate-pulse" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-black text-white theme-light:text-slate-950">
+                  {isAr ? 'جاري تنزيل ملف الفيديو عبر سرب التورنت' : 'Downloading Video via WebTorrent Swarm'}
+                </h3>
+                <p className="text-xs text-purple-300 font-bold max-w-md mx-auto">
+                  {uploadStatusText || (isAr ? 'الاتصال بالموزعين وتنزيل أجزاء الفيديو...' : 'Connecting to seeders and fetching pieces...')}
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="max-w-lg mx-auto space-y-2">
+                <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-500 transition-all duration-300 shadow-md"
+                    style={{ width: `${torrentTelemetry?.progress !== undefined ? torrentTelemetry.progress : uploadProgress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs font-black text-white px-1" dir="ltr">
+                  <span>{torrentTelemetry?.downloadedMb || 0} MB / {torrentTelemetry?.totalMb || 0} MB</span>
+                  <span className="text-pink-300">{torrentTelemetry?.progress !== undefined ? torrentTelemetry.progress : uploadProgress}%</span>
+                </div>
+              </div>
+
+              {/* Live 4-Card Telemetry Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-lg mx-auto text-left" dir="ltr">
+                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Speed</span>
+                  <span className="text-sm font-black text-white">{torrentTelemetry?.downloadSpeed || 0} MB/s</span>
+                </div>
+                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Swarm Peers</span>
+                  <span className="text-sm font-black text-pink-300">{torrentTelemetry?.numPeers || 0} peers</span>
+                </div>
+                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Seeders</span>
+                  <span className="text-sm font-black text-emerald-400">{torrentTelemetry?.numSeeds !== undefined ? torrentTelemetry.numSeeds : 0} seeds</span>
+                </div>
+                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Est. Time</span>
+                  <span className="text-sm font-black text-white">{torrentTelemetry?.eta !== undefined ? torrentTelemetry.eta : '--'}</span>
+                </div>
+              </div>
+
+              {/* Zero-Seeds Safeguard Notice */}
+              <div className="max-w-lg mx-auto bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 flex items-start space-x-3 rtl:space-x-reverse text-right">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-200">
+                  <p className="font-bold text-amber-300 mb-0.5">
+                    {isAr ? 'حماية عدم توفر الموزعين (Seeds Safeguard)' : 'Zero-Seeds Safeguard Active'}
+                  </p>
+                  <p className="leading-relaxed opacity-90 text-[11px]">
+                    {isAr
+                      ? 'إذا استمر عدد الموزعين (Seeds) عند 0 لأكثر من 30 دقيقة متواصلة، فسيقوم السيرفر بإلغاء التنزيل تلقائياً، وحذف الملفات الجزئية، وإرسال تنبيه بالبريد.'
+                      : 'If seeds remain 0 for more than 30 consecutive minutes, the job will abort automatically, purge partial files, and notify you.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons: Run in Background & Cancel */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-6 py-2.5 rounded-xl bg-purple-900/60 hover:bg-purple-800 text-white font-extrabold text-xs border border-purple-400/40 shadow-md transition"
+                >
+                  {isAr ? 'العمل في الخلفية (العودة للرئيسية)' : 'Run in Background (Return Home)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelTorrent}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/80 text-rose-300 font-extrabold text-xs border border-rose-500/40 transition"
+                >
+                  {isAr ? 'إلغاء التنزيل' : 'Cancel Download'}
+                </button>
+              </div>
             </div>
-
-            {/* FILE NAME & LIVE STATUS IN PURE BOLD WHITE TEXT (LTR) */}
-            <div className="flex items-center justify-between text-xs font-extrabold" dir="ltr">
-              <span className="text-white font-black bg-purple-950 theme-light:bg-purple-800 px-4 py-1 rounded-xl border border-purple-400 shadow-sm text-left truncate max-w-xs">
-                {videoFile?.name}
-              </span>
-              <span className="text-white bg-purple-950 theme-light:bg-purple-800 px-3 py-1 rounded-full border border-purple-400 wizard-white-text">
-                {uploadProgress}%
-              </span>
-            </div>
-
-            {uploadStatusText && (
-              <p className="text-xs font-extrabold text-pink-300 bg-purple-950/80 theme-light:bg-purple-900/90 py-1.5 px-4 rounded-xl border border-pink-400/40 inline-block">
-                {uploadStatusText}
-              </p>
-            )}
-          </div>
+          )}
         </div>
       )}
 
