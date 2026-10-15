@@ -149,7 +149,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     setUploadProgress(5);
     setUploadStatusText(isAr ? 'جاري الاتصال بسرب التورنت وفحص ملفات الفيديو...' : 'Connecting to torrent swarm and verifying video contents...');
 
-    try {
+    const sendIngestRequest = async (targetUrl) => {
       let res;
       if (sourceType === 'torrent') {
         const fd = new FormData();
@@ -159,13 +159,13 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         if (mediaTitle) fd.append('mediaTitle', mediaTitle);
         fd.append('torrentFile', torrentFile);
 
-        res = await fetch('/api/torrent/ingest', {
+        res = await fetch(targetUrl, {
           method: 'POST',
           headers: user?.id ? { 'x-user-id': user.id } : {},
           body: fd
         });
       } else {
-        res = await fetch('/api/torrent/ingest', {
+        res = await fetch(targetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -181,16 +181,37 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         });
       }
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to initialize torrent ingestion');
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        throw new Error(`Server returned invalid response (${res.status}): ${text ? text.slice(0, 100) : 'empty response'}`);
+      }
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `Request failed with status ${res.status}`);
+      }
+      return data;
+    };
+
+    try {
+      let data = null;
+      try {
+        data = await sendIngestRequest('/api/torrent/ingest');
+      } catch (proxyErr) {
+        console.warn('Ingest attempt 1 failed, trying direct backend port 3001...', proxyErr.message);
+        const protocol = window.location.protocol || 'http:';
+        const hostname = window.location.hostname || 'localhost';
+        const directUrl = `${protocol}//${hostname}:3001/api/torrent/ingest`;
+        data = await sendIngestRequest(directUrl);
       }
 
       setProjectId(data.projectId);
       setUploadStatusText(isAr ? 'تم بدء الاتصال بالسرب والتحميل في الخلفية...' : 'Connected to swarm. Downloading video in background...');
     } catch (err) {
       console.error('Torrent ingest error:', err);
-      setErrorMessage(err.message);
+      setErrorMessage(err.message || 'Failed to start torrent ingestion');
       setCurrentStep(6);
     } finally {
       setIsIngestingTorrent(false);
