@@ -95,14 +95,14 @@ export default function Header({
           {user && (
             <button
               onClick={onOpenProjects}
-              className="relative flex items-center space-x-1 sm:space-x-2 rtl:space-x-reverse text-[10px] sm:text-sm font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all shadow-md shadow-purple-500/20"
+              className="flex items-center space-x-1.5 sm:space-x-2 rtl:space-x-reverse text-[10px] sm:text-xs font-black text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-95 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition-all shadow-md shadow-purple-500/20 hover:scale-[1.02]"
             >
-              <FolderKanban className="w-4 h-4 text-pink-200" />
+              <FolderKanban className="w-4 h-4 text-pink-200 shrink-0" />
               <span className="hidden sm:inline">{isAr ? 'مشاريعي' : 'My Projects'}</span>
               {unreadProjectsCount > 0 && (
                 <span
-                  title={isAr ? `لديك ${unreadProjectsCount} مشروع جاهز جديد!` : `You have ${unreadProjectsCount} new completed project!`}
-                  className="absolute -top-1.5 -right-1.5 rtl:-right-auto rtl:-left-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-pink-500 px-1 text-[10px] font-black text-white ring-2 ring-purple-950 animate-pulse shadow-lg shadow-pink-500/50"
+                  title={isAr ? `لديك ${unreadProjectsCount} مشروع جاهز جديد!` : `You have ${unreadProjectsCount} new completed project(s)!`}
+                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black text-white bg-pink-500/90 border border-pink-300/40 shadow-inner shrink-0"
                 >
                   {unreadProjectsCount}
                 </span>
