@@ -20,8 +20,23 @@ import { torrentService } from './services/torrentService.js';
 import { detectVisualSignsFromVideo } from './services/visionOcrService.js';
 import { getAllFolderCovers, generateFolderCover } from './services/folderCoverService.js';
 
-// Set ffmpeg binary path from installer
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+// Set ffmpeg binary path from installer with system fallback & executable verification
+let resolvedFfmpegPath = ffmpegInstaller?.path;
+try {
+  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+    resolvedFfmpegPath = process.env.FFMPEG_PATH;
+  } else if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
+    if (fs.existsSync('/usr/bin/ffmpeg')) resolvedFfmpegPath = '/usr/bin/ffmpeg';
+    else if (fs.existsSync('/usr/local/bin/ffmpeg')) resolvedFfmpegPath = '/usr/local/bin/ffmpeg';
+  }
+  if (resolvedFfmpegPath && fs.existsSync(resolvedFfmpegPath)) {
+    try { fs.chmodSync(resolvedFfmpegPath, 0o755); } catch (_) {}
+    ffmpeg.setFfmpegPath(resolvedFfmpegPath);
+    console.log(`🎬 [FFmpeg] Path verified: ${resolvedFfmpegPath}`);
+  }
+} catch (ffErr) {
+  console.warn('⚠️ [FFmpeg Init Warning]:', ffErr.message);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -237,12 +252,30 @@ function findProjectDirectories(userId, projectName, projectId) {
   return { targetDir, urlPrefix, safeFolderName, videoFiles };
 }
 
-// Extract Audio Track from MP4 Video File locally
+// Helper to probe video duration in seconds via FFprobe
+function probeVideoDuration(videoPath) {
+  return new Promise((resolve) => {
+    try {
+      ffmpeg.ffprobe(videoPath, (err, metadata) => {
+        if (!err && metadata?.format?.duration) {
+          resolve(Math.round(metadata.format.duration));
+        } else {
+          resolve(0);
+        }
+      });
+    } catch (_) {
+      resolve(0);
+    }
+  });
+}
+
+// Extract Audio Track from MP4/MKV/Video File locally
 function extractAudioTrack(videoPath, audioPath) {
   return new Promise((resolve, reject) => {
     console.log(`[Audio Extractor] Extracting audio track from: ${videoPath} -> ${audioPath}`);
     ffmpeg(videoPath)
       .output(audioPath)
+      .outputOptions(['-y'])
       .noVideo()
       .audioCodec('libmp3lame')
       .audioBitrate(128)
@@ -1295,76 +1328,113 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
   }
 });
 
+// Track currently active processing jobs to prevent concurrent duplicate jobs
+const activeProcessingSet = new Set();
+
 async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes = null) {
   if (!projectId) {
     if (optionalRes) return optionalRes.status(400).json({ error: 'projectId is required' });
     throw new Error('projectId is required');
   }
 
-  const projects = readProjects();
-  const project = projects[projectId];
-
-  if (!project) {
-    return res.status(404).json({ error: 'Project not found' });
+  // Prevent duplicate concurrent runs for the exact same project
+  if (activeProcessingSet.has(projectId)) {
+    console.log(`⏳ [Process] Project ${projectId} is already processing in background.`);
+    if (optionalRes) {
+      return optionalRes.json({ success: true, message: 'Processing already in progress', projectId });
+    }
+    return { success: true, message: 'Processing already in progress' };
   }
 
-  const userId = project.ownerId || 'usr_guest';
+  activeProcessingSet.add(projectId);
 
-  // --- Step 2: Backend Credit & Security Check ---
-  if (userId !== 'usr_guest') {
-    const users = readUsers();
-    const user = users[userId];
-    if (user) {
-      const videoMinutes = Math.ceil((videoDurationSecs || 0) / 60) || 24; // Fallback to 24 mins if undefined
-      const isAdmin = user.role === 'Admin';
-      
-      if (!isAdmin && videoMinutes > 40 && !user.hasPurchased) {
-        return res.status(403).json({ error: 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.' });
-      }
-      
-      if (!isAdmin && user.minuteBalance < videoMinutes) {
-        return res.status(402).json({ error: `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.` });
-      }
-      
-      // Deduct minutes (skip for admins)
-      if (!isAdmin) {
-        user.minuteBalance -= videoMinutes;
-        writeUsers(users);
-        console.log(`[Wallet] Deducted ${videoMinutes} mins from user ${userId}. Remaining: ${user.minuteBalance} mins.`);
-      } else {
-        console.log(`[Wallet] Admin ${userId} bypassed minute deduction. Video: ${videoMinutes} mins.`);
+  try {
+    const projects = readProjects();
+    const project = projects[projectId];
+
+    if (!project) {
+      if (optionalRes) return optionalRes.status(404).json({ error: 'Project not found' });
+      throw new Error('Project not found');
+    }
+
+    // If already fully transcribed, return existing project data immediately
+    if (project.processingProgress === 100 && Array.isArray(project.subtitles) && project.subtitles.length > 0) {
+      console.log(`⚡ [Process] Project ${projectId} already completed. Returning existing subtitles.`);
+      const cachedPayload = {
+        success: true,
+        projectId,
+        audioUrl: project.audioUrl,
+        srtUrl: project.srtUrl,
+        subtitles: project.subtitles,
+        visualSigns: project.visualSigns || [],
+        characters: project.characters || [],
+        project
+      };
+      if (optionalRes) return optionalRes.json(cachedPayload);
+      return cachedPayload;
+    }
+
+    const userId = project.ownerId || 'usr_guest';
+    const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, projectId);
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Search for video file (video.* or any standard video container in targetDir)
+    let foundVideoFile = videoFiles.length > 0 ? videoFiles[0] : null;
+    if (!foundVideoFile && fs.existsSync(targetDir)) {
+      const allFiles = fs.readdirSync(targetDir);
+      foundVideoFile = allFiles.find(f => /\.(mp4|mkv|avi|mov|webm|flv|ts|wmv|m4v)$/i.test(f) || f.startsWith('video.'));
+    }
+
+    if (!foundVideoFile) {
+      const errMsg = `Video file not found for project ${projectId} in ${targetDir}`;
+      if (optionalRes) return optionalRes.status(404).json({ error: errMsg });
+      throw new Error(errMsg);
+    }
+
+    const videoPath = path.join(targetDir, foundVideoFile);
+    const audioPath = path.join(targetDir, 'audio.mp3');
+    const srtPath = path.join(targetDir, 'subtitle.srt');
+
+    // Probe duration from video file if not passed from client
+    let finalDurationSecs = Number(videoDurationSecs) || 0;
+    if (finalDurationSecs <= 0) {
+      finalDurationSecs = await probeVideoDuration(videoPath);
+      console.log(`⏱️ [Video Probe] Detected video duration: ${finalDurationSecs}s (${(finalDurationSecs / 60).toFixed(1)} mins)`);
+    }
+
+    // --- Step 2: Backend Credit & Security Check ---
+    if (userId !== 'usr_guest') {
+      const users = readUsers();
+      const user = users[userId];
+      if (user) {
+        const videoMinutes = Math.ceil(finalDurationSecs / 60) || 24;
+        const isAdmin = user.role === 'Admin';
+        
+        if (!isAdmin && videoMinutes > 40 && !user.hasPurchased) {
+          const errMsg = 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.';
+          if (optionalRes) return optionalRes.status(403).json({ error: errMsg });
+          throw new Error(errMsg);
+        }
+        
+        if (!isAdmin && user.minuteBalance < videoMinutes) {
+          const errMsg = `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.`;
+          if (optionalRes) return optionalRes.status(402).json({ error: errMsg });
+          throw new Error(errMsg);
+        }
+        
+        // Deduct minutes (skip for admins)
+        if (!isAdmin) {
+          user.minuteBalance -= videoMinutes;
+          writeUsers(users);
+          console.log(`[Wallet] Deducted ${videoMinutes} mins from user ${userId}. Remaining: ${user.minuteBalance} mins.`);
+        } else {
+          console.log(`[Wallet] Admin ${userId} bypassed minute deduction. Video: ${videoMinutes} mins.`);
+        }
       }
     }
-  }
-  // ----------------------------------------------
-  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
-  
-  const newNestedDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
-  const oldFlatDir = path.join(UPLOADS_DIR, userId, projectId);
-  const rootDir = path.join(UPLOADS_DIR, projectId);
-  
-  let targetDir = newNestedDir;
-  let urlPrefix = `/uploads/${userId}/${safeFolderName}/${projectId}`;
-  
-  if (!fs.existsSync(newNestedDir)) {
-    if (fs.existsSync(oldFlatDir)) {
-      targetDir = oldFlatDir;
-      urlPrefix = `/uploads/${userId}/${projectId}`;
-    } else if (fs.existsSync(rootDir)) {
-      targetDir = rootDir;
-      urlPrefix = `/uploads/${projectId}`;
-    }
-  }
-  
-  const videoFiles = fs.readdirSync(targetDir).filter(f => f.startsWith('video.'));
-  if (videoFiles.length === 0) {
-    if (optionalRes) return optionalRes.status(404).json({ error: 'Video file not found for this project' });
-    throw new Error('Video file not found for this project');
-  }
-
-  const videoPath = path.join(targetDir, videoFiles[0]);
-  const audioPath = path.join(targetDir, 'audio.mp3');
-  const srtPath = path.join(targetDir, 'subtitle.srt');
 
   const emitAndSaveProgress = (extract, transcode, translate, status, overall) => {
     (function() {
@@ -1407,9 +1477,8 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     console.log(`📁 [StorageService] Cloudflare R2 not active (${r2Status.mode}). Missing credentials: [${(r2Status.missingKeys || []).join(', ')}]`);
   }
 
-  try {
-    // Step 1: Extract Audio
-    emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10);
+  // Step 1: Extract Audio
+  emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10);
     await extractAudioTrack(videoPath, audioPath);
     emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25);
     
@@ -1451,14 +1520,18 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
-        .outputOptions(['-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
+        .outputOptions(['-y', '-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
         .output(path.join(chunksDir, 'chunk_%03d.mp3'))
         .on('end', resolve)
         .on('error', reject)
         .run();
     });
 
-    const chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+    let chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+    if (chunkFiles.length === 0 && fs.existsSync(audioPath)) {
+      fs.copyFileSync(audioPath, path.join(chunksDir, 'chunk_000.mp3'));
+      chunkFiles = ['chunk_000.mp3'];
+    }
     console.log(`[Audio Splitter] Splitted into ${chunkFiles.length} chunks.`);
 
     let allParsedSubtitles = [];
@@ -1741,12 +1814,30 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
 
   } catch (err) {
     console.error('[Process AI Error]', err);
+    try {
+      const errDb = readProjects();
+      if (errDb[projectId]) {
+        errDb[projectId].status = 'failed';
+        errDb[projectId].processingStatus = `فشل في معالجة الصوت: ${err.message}`;
+        errDb[projectId].error = err.message;
+        writeProjects(errDb);
+      }
+      socketService.emitProgress(projectId, {
+        progress: 0,
+        status: `فشل في معالجة الصوت: ${err.message}`,
+        stage: 'process_failed',
+        error: err.message
+      });
+    } catch (_) {}
+
     if (optionalRes) {
       return optionalRes.status(500).json({
         error: 'AI Transcription Error: ' + err.message
       });
     }
     throw err;
+  } finally {
+    activeProcessingSet.delete(projectId);
   }
 }
 

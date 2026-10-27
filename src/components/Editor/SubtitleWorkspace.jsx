@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users, Eye } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users, Eye, Cpu, Sparkles, RefreshCw } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
 import CharacterMatrix from './CharacterMatrix.jsx';
 import VisualSignsMatrix from './VisualSignsMatrix.jsx';
@@ -32,11 +32,72 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
   const [exportFormat, setExportFormat] = useState('srt'); // 'srt' or 'ass'
   const [exportLang, setExportLang] = useState('ar'); // 'ar', 'en', 'ja'
   const [showReSubtitleModal, setShowReSubtitleModal] = useState(false);
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStatusText, setProcessingStatusText] = useState('');
 
   const videoRef = useRef(null);
   const videoContainerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const isAr = lang === 'ar';
+
+  const handleStartAIProcessing = async () => {
+    setIsProcessingAI(true);
+    setProcessingProgress(10);
+    setProcessingStatusText(isAr ? 'جاري بدء استخراج الصوت والترجمة...' : 'Starting audio extraction and transcription...');
+
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/project/${project.id}/progress?t=${Date.now()}`);
+        const pData = await res.json();
+        if (pData?.progress > 0) {
+          setProcessingProgress(pData.progress);
+          if (pData.status) setProcessingStatusText(pData.status);
+        }
+      } catch (_) {}
+    }, 2000);
+
+    try {
+      const res = await fetch('/api/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          projectName: project.projectName,
+          projectType: project.projectType,
+          mediaTitle: project.mediaTitle,
+          videoDurationSecs: Math.round(videoDurationSeconds || 0)
+        })
+      });
+
+      const data = await res.json();
+      clearInterval(pollTimer);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to process audio');
+      }
+
+      if (data.project) {
+        setProject(data.project);
+        if (Array.isArray(data.project.subtitles)) setSubtitles(data.project.subtitles);
+        if (Array.isArray(data.project.characters)) setCharacters(data.project.characters);
+        if (Array.isArray(data.project.visualSigns)) setVisualSigns(data.project.visualSigns);
+      }
+      setToastMsg(isAr ? 'اكتمل تفريغ الصوت وتوليد الترجمة بنجاح!' : 'AI Transcription completed successfully!');
+      setTimeout(() => setToastMsg(null), 4000);
+    } catch (err) {
+      clearInterval(pollTimer);
+      console.error('Trigger process error:', err);
+      alert(err.message || 'Failed to process video');
+    } finally {
+      setIsProcessingAI(false);
+      setProcessingProgress(0);
+      setProcessingStatusText('');
+    }
+  };
 
   // Seek video player to exact timestamp when clicking a line
   const handleSelectLine = (sub) => {
@@ -727,6 +788,48 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
               Japanese • English • Arabic
             </span>
           </div>
+
+          {/* Empty Subtitle State with 1-Click Trigger */}
+          {subtitles.length === 0 && (
+            <div className="glass-panel p-8 sm:p-12 rounded-3xl border border-purple-500/40 text-center space-y-6 my-4 shadow-xl shadow-purple-950/30">
+              <div className="w-16 h-16 mx-auto rounded-full bg-purple-900/40 border border-purple-500/50 flex items-center justify-center text-purple-300">
+                <Cpu className="w-8 h-8 text-pink-300 animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-white">
+                  {isAr ? 'لم يتم استخراج الترجمة بعد لهذا الفيديو' : 'No Subtitles Extracted Yet for this Video'}
+                </h3>
+                <p className="text-sm text-purple-200 theme-light:text-purple-800 max-w-lg mx-auto leading-relaxed">
+                  {isAr
+                    ? 'ملف الفيديو متوفر وجاهز على الخادم. يمكنك الآن تشغيل نموذج الذكاء الاصطناعي لاستخراج الصوت الياباني، تقسيمه وتوليد الترجمة العربية والإنجليزية فوراً.'
+                    : 'The video is ready on the server. You can trigger the AI pipeline now to extract Japanese audio, segment chunks, and generate Arabic and English subtitles.'}
+                </p>
+              </div>
+
+              {isProcessingAI ? (
+                <div className="max-w-md mx-auto space-y-3 p-4 rounded-2xl bg-purple-950/50 border border-purple-500/30">
+                  <div className="flex justify-between text-xs font-black text-purple-200">
+                    <span>{processingStatusText || (isAr ? 'جاري المعالجة...' : 'Processing...')}</span>
+                    <span>{processingProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-purple-500/30">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 h-full transition-all duration-300"
+                      style={{ width: `${processingProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={handleStartAIProcessing}
+                  className="inline-flex items-center space-x-2 rtl:space-x-reverse px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white font-black text-base shadow-xl shadow-purple-500/40 hover:scale-105 transition border-2 border-purple-400"
+                >
+                  <Sparkles className="w-5 h-5 text-pink-200" />
+                  <span>{isAr ? 'بدء تفريغ الصوت وتوليد الترجمة الذكية الآن' : 'Start Audio Extraction & AI Transcription Now'}</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Subtitle Line Cards */}
           <div className="space-y-3">

@@ -43,6 +43,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCompleted, setUploadCompleted] = useState(false);
   const hasCompletedProcessRef = useRef(false);
+  const startAIProcessingRef = useRef(null);
 
   // AI Processing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -144,10 +145,14 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
         if (data.stage === 'torrent_completed') {
           setTimeout(() => {
-            setCurrentStep(6);
-            setIsProcessing(true);
-            setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! بدء المعالجة بالذكاء الاصطناعي...' : 'Torrent downloaded! Starting AI transcription...');
-          }, 1500);
+            if (startAIProcessingRef.current) {
+              startAIProcessingRef.current(projectId);
+            } else {
+              setCurrentStep(6);
+              setIsProcessing(true);
+              setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! بدء المعالجة بالذكاء الاصطناعي...' : 'Torrent downloaded! Starting AI transcription...');
+            }
+          }, 1000);
         } else if (data.stage === 'torrent_failed') {
           setErrorMessage(data.error || 'Failed to download torrent.');
           setCurrentStep(6);
@@ -176,8 +181,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           if (st.progress !== undefined) setUploadProgress(st.progress);
           if (st.status === 'completed') {
             clearInterval(pollInterval);
-            setCurrentStep(6);
-            setIsProcessing(true);
+            if (startAIProcessingRef.current) {
+              startAIProcessingRef.current(projectId);
+            } else {
+              setCurrentStep(6);
+              setIsProcessing(true);
+            }
           } else if (st.status === 'failed') {
             clearInterval(pollInterval);
             setErrorMessage(st.error || 'Torrent download failed');
@@ -408,20 +417,23 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline
-  const startAIProcessing = async () => {
+  const startAIProcessing = async (overrideProjectId = null) => {
+    const activeId = overrideProjectId || projectId;
+    if (!activeId) return;
+
     setCurrentStep(6);
     setIsProcessing(true);
     setErrorMessage(null);
     setProcessProgress(5);
-    setProgressExtract(50);
+    setProgressExtract(25);
     setProgressTranscode(0);
     setProgressTranslate(0);
-    setProcessStatusMsg(isAr ? 'جاري بدء المعالجة...' : 'Initializing processing...');
+    setProcessStatusMsg(isAr ? 'جاري بدء استخراج الصوت والمعالجة...' : 'Initializing audio extraction and processing...');
 
     // Start polling the server for real progress
     const progressTimer = setInterval(async () => {
       try {
-        const pRes = await fetch(`/api/project/${projectId}/progress?t=${Date.now()}`, { cache: 'no-store' });
+        const pRes = await fetch(`/api/project/${activeId}/progress?t=${Date.now()}`, { cache: 'no-store' });
         const pData = await pRes.json();
         if (pData.progress > 0) {
           setProcessProgress(pData.progress);
@@ -440,13 +452,16 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     try {
       const res = await fetch('/api/process', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
         body: JSON.stringify({
-          projectId,
+          projectId: activeId,
           projectName: projectName || 'Untitled Project',
           projectType,
           mediaTitle: mediaTitle || 'Untitled Video',
-          videoDurationSecs
+          videoDurationSecs: videoDurationSecs || 0
         })
       });
 
@@ -478,6 +493,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       setErrorMessage(isAr ? 'خطأ في الاتصال أثناء معالجة الصوت بالذكاء الاصطناعي.' : 'Network connection error during audio extraction / Gemini AI processing.');
     }
   };
+
+  useEffect(() => {
+    startAIProcessingRef.current = startAIProcessing;
+  });
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
