@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +38,7 @@ export function getAllFolderCovers() {
   return readFolderCovers();
 }
 
-export async function generateFolderCover(folderName, geminiPool) {
+export async function generateFolderCover(folderName, geminiPool, options = {}) {
   if (!folderName || !folderName.trim()) {
     throw new Error('Folder name is required');
   }
@@ -46,36 +47,63 @@ export async function generateFolderCover(folderName, geminiPool) {
   const safeFolderName = cleanFolderName.replace(/[\/\\?%*:|"<>]/g, '_').trim();
   const localFileName = `${safeFolderName}.jpg`;
   const localFilePath = path.join(COVERS_DIR, localFileName);
+  const { force = false } = options;
 
-  // 1. Craft an Anime Art prompt with Gemini
-  let artPrompt = `${cleanFolderName} anime, scenic background wallpaper, dramatic anime atmosphere, vibrant colors, Makoto Shinkai style, 8k anime art`;
+  // If already generated and file exists on disk, reuse immediately without re-promoting
+  const existingCovers = readFolderCovers();
+  if (!force && existingCovers[cleanFolderName] && fs.existsSync(localFilePath) && fs.statSync(localFilePath).size > 2000) {
+    console.log(`⚡ [FolderCoverService] Reusing existing cached cover for "${cleanFolderName}"`);
+    return {
+      success: true,
+      folderName: cleanFolderName,
+      coverUrl: existingCovers[cleanFolderName],
+      cached: true
+    };
+  }
+
+  // 1. Craft an intelligent, genre-aware anime art prompt with Gemini
+  let artPrompt = `${cleanFolderName} anime scenic landscape, vibrant colors, dramatic anime sky, Makoto Shinkai aesthetic, high detail cinematic anime background, 8k`;
 
   if (geminiPool) {
+    let keyInfo = null;
     try {
-      const apiKeyInfo = geminiPool.acquireKey();
-      if (apiKeyInfo?.key) {
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKeyInfo.key}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `You are an anime art director. For the anime title "${cleanFolderName}", generate a detailed 1-sentence prompt to create a stunning, cinematic anime landscape or key visual background without text/logos. Describe atmospheric scenery, lighting, and anime aesthetic. Output ONLY the raw prompt string, nothing else.`
-                }]
-              }]
-            })
+      keyInfo = geminiPool.acquireKey();
+      const apiKey = keyInfo.rawKey || process.env.GEMINI_API_KEY;
+      if (apiKey) {
+        const ai = keyInfo.client || new GoogleGenAI({ apiKey });
+        const promptRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{
+            role: 'user',
+            parts: [{
+              text: `You are an elite anime art director. Analyze the anime series title "${cleanFolderName}".
+1. Identify the anime series, its mood, setting, atmosphere, and genre (e.g. supernatural action shonen, fantasy isekai adventure, psychological thriller, modern slice of life, sci-fi cyberpunk, historical romance).
+2. Write a single, highly descriptive prompt for a stunning, panoramic anime landscape or iconic scenic background representing this specific series.
+3. Include rich vibrant colors, volumetric lighting, dramatic anime sky, studio quality (Makoto Shinkai / Ufotable aesthetic), highly detailed anime background art, 8k wallpaper.
+4. STRICT REQUIREMENT: Absolutely NO text, NO typography, NO watermark, NO logo, NO characters in closeup.
+Output ONLY the final raw prompt sentence, nothing else.`
+            }]
+          }],
+          config: {
+            temperature: 0.4,
+            maxOutputTokens: 120
           }
-        );
-        const gData = await geminiRes.json();
-        const generatedText = gData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (generatedText && generatedText.length > 10) {
-          artPrompt = generatedText.replace(/[\r\n"']/g, ' ');
-          console.log(`🎨 [FolderCoverService] Gemini crafted prompt for "${cleanFolderName}": ${artPrompt}`);
+        });
+
+        if (keyInfo.keyId) {
+          geminiPool.releaseKey(keyInfo.keyId, true);
+        }
+
+        const generatedText = (promptRes.text || '').replace(/[\r\n"']/g, ' ').trim();
+        if (generatedText && generatedText.length > 15) {
+          artPrompt = generatedText;
+          console.log(`🎨 [FolderCoverService] Intelligent prompt for "${cleanFolderName}": ${artPrompt}`);
         }
       }
     } catch (gErr) {
+      if (keyInfo && keyInfo.keyId) {
+        geminiPool.releaseKey(keyInfo.keyId, false, gErr.message);
+      }
       console.warn(`[FolderCoverService] Prompt generation fallback for ${cleanFolderName}:`, gErr.message);
     }
   }

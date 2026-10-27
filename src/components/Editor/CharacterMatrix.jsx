@@ -48,50 +48,51 @@ function CharacterCard({ character, onSave, isSaving, lang }) {
 
   return (
     <div
-      className={`relative rounded-2xl p-3.5 border transition-all duration-300 flex flex-col justify-between ${
+      className={`relative rounded-3xl p-5 border transition-all duration-300 flex flex-col justify-between ${
         isDirty
-          ? 'bg-gradient-to-b from-purple-950/70 to-pink-950/50 border-pink-500/60 shadow-lg shadow-pink-500/10 ring-1 ring-pink-500/30'
-          : 'bg-slate-900/90 border-purple-500/25 hover:border-purple-500/40'
+          ? 'bg-gradient-to-b from-purple-950/70 to-pink-950/50 border-pink-500/60 shadow-xl shadow-pink-500/10 ring-1 ring-pink-500/30'
+          : 'bg-slate-900/90 border-purple-500/25 hover:border-purple-500/40 shadow-lg'
       }`}
       dir={isAr ? 'rtl' : 'ltr'}
     >
-      {/* Card Header: Avatar + Display Name + Mention Count */}
-      <div className="flex items-center gap-3 mb-3">
-        <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-purple-950 border border-purple-500/40 shrink-0 flex items-center justify-center shadow-md">
+      {/* Centered Character Showcase: Large Prominent Photo & Title */}
+      <div className="flex flex-col items-center text-center mb-4">
+        <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-purple-950 border-2 border-purple-400/60 shadow-xl shadow-purple-950/50 shrink-0 flex items-center justify-center group">
           {character.avatarUrl ? (
             <img
               src={character.avatarUrl}
               alt={character.arabicName || character.englishName || 'Character'}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               onError={(e) => {
                 e.target.style.display = 'none';
               }}
             />
           ) : (
-            <User className="w-5 h-5 text-purple-300" />
+            <User className="w-12 h-12 text-purple-300/70" />
           )}
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900" />
+          <span className="absolute bottom-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-emerald-400 ring-2 ring-slate-900 shadow-md" />
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-1">
-            <h4 className="text-xs font-black text-white truncate" title={character.arabicName || character.englishName}>
-              {character.arabicName || character.englishName || character.japaneseName || (isAr ? 'شخصية غير مسماة' : 'Character')}
-            </h4>
+        {/* Character Title & Mentions */}
+        <div className="mt-3 w-full max-w-xs">
+          <h4 className="text-sm sm:text-base font-black text-white truncate" title={character.arabicName || character.englishName}>
+            {character.arabicName || character.englishName || character.japaneseName || (isAr ? 'شخصية غير مسماة' : 'Character')}
+          </h4>
+          <div className="flex items-center justify-center gap-2 mt-1">
             {character.mentionsCount ? (
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-[10px] font-bold text-purple-300 whitespace-nowrap">
-                {character.mentionsCount} {isAr ? 'سطر' : 'lines'}
+              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-[10px] font-black text-purple-200 whitespace-nowrap shadow-sm">
+                {character.mentionsCount} {isAr ? 'سطر حوار' : 'dialogue lines'}
               </span>
             ) : null}
+            <span className="text-[11px] text-slate-400 truncate font-mono">
+              {character.japaneseName || character.englishName || '—'}
+            </span>
           </div>
-          <p className="text-[10px] text-slate-400 truncate font-mono">
-            {character.japaneseName || character.englishName || '—'}
-          </p>
         </div>
       </div>
 
       {/* 3 Editable Inputs */}
-      <div className="space-y-2 mb-3">
+      <div className="space-y-2.5 mb-4">
         {/* Japanese Name */}
         <div>
           <label className="text-[10px] font-bold text-purple-300/80 mb-0.5 block">
@@ -102,7 +103,7 @@ function CharacterCard({ character, onSave, isSaving, lang }) {
             value={japaneseName}
             onChange={(e) => setJapaneseName(e.target.value)}
             placeholder="まる子 / さくら ももこ"
-            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-sans"
+            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none transition font-sans"
             dir="ltr"
           />
         </div>
@@ -117,7 +118,7 @@ function CharacterCard({ character, onSave, isSaving, lang }) {
             value={englishName}
             onChange={(e) => setEnglishName(e.target.value)}
             placeholder="Maruko / Momoko Sakura"
-            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-sans"
+            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none transition font-sans"
             dir="ltr"
           />
         </div>
@@ -132,7 +133,7 @@ function CharacterCard({ character, onSave, isSaving, lang }) {
             value={arabicName}
             onChange={(e) => setArabicName(e.target.value)}
             placeholder="ماروكو / موموكو ساكورا"
-            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none transition font-bold"
+            className="w-full bg-slate-950/80 border border-purple-500/25 focus:border-pink-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none transition font-bold"
             dir="rtl"
           />
         </div>

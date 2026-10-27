@@ -457,18 +457,31 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Find active subtitle line for video player preview
-  const activeCue = subtitles.find(s => {
+  // Filter ALL active subtitle cues at current video timestamp (supports simultaneous dialogue & signs)
+  const activeCues = subtitles.filter(s => {
     const start = s.startSeconds ?? 0;
     const end = s.endSeconds ?? (start + 3);
     return currentTime >= start && currentTime <= end;
   });
 
-  const previewOverlayText = activeCue ? (
-    activeSrtLang === 'ja' ? activeCue.japaneseText :
-    activeSrtLang === 'en' ? activeCue.englishText :
-    activeCue.arabicText
-  ) : '';
+  const isSignCue = (cue) => {
+    if (cue.track === 'sign') return true;
+    if (cue.category && ['title', 'character_card', 'sign', 'letter', 'screen', 'location'].includes(cue.category)) return true;
+    if (cue.assPosition && cue.assPosition !== '\\an2') return true;
+    return false;
+  };
+
+  const getCueText = (cue) => {
+    if (!cue) return '';
+    return activeSrtLang === 'ja'
+      ? (cue.japaneseText || '')
+      : activeSrtLang === 'en'
+      ? (cue.englishText || '')
+      : (cue.arabicText || cue.englishText || cue.japaneseText || '');
+  };
+
+  const activeSigns = activeCues.filter(isSignCue);
+  const activeDialogues = activeCues.filter(c => !isSignCue(c));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -613,15 +626,87 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
               {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
             </button>
 
-            {/* DYNAMIC SUBTITLE OVERLAY BASED ON RADIO SELECTION */}
-            {previewOverlayText && (
-              <div className={`absolute left-3 right-3 z-20 flex items-center justify-center text-center pointer-events-none ${isFullscreen ? 'bottom-24' : 'bottom-10'}`}>
-                <p
-                  className={`${isFullscreen ? 'text-2xl sm:text-4xl' : 'text-sm sm:text-base'} font-black leading-snug anime-subtitle-overlay tracking-wide bg-black/60 px-4 py-2 rounded-xl border border-white/20 drop-shadow-2xl`}
-                  dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}
-                >
-                  {previewOverlayText}
-                </p>
+            {/* DYNAMIC MULTI-TRACK SUBTITLE OVERLAYS: SIMULTANEOUS SIGNS & DIALOGUE */}
+
+            {/* 1. In-Universe Visual Signs (Top, Center, or Screen Cards) */}
+            {activeSigns.length > 0 && (
+              <div className="absolute inset-0 pointer-events-none z-20 p-4 flex flex-col justify-between">
+                {/* Top Signs (\an8, \an7, \an9 or default signs) */}
+                <div className="flex flex-col items-center gap-2">
+                  {activeSigns
+                    .filter(s => !s.assPosition || s.assPosition === '\\an8' || s.assPosition === '\\an7' || s.assPosition === '\\an9')
+                    .map(s => {
+                      const text = getCueText(s);
+                      if (!text) return null;
+                      const alignClass = s.assPosition === '\\an7' ? 'self-start text-left rtl:text-right' : s.assPosition === '\\an9' ? 'self-end text-right rtl:text-left' : 'self-center text-center';
+                      return (
+                        <div key={s.id} className={`${alignClass} max-w-[85%] bg-purple-950/90 text-white px-3.5 py-1.5 rounded-xl border border-pink-500/60 shadow-2xl backdrop-blur-md`}>
+                          <span className="text-[10px] text-pink-300 font-bold block uppercase tracking-wider">
+                            {s.category ? (isAr ? `[ لوحة: ${s.category} ]` : `[ Sign: ${s.category} ]`) : (isAr ? '[ لوحة توضيحية ]' : '[ Visual Sign ]')}
+                          </span>
+                          <p className={`${isFullscreen ? 'text-xl sm:text-2xl' : 'text-xs sm:text-sm'} font-black text-white`} dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}>
+                            {text}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Center Signs (\an5) */}
+                <div className="flex flex-col items-center gap-2 my-auto">
+                  {activeSigns
+                    .filter(s => s.assPosition === '\\an5')
+                    .map(s => {
+                      const text = getCueText(s);
+                      if (!text) return null;
+                      return (
+                        <div key={s.id} className="max-w-[80%] bg-purple-950/95 text-white px-4 py-2 rounded-2xl border-2 border-pink-500/70 shadow-2xl backdrop-blur-lg text-center">
+                          <span className="text-[10px] text-pink-300 font-bold block uppercase tracking-wider mb-0.5">
+                            {isAr ? '[ نص معروض بالمركز ]' : '[ Center Display ]'}
+                          </span>
+                          <p className={`${isFullscreen ? 'text-2xl sm:text-3xl' : 'text-sm sm:text-base'} font-black text-white`} dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}>
+                            {text}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Bottom Signs (\an2 signs positioned slightly above bottom dialogue) */}
+                <div className="flex flex-col items-center gap-2 mb-16">
+                  {activeSigns
+                    .filter(s => s.assPosition === '\\an2')
+                    .map(s => {
+                      const text = getCueText(s);
+                      if (!text) return null;
+                      return (
+                        <div key={s.id} className="max-w-[85%] bg-purple-950/90 text-white px-3 py-1 rounded-xl border border-pink-400/50 shadow-xl backdrop-blur-md text-center">
+                          <p className={`${isFullscreen ? 'text-lg sm:text-xl' : 'text-xs sm:text-sm'} font-bold text-pink-200`} dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}>
+                            {text}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* 2. Spoken Dialogue Subtitles (Bottom Screen Overlay) */}
+            {activeDialogues.length > 0 && (
+              <div className={`absolute left-3 right-3 z-20 flex flex-col items-center justify-center text-center pointer-events-none ${isFullscreen ? 'bottom-20' : 'bottom-8'} gap-1.5`}>
+                {activeDialogues.map(d => {
+                  const text = getCueText(d);
+                  if (!text) return null;
+                  return (
+                    <p
+                      key={d.id}
+                      className={`${isFullscreen ? 'text-2xl sm:text-4xl' : 'text-sm sm:text-base'} font-black leading-snug anime-subtitle-overlay tracking-wide bg-black/70 px-4 py-1.5 rounded-xl border border-white/20 drop-shadow-2xl text-white`}
+                      dir={activeSrtLang === 'ar' ? 'rtl' : 'ltr'}
+                    >
+                      {text}
+                    </p>
+                  );
+                })}
               </div>
             )}
           </div>

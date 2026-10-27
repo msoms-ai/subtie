@@ -148,32 +148,41 @@ export async function detectVisualSignsFromVideo(videoPath, geminiPool, options 
 
         // Add prompt
         parts.push({
-          text: `You are an expert anime visual OCR and translation AI.
+          text: `You are an elite anime visual OCR and translation AI specialist.
 Analyze the following batch of anime frames.
-Detect any on-screen written JAPANESE text, such as:
-1. Episode Title Cards (e.g. 第1071話 ... / タイトル)
-2. Location & Time markers (e.g. 東京・渋谷区 / 3年後)
-3. Shop banners, street signs, posters, warnings (e.g. 居酒屋, 立ち入り禁止)
-4. Handwritten letters, diary entries, smartphone text messages
-5. Newspaper and book headlines
+Your mission is to detect, transcribe, and translate ONLY IN-UNIVERSE WRITTEN JAPANESE TEXT.
 
-CRITICAL INSTRUCTIONS:
-- Ignore English fan subtitles at the bottom if already present. Focus on native on-screen animation text!
-- For each piece of on-screen text detected, output a JSON object:
-  - "frameIndex": integer index matching the frame (0 to ${batch.length - 1})
-  - "category": one of ["title", "location", "sign", "letter", "headline"]
-  - "japaneseText": original Japanese text as written
-  - "englishText": accurate English translation
-  - "arabicText": natural and professional Arabic fansub translation (ترجمة إمسومس احترافية)
-  - "assPosition": recommended ASS screen alignment tag:
-    - "\\an8" (Top Center - for episode titles and top banners)
-    - "\\an7" (Top Left - for location stamps and notes)
-    - "\\an9" (Top Right - for timestamps or episode numbers)
-    - "\\an2" (Bottom Center - for regular notes)
-    - "\\an5" (Center - for central screen letters/cards)
-  - "displayDurationSeconds": estimated seconds on screen (usually 3 to 6 seconds)
+STRICT EXCLUSION RULES (CRITICAL - DO NOT DETECT THESE):
+1. IGNORE ALL OPENING (OP) AND ENDING (ED) SONG LYRICS (Romaji, Kanji lyrics, karaoke text).
+2. IGNORE ALL PRODUCTION CREDITS & STAFF ROLLS:
+   - Voice actors / Cast (CV / 声優 / 出演)
+   - Directors, animators, producers (監督 / 作画監督 / 演出 / 制作)
+   - Studio names, sponsor cards (提供 / この番組は...), production committees (製作委員会).
+3. IGNORE TV BROADCAST LOGOS, station watermarks (e.g. TOKYO MX, BS11, AT-X, TV Tokyo) and warning/clock overlays.
+4. IGNORE existing English fansub dialogue subtitles at the bottom.
 
-If no written text is found in a frame, do not include an object for it.
+WHAT YOU MUST CONCENTRATE ON (STRICT INCLUSION):
+1. Episode Title Cards & Chapter Titles (e.g. 第1話「始まりの街」, タイトル)
+2. Character Identification Cards, Name/Profile intro banners, Bounties, or Stat boxes
+3. In-universe signage: Store banners, street signs, billboards, classroom boards, warning posters (e.g. 居酒屋, 立ち入り禁止, 指名手配)
+4. In-scene written materials: Handwritten letters, diary entries, smartphone/PC screens, notes, newspapers, books
+5. In-universe location stamps & time stamps (e.g. 翌朝, 3日後, 帝都・中央広場)
+
+FOR EACH DETECTED ITEM, OUTPUT A JSON OBJECT:
+- "frameIndex": integer index matching the frame (0 to ${batch.length - 1})
+- "category": one of ["title", "character_card", "sign", "letter", "screen", "location"]
+- "japaneseText": original Japanese text as written on screen
+- "englishText": accurate, contextual English translation
+- "arabicText": natural and professional Arabic fansub translation (ترجمة إمسومس احترافية)
+- "assPosition": recommended ASS screen alignment tag:
+  - "\\an8" (Top Center - for episode titles and top banners)
+  - "\\an7" (Top Left - for location stamps and notes)
+  - "\\an9" (Top Right - for timestamps or episode numbers)
+  - "\\an5" (Center - for central letters, character cards, fullscreen text)
+  - "\\an2" (Bottom Center - only if clearly positioned near bottom)
+- "displayDurationSeconds": realistic on-screen duration in seconds (typically 3 to 6 seconds)
+
+If no valid in-universe written text is found in a frame, do not include an object for it.
 Return ONLY a valid JSON array of objects. Example:
 [
   {

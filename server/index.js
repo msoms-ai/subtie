@@ -1340,10 +1340,11 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
   // Prevent duplicate concurrent runs for the exact same project
   if (activeProcessingSet.has(projectId)) {
     console.log(`⏳ [Process] Project ${projectId} is already processing in background.`);
+    const curProject = readProjects()[projectId];
     if (optionalRes) {
-      return optionalRes.json({ success: true, message: 'Processing already in progress', projectId });
+      return optionalRes.json({ success: true, message: 'Processing already in progress', projectId, project: curProject });
     }
-    return { success: true, message: 'Processing already in progress' };
+    return { success: true, message: 'Processing already in progress', project: curProject };
   }
 
   activeProcessingSet.add(projectId);
@@ -2263,11 +2264,11 @@ app.get('/api/folders/covers', (req, res) => {
 
 app.post('/api/folders/generate-cover', async (req, res) => {
   try {
-    const { folderName } = req.body;
+    const { folderName, force } = req.body;
     if (!folderName) {
       return res.status(400).json({ error: 'Folder name is required' });
     }
-    const result = await generateFolderCover(folderName, geminiPool);
+    const result = await generateFolderCover(folderName, geminiPool, { force: !!force });
     return res.json(result);
   } catch (err) {
     console.error('[FolderCover Error]', err);
@@ -2464,7 +2465,9 @@ app.get('/api/project/:id/export', (req, res) => {
       const rawEnd = formatSecondsToTimestampstamp(sub.endTime || '00:00:05,000');
       const start = rawStart.replace(',', '.').substring(0, 10);
       const end = rawEnd.replace(',', '.').substring(0, 10);
-      ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}\n`;
+      const isSign = sub.track === 'sign' || (sub.assPosition && sub.assPosition !== '\\an2');
+      const posTag = sub.assPosition ? `{\\${sub.assPosition.replace(/^\\+/, '')}}` : '';
+      ass += `Dialogue: 0,${start},${end},${isSign ? 'Sign' : 'Default'},,0,0,0,,${posTag}${text}\n`;
     });
 
     res.setHeader('Content-Type', 'application/octet-stream; charset=utf-8');

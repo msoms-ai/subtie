@@ -39,7 +39,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
       const res = await fetch('/api/folders/generate-cover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderName })
+        body: JSON.stringify({ folderName, force: true })
       });
       const data = await res.json();
       if (data?.success && data?.coverUrl) {
@@ -74,20 +74,6 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
     fetchProjects();
     fetchFolderCovers();
   }, [user]);
-
-  // Proactive background auto-generation for folders missing covers
-  useEffect(() => {
-    if (viewMode === 'folders' && projects.length > 0) {
-      const folderNames = [...new Set(projects.map(p => p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')))];
-      folderNames.forEach((folder, idx) => {
-        if (!folderCovers[folder] && !generatingCovers[folder]) {
-          setTimeout(() => {
-            handleGenerateCover(null, folder);
-          }, idx * 1200);
-        }
-      });
-    }
-  }, [projects, viewMode, folderCovers]);
 
   const handleDeleteConfirm = async () => {
     if (!deletingProjectId) return;

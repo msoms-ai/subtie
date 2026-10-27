@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import LandingHero from './components/LandingHero.jsx';
@@ -14,6 +14,7 @@ import AuthModal from './components/Auth/AuthModal.jsx';
 import UserProfileModal from './components/Profile/UserProfileModal.jsx';
 import AdminUserConsoleModal from './components/Admin/AdminUserConsoleModal.jsx';
 import AssignAuditorModal from './components/Projects/AssignAuditorModal.jsx';
+import { RefreshCw } from 'lucide-react';
 
 export default function App() {
   const [view, setView] = useState('landing'); // 'landing', 'projects', 'wizard', 'editor'
@@ -43,6 +44,57 @@ export default function App() {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [preSelectedFolder, setPreSelectedFolder] = useState('');
+
+  // Viewed Projects tracking for Header notification badge
+  const [viewedProjectIds, setViewedProjectIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('subtie_viewed_projects');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [unreadProjectsCount, setUnreadProjectsCount] = useState(0);
+
+  const markProjectAsViewed = useCallback((projectId) => {
+    if (!projectId) return;
+    setViewedProjectIds(prev => {
+      if (prev.includes(projectId)) return prev;
+      const updated = [...prev, projectId];
+      try {
+        localStorage.setItem('subtie_viewed_projects', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  }, []);
+
+  const refreshUnreadProjects = useCallback(async () => {
+    if (!user?.id) {
+      setUnreadProjectsCount(0);
+      return;
+    }
+    try {
+      const res = await fetch('/api/projects', {
+        headers: { 'x-user-id': user.id },
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.projects || []);
+      const unread = list.filter(p => {
+        const isDone = p.processingProgress === 100 || p.status === 'Completed';
+        return isDone && !viewedProjectIds.includes(p.id);
+      }).length;
+      setUnreadProjectsCount(unread);
+    } catch (e) {
+      console.warn('Failed to refresh unread projects count:', e);
+    }
+  }, [user?.id, viewedProjectIds]);
+
+  useEffect(() => {
+    refreshUnreadProjects();
+    const timer = setInterval(refreshUnreadProjects, 10000);
+    return () => clearInterval(timer);
+  }, [refreshUnreadProjects]);
 
   // Persist user state & preferences
   useEffect(() => {
@@ -104,14 +156,24 @@ export default function App() {
   };
 
   const handleCompleteProcess = (project) => {
-    setCurrentProject(project);
-    setView('editor');
+    if (project && project.id) {
+      setCurrentProject(project);
+      markProjectAsViewed(project.id);
+      setView('editor');
+    } else {
+      setView('projects');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleLoadProject = (project) => {
-    setCurrentProject(project);
-    setView('editor');
+    if (project && project.id) {
+      setCurrentProject(project);
+      markProjectAsViewed(project.id);
+      setView('editor');
+    } else {
+      setView('projects');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -160,6 +222,7 @@ export default function App() {
         onToggleLang={toggleLang}
         onToggleTheme={toggleTheme}
         user={user}
+        unreadProjectsCount={unreadProjectsCount}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAdminConsole={() => setIsAdminConsoleOpen(true)}
@@ -206,17 +269,37 @@ export default function App() {
           />
         )}
 
-        {view === 'editor' && currentProject && (
-          <SubtitleWorkspace
-            user={user}
-            initialProject={currentProject}
-            onSaveAndClose={() => setView('projects')}
-            onAddAnotherEpisode={() => {
-              setPreSelectedFolder(currentProject.projectName || '');
-              setView('wizard');
-            }}
-            lang={lang}
-          />
+        {view === 'editor' && (
+          currentProject ? (
+            <SubtitleWorkspace
+              user={user}
+              initialProject={currentProject}
+              onSaveAndClose={() => setView('projects')}
+              onAddAnotherEpisode={() => {
+                setPreSelectedFolder(currentProject.projectName || '');
+                setView('wizard');
+              }}
+              lang={lang}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-20 p-8 glass-panel rounded-3xl border border-purple-500/30 text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-purple-900/50 border border-purple-500/40 flex items-center justify-center mx-auto text-purple-300">
+                <RefreshCw className="w-6 h-6 animate-spin text-pink-400" />
+              </div>
+              <h3 className="text-base font-black text-white">
+                {isAr ? 'جاري تحميل المشروع...' : 'Loading Project...'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {isAr ? 'إذا لم يفتح المحرر تلقائياً، يمكنك العودة لقائمة المشاريع.' : 'If the workspace does not open automatically, return to your projects.'}
+              </p>
+              <button
+                onClick={() => setView('projects')}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black transition shadow-md"
+              >
+                {isAr ? 'الذهاب إلى مشاريعي' : 'Go to My Projects'}
+              </button>
+            </div>
+          )
         )}
       </main>
 

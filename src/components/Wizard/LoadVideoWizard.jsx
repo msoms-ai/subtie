@@ -118,10 +118,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       // Automatic transition to editor when AI processing reaches 100%
       if ((data.progress === 100 || data.status === 'Completed') && !hasCompletedProcessRef.current) {
         hasCompletedProcessRef.current = true;
-        fetch(`/api/project/${projectId}`)
+        fetch(`/api/project/${projectId}`, {
+          headers: user?.id ? { 'x-user-id': user.id } : {}
+        })
           .then(r => r.json())
           .then(proj => {
-            if (proj && !proj.error) {
+            if (proj && proj.id && !proj.error) {
               setProcessStatusMsg(isAr ? 'اكتملت المعالجة بنجاح! جاري فتح محرر الترجمة...' : 'Processing complete! Opening subtitle workspace...');
               setTimeout(() => {
                 setIsProcessing(false);
@@ -479,11 +481,38 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         return;
       }
 
+      let finalProject = data.project;
+      if (!finalProject) {
+        try {
+          const pRes = await fetch(`/api/project/${activeId}`, {
+            headers: user?.id ? { 'x-user-id': user.id } : {}
+          });
+          const pData = await pRes.json();
+          if (pData && pData.id && !pData.error) {
+            finalProject = pData;
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch final project immediately:', fetchErr);
+        }
+      }
+
       setProcessProgress(100);
       setProcessStatusMsg(isAr ? 'اكتملت المعالجة! جاري فتح محرر الترجمة...' : 'Processing complete! Loading Working Table Workspace...');
-      setTimeout(() => {
+      setTimeout(async () => {
         setIsProcessing(false);
-        onCompleteProcess(data.project);
+        if (finalProject && finalProject.id) {
+          onCompleteProcess(finalProject);
+        } else {
+          try {
+            const pRes = await fetch(`/api/project/${activeId}`, {
+              headers: user?.id ? { 'x-user-id': user.id } : {}
+            });
+            const pData = await pRes.json();
+            if (pData && pData.id && !pData.error) {
+              onCompleteProcess(pData);
+            }
+          } catch (e) {}
+        }
       }, 600);
 
     } catch (err) {
