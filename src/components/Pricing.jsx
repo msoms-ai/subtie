@@ -148,7 +148,26 @@ export default function Pricing({ lang, user, onRequireAuth }) {
         })
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      let data;
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        console.error('Non-JSON server response:', text);
+        if (res.status === 404 || text.includes('Cannot POST')) {
+          throw new Error(
+            isAr
+              ? 'خادم الدفع غير مفعل أو يحتاج إلى إعادة تشغيل. يرجى الضغط على Restart لتطبيق Node.js في لوحة Plesk.'
+              : 'Payment endpoint not found (404). Please restart the Node.js application in your Plesk panel to load the latest backend routes.'
+          );
+        }
+        throw new Error(
+          isAr
+            ? 'استجابة غير صالحة من السيرفر. يرجى إعادة تشغيل تطبيق Node.js.'
+            : 'Invalid server response. Please restart the Node.js application.'
+        );
+      }
 
       if (!res.ok || !data.success || !data.redirectUrl) {
         throw new Error(data.error || (isAr ? 'فشل بدء عملية الدفع عبر Ziina' : 'Failed to initiate Ziina payment.'));

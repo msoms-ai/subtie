@@ -154,7 +154,14 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentIntentId })
       })
-        .then(res => res.json())
+        .then(async res => {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            return res.json();
+          }
+          const text = await res.text();
+          throw new Error(text.includes('Cannot POST') ? (lang === 'ar' ? 'خادم الدفع غير مفعل، يرجى إعادة تشغيل تطبيق Node.js.' : 'Payment endpoint not loaded. Please restart the Node.js app.') : (lang === 'ar' ? 'استجابة غير صالحة من السيرفر.' : 'Invalid server response.'));
+        })
         .then(data => {
           if (data.success && data.status === 'completed') {
             setPaymentModalData({
