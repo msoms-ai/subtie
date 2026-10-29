@@ -160,7 +160,7 @@ export default function App() {
             return res.json();
           }
           const text = await res.text();
-          throw new Error(text.includes('Cannot POST') ? (lang === 'ar' ? 'خادم الدفع غير مفعل، يرجى إعادة تشغيل تطبيق Node.js.' : 'Payment endpoint not loaded. Please restart the Node.js app.') : (lang === 'ar' ? 'استجابة غير صالحة من السيرفر.' : 'Invalid server response.'));
+          throw new Error(lang === 'ar' ? 'تعذر التحقق من الدفع حالياً، يرجى التواصل مع الدعم الفني.' : 'Unable to verify payment at this time. Please contact support.');
         })
         .then(data => {
           if (data.success && data.status === 'completed') {

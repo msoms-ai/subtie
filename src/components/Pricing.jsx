@@ -155,17 +155,10 @@ export default function Pricing({ lang, user, onRequireAuth }) {
       } else {
         const text = await res.text();
         console.error('Non-JSON server response:', text);
-        if (res.status === 404 || text.includes('Cannot POST')) {
-          throw new Error(
-            isAr
-              ? 'خادم الدفع غير مفعل أو يحتاج إلى إعادة تشغيل. يرجى الضغط على Restart لتطبيق Node.js في لوحة Plesk.'
-              : 'Payment endpoint not found (404). Please restart the Node.js application in your Plesk panel to load the latest backend routes.'
-          );
-        }
         throw new Error(
           isAr
-            ? 'استجابة غير صالحة من السيرفر. يرجى إعادة تشغيل تطبيق Node.js.'
-            : 'Invalid server response. Please restart the Node.js application.'
+            ? 'خدمة الدفع غير متوفرة حالياً، يرجى المحاولة لاحقاً أو التواصل مع الدعم الفني.'
+            : 'Payment service is temporarily unavailable. Please try again later or contact support.'
         );
       }
 
