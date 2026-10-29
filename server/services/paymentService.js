@@ -1,9 +1,70 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Ensure .env is explicitly loaded from root or server folder
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+dotenv.config();
+
+// Bulletproof key resolver that checks process.env and disk files directly
+export function getZiinaApiKey() {
+  if (process.env.ZIINA_API_KEY && process.env.ZIINA_API_KEY.trim()) {
+    return process.env.ZIINA_API_KEY.trim();
+  }
+
+  const possiblePaths = [
+    path.join(__dirname, '..', '..', '.env'),
+    path.join(__dirname, '..', '.env'),
+    path.resolve(process.cwd(), '.env'),
+    '/var/www/vhosts/msoms.ai/subtie.msoms.ai/.env'
+  ];
+
+  for (const envPath of possiblePaths) {
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const match = content.match(/ZIINA_API_KEY\s*=\s*["']?([^"'\r\n]+)["']?/);
+        if (match && match[1]) {
+          const key = match[1].trim();
+          process.env.ZIINA_API_KEY = key;
+          return key;
+        }
+      } catch (_) {}
+    }
+  }
+  return null;
+}
+
+export function getZiinaTestMode() {
+  if (process.env.ZIINA_TEST_MODE !== undefined) {
+    return process.env.ZIINA_TEST_MODE === 'true' || process.env.ZIINA_TEST_MODE === true;
+  }
+
+  const possiblePaths = [
+    path.join(__dirname, '..', '..', '.env'),
+    path.join(__dirname, '..', '.env'),
+    path.resolve(process.cwd(), '.env'),
+    '/var/www/vhosts/msoms.ai/subtie.msoms.ai/.env'
+  ];
+
+  for (const envPath of possiblePaths) {
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const match = content.match(/ZIINA_TEST_MODE\s*=\s*["']?([^"'\r\n]+)["']?/);
+        if (match && match[1]) {
+          return match[1].trim() === 'true';
+        }
+      } catch (_) {}
+    }
+  }
+  return true;
+}
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json');
@@ -250,9 +311,9 @@ export function getPackagesCatalogue() {
  * Creates a Ziina Payment Intent on Ziina API
  */
 export async function createPaymentIntent({ userId, packageId, customMinutes, origin }) {
-  const apiKey = process.env.ZIINA_API_KEY;
+  const apiKey = getZiinaApiKey();
   if (!apiKey) {
-    throw new Error('Ziina API Key is not configured on the server (ZIINA_API_KEY).');
+    throw new Error('Ziina API Key is not configured on the server (ZIINA_API_KEY). Please add ZIINA_API_KEY to your .env file or environment variables.');
   }
 
   const users = readUsers();
@@ -270,7 +331,7 @@ export async function createPaymentIntent({ userId, packageId, customMinutes, or
     throw new Error(`Invalid package selected: "${packageId}".`);
   }
 
-  const isTestMode = process.env.ZIINA_TEST_MODE === 'true' || process.env.ZIINA_TEST_MODE === true || !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+  const isTestMode = getZiinaTestMode();
 
   // Base domain for customer redirect callbacks
   const siteUrl = (origin || process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '');
@@ -354,7 +415,7 @@ export async function verifyAndCreditPayment(paymentIntentId) {
   }
 
   const cleanIntentId = paymentIntentId.trim();
-  const apiKey = process.env.ZIINA_API_KEY;
+  const apiKey = getZiinaApiKey();
   if (!apiKey) {
     throw new Error('Ziina API Key is missing on the server.');
   }
