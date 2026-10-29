@@ -1,0 +1,20 @@
+{
+  "be08f26d-a8b5-4143-b973-e75b276c4204": {
+    "txId": "tx_1793309410972_mm9sp",
+    "paymentIntentId": "be08f26d-a8b5-4143-b973-e75b276c4204",
+    "userId": "usr_admin_msoms1",
+    "userEmail": "msoms1@gmail.com",
+    "packageId": "ep_single",
+    "packageTitleAr": "حلقة واحدة",
+    "packageTitleEn": "Single Episode",
+    "minutes": 25,
+    "amountFils": 400,
+    "priceAed": 4,
+    "currency": "AED",
+    "status": "requires_payment_instrument",
+    "test": true,
+    "redirectUrl": "https://pay.ziina.com/payment_intent/be08f26d-a8b5-4143-b973-e75b276c4204",
+    "createdAt": "2026-10-29T21:30:10.972Z",
+    "completedAt": null
+  }
+}

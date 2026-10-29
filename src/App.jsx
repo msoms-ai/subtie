@@ -14,7 +14,7 @@ import AuthModal from './components/Auth/AuthModal.jsx';
 import UserProfileModal from './components/Profile/UserProfileModal.jsx';
 import AdminUserConsoleModal from './components/Admin/AdminUserConsoleModal.jsx';
 import AssignAuditorModal from './components/Projects/AssignAuditorModal.jsx';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, X } from 'lucide-react';
 
 export default function App() {
   const [view, setView] = useState('landing'); // 'landing', 'projects', 'wizard', 'editor'
@@ -44,6 +44,7 @@ export default function App() {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [preSelectedFolder, setPreSelectedFolder] = useState('');
+  const [paymentModalData, setPaymentModalData] = useState(null); // { status: 'verifying' | 'success' | 'canceled' | 'error', minutesAdded, newBalance, message }
 
   // Viewed Projects tracking for Header notification badge
   const [viewedProjectIds, setViewedProjectIds] = useState(() => {
@@ -124,6 +125,72 @@ export default function App() {
         .catch(err => console.error('Failed to load shared project:', err));
     }
   }, []);
+
+  // Handle Ziina Payment Callback (?payment_status=success/cancel&payment_intent_id=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment_status');
+    const paymentIntentId = params.get('payment_intent_id');
+
+    if (!paymentStatus && !paymentIntentId) return;
+
+    if (paymentStatus === 'cancel') {
+      setPaymentModalData({
+        status: 'canceled',
+        message: lang === 'ar' ? 'تم إلغاء عملية الدفع، لم يتم خصم أي مبالغ من حسابك.' : 'Payment was canceled. No charges were made.'
+      });
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (paymentIntentId) {
+      setPaymentModalData({
+        status: 'verifying',
+        message: lang === 'ar' ? 'جاري التحقق من عملية الدفع عبر بوابة Ziina وتحديث رصيد الدقائق...' : 'Verifying payment with Ziina and updating your minutes...'
+      });
+
+      fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentIntentId })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.status === 'completed') {
+            setPaymentModalData({
+              status: 'success',
+              minutesAdded: data.minutesAdded,
+              newBalance: data.minuteBalance,
+              packageTitleAr: data.packageTitleAr,
+              packageTitleEn: data.packageTitleEn
+            });
+
+            // Update user state and local storage immediately
+            setUser(prev => {
+              if (!prev) return prev;
+              const updated = { ...prev, minuteBalance: data.minuteBalance, hasPurchased: true };
+              localStorage.setItem('subtie_user', JSON.stringify(updated));
+              return updated;
+            });
+          } else {
+            setPaymentModalData({
+              status: 'error',
+              message: data.message || data.error || (lang === 'ar' ? 'تعذر التحقق من نجاح عملية الدفع.' : 'Could not verify payment intent.')
+            });
+          }
+        })
+        .catch(err => {
+          console.error('Payment verification failed:', err);
+          setPaymentModalData({
+            status: 'error',
+            message: lang === 'ar' ? 'خطأ في الاتصال أثناء التحقق من الدفع.' : 'Network error verifying payment.'
+          });
+        })
+        .finally(() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
+  }, [lang]);
 
   const handleLoginSuccess = (loggedInUser) => {
     setUser(loggedInUser);
@@ -232,7 +299,7 @@ export default function App() {
       {/* Main Content Views */}
       <main className="flex-grow">
         {view === 'pricing' && (
-          <Pricing lang={lang} user={user} />
+          <Pricing lang={lang} user={user} onRequireAuth={() => setIsAuthOpen(true)} />
         )}
 
         {view === 'landing' && (
@@ -350,6 +417,130 @@ export default function App() {
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} lang={lang} />
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} lang={lang} />
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} lang={lang} />
+
+      {/* Ziina Payment Status & Celebration Modal */}
+      {paymentModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="relative w-full max-w-md p-6 sm:p-8 rounded-[2rem] bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-purple-500/40 shadow-2xl shadow-purple-950/60 text-center space-y-5">
+            <button
+              onClick={() => setPaymentModalData(null)}
+              className="absolute top-4 right-4 rtl:right-auto rtl:left-4 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {paymentModalData.status === 'verifying' && (
+              <div className="py-6 space-y-4">
+                <div className="w-16 h-16 rounded-full bg-purple-900/50 border-2 border-purple-400/50 flex items-center justify-center mx-auto text-pink-400 shadow-xl">
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                </div>
+                <h3 className="text-lg font-black text-white">
+                  {isAr ? 'جاري التحقق من عملية الدفع...' : 'Verifying Payment...'}
+                </h3>
+                <p className="text-xs text-slate-400 font-bold max-w-xs mx-auto">
+                  {paymentModalData.message}
+                </p>
+              </div>
+            )}
+
+            {paymentModalData.status === 'success' && (
+              <div className="py-2 space-y-4">
+                <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center mx-auto text-white shadow-2xl shadow-emerald-500/30">
+                  <CheckCircle2 className="w-10 h-10" />
+                  <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center text-slate-950 shadow-md">
+                    <Sparkles className="w-3.5 h-3.5 fill-current" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-500/30">
+                    {isAr ? 'تم الدفع بنجاح عبر Ziina' : 'Payment Completed via Ziina'}
+                  </span>
+                  <h3 className="text-2xl font-black text-white pt-2">
+                    {isAr ? '🎉 مبروك! تم شحن رصيدك' : '🎉 Payment Successful!'}
+                  </h3>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-purple-950/60 border border-purple-500/30 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span>{isAr ? 'الدقائق المضافة:' : 'Minutes Added:'}</span>
+                    <span className="text-emerald-400 font-black text-sm">+{paymentModalData.minutesAdded} {isAr ? 'دقيقة' : 'mins'}</span>
+                  </div>
+                  <div className="h-px bg-purple-500/20" />
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span>{isAr ? 'الرصيد الكلي الحالي:' : 'New Total Balance:'}</span>
+                    <span className="text-yellow-400 font-black text-base flex items-center space-x-1 rtl:space-x-reverse">
+                      <span>🪙</span>
+                      <span>{paymentModalData.newBalance} {isAr ? 'دقيقة' : 'mins'}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => {
+                      setPaymentModalData(null);
+                      handleStartWizard();
+                    }}
+                    className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs sm:text-sm shadow-lg hover:opacity-95 transition cursor-pointer"
+                  >
+                    {isAr ? 'ابدأ ترجمة فيديو جديد' : 'Start New Project'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPaymentModalData(null);
+                      handleOpenProjects();
+                    }}
+                    className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs sm:text-sm transition cursor-pointer"
+                  >
+                    {isAr ? 'مشاريعي' : 'My Projects'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {paymentModalData.status === 'canceled' && (
+              <div className="py-4 space-y-4">
+                <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-400/40 flex items-center justify-center mx-auto text-amber-400 shadow-xl">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-white">
+                  {isAr ? 'تم إلغاء عملية الدفع' : 'Payment Canceled'}
+                </h3>
+                <p className="text-xs text-slate-400 font-bold max-w-xs mx-auto">
+                  {paymentModalData.message}
+                </p>
+                <button
+                  onClick={() => setPaymentModalData(null)}
+                  className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs transition cursor-pointer"
+                >
+                  {isAr ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
+            )}
+
+            {paymentModalData.status === 'error' && (
+              <div className="py-4 space-y-4">
+                <div className="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-400/40 flex items-center justify-center mx-auto text-rose-400 shadow-xl">
+                  <XCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-white">
+                  {isAr ? 'فشل التحقق من الدفع' : 'Payment Verification Failed'}
+                </h3>
+                <p className="text-xs text-rose-300 font-bold max-w-xs mx-auto">
+                  {paymentModalData.message}
+                </p>
+                <button
+                  onClick={() => setPaymentModalData(null)}
+                  className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs transition cursor-pointer"
+                >
+                  {isAr ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

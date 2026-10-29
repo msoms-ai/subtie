@@ -19,6 +19,12 @@ import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from 
 import { torrentService } from './services/torrentService.js';
 import { detectVisualSignsFromVideo } from './services/visionOcrService.js';
 import { getAllFolderCovers, generateFolderCover } from './services/folderCoverService.js';
+import paymentService, {
+  getPackagesCatalogue,
+  createPaymentIntent,
+  verifyAndCreditPayment,
+  getUserTransactions
+} from './services/paymentService.js';
 
 // Set ffmpeg binary path from installer with system fallback & executable verification
 let resolvedFfmpegPath = ffmpegInstaller?.path;
@@ -2586,6 +2592,72 @@ app.delete('/api/admin/gemini-keys/:id', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ====================================================
+// ZIINA PAYMENT GATEWAY & PACKAGES ENDPOINTS
+// ====================================================
+
+// 1. Get Packages Catalogue
+app.get('/api/payments/packages', (req, res) => {
+  const catalogue = getPackagesCatalogue();
+  return res.json({ success: true, catalogue });
+});
+
+// 2. Create Ziina Payment Intent
+app.post('/api/payments/create-intent', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.body?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required to initiate payment.' });
+    }
+
+    const { packageId, customMinutes } = req.body;
+    if (!packageId) {
+      return res.status(400).json({ error: 'packageId is required.' });
+    }
+
+    // Determine client origin for customer redirection
+    const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+
+    const result = await createPaymentIntent({
+      userId,
+      packageId,
+      customMinutes,
+      origin
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('❌ [Payment Create-Intent Error]:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Verify Payment & Credit User Wallet
+app.post('/api/payments/verify', async (req, res) => {
+  try {
+    const { paymentIntentId } = req.body;
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'paymentIntentId is required for verification.' });
+    }
+
+    const result = await verifyAndCreditPayment(paymentIntentId);
+    return res.json(result);
+  } catch (err) {
+    console.error('❌ [Payment Verify Error]:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Get User Transaction History
+app.get('/api/payments/transactions', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+  const txs = getUserTransactions(userId);
+  return res.json({ success: true, transactions: txs });
 });
 
 // Serve Vite frontend build (Production)
