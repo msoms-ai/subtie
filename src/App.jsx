@@ -14,6 +14,7 @@ import AuthModal from './components/Auth/AuthModal.jsx';
 import UserProfileModal from './components/Profile/UserProfileModal.jsx';
 import AdminUserConsoleModal from './components/Admin/AdminUserConsoleModal.jsx';
 import AssignAuditorModal from './components/Projects/AssignAuditorModal.jsx';
+import ActivitiesModal from './components/Activities/ActivitiesModal.jsx';
 import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, X } from 'lucide-react';
 
 export default function App() {
@@ -43,8 +44,36 @@ export default function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isActivitiesOpen, setIsActivitiesOpen] = useState(false);
+  const [activeActivitiesCount, setActiveActivitiesCount] = useState(0);
   const [preSelectedFolder, setPreSelectedFolder] = useState('');
   const [paymentModalData, setPaymentModalData] = useState(null); // { status: 'verifying' | 'success' | 'canceled' | 'error', minutesAdded, newBalance, message }
+
+  const refreshActivitiesCount = useCallback(async () => {
+    if (!user?.id) {
+      setActiveActivitiesCount(0);
+      return;
+    }
+    try {
+      const res = await fetch('/api/activities', {
+        headers: { 'x-user-id': user.id },
+        cache: 'no-store'
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && typeof data.activeCount === 'number') {
+        setActiveActivitiesCount(data.activeCount);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refreshActivitiesCount();
+    const actTimer = setInterval(refreshActivitiesCount, 4000);
+    return () => clearInterval(actTimer);
+  }, [refreshActivitiesCount]);
 
   // Viewed Projects tracking for Header notification badge
   const [viewedProjectIds, setViewedProjectIds] = useState(() => {
@@ -291,6 +320,11 @@ export default function App() {
         onOpenProjects={handleOpenProjects}
         onStartWizard={handleStartWizard}
         onOpenPricing={() => { setView('pricing'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onOpenActivities={() => {
+          setIsActivitiesOpen(true);
+          refreshActivitiesCount();
+        }}
+        activeActivitiesCount={activeActivitiesCount}
         lang={lang}
         theme={theme}
         onToggleLang={toggleLang}
@@ -313,6 +347,11 @@ export default function App() {
           <LandingHero
             onStartWizard={handleStartWizard}
             onLoadProject={handleLoadProject}
+            onOpenActivities={() => {
+              setIsActivitiesOpen(true);
+              refreshActivitiesCount();
+            }}
+            activeActivitiesCount={activeActivitiesCount}
             lang={lang}
           />
         )}
@@ -417,6 +456,18 @@ export default function App() {
         project={assignAuditorProject}
         currentUser={user}
         onAssignedSuccess={() => handleOpenProjects()}
+        lang={lang}
+      />
+
+      {/* Ongoing Activities & Background Tasks Modal */}
+      <ActivitiesModal
+        isOpen={isActivitiesOpen}
+        onClose={() => {
+          setIsActivitiesOpen(false);
+          refreshActivitiesCount();
+        }}
+        onOpenProject={handleLoadProject}
+        user={user}
         lang={lang}
       />
 

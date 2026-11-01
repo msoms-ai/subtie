@@ -390,6 +390,13 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
                             {getCategoryLabel(p.projectType)}
                           </span>
                         </div>
+
+                        {(p.status === 'downloading_torrent' || p.status === 'processing') && (
+                          <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-pink-950/80 theme-light:bg-pink-100 text-pink-300 theme-light:text-pink-900 px-2.5 py-0.5 rounded-full border border-pink-400/40 text-[10px] font-black mb-2 ml-2 rtl:mr-2 rtl:ml-0 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+                            <span>{p.status === 'downloading_torrent' ? (isAr ? 'تحميل التورنت...' : 'Torrent Ingest...') : (isAr ? 'معالجة ذكية...' : 'AI Processing...')} ({p.processingProgress || 10}%)</span>
+                          </div>
+                        )}
                         <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight mb-1 line-clamp-2">
                           {p.mediaTitle}
                         </h3>

@@ -1465,7 +1465,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       }
     }
 
-  const emitAndSaveProgress = (extract, transcode, translate, status, overall) => {
+  const emitAndSaveProgress = (extract, transcode, translate, status, overall, stage = 'processing') => {
     (function() {
       const db = readProjects();
       if (db[projectId]) {
@@ -1474,12 +1474,16 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
         if (translate !== undefined) db[projectId].progressTranslate = translate;
         if (status !== undefined) db[projectId].processingStatus = status;
         if (overall !== undefined) db[projectId].processingProgress = overall;
+        db[projectId].processingStage = stage;
+        db[projectId].status = overall === 100 ? 'ready' : 'processing';
+        db[projectId].updatedAt = new Date().toISOString();
         writeProjects(db);
       }
     })();
     socketService.emitProgress(projectId, {
       progress: overall,
       status,
+      stage,
       progressExtract: extract,
       progressTranscode: transcode,
       progressTranslate: translate
@@ -1507,9 +1511,9 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
   }
 
   // Step 1: Extract Audio
-  emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10);
-    await extractAudioTrack(videoPath, audioPath);
-    emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25);
+  emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10, 'audio_extraction');
+  await extractAudioTrack(videoPath, audioPath);
+  emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25, 'audio_extraction');
     
 
     project.audioUrl = `${urlPrefix}/audio.mp3`;
@@ -1601,7 +1605,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
         
         const aPct = Math.round(((i + 0.5) / chunkFiles.length) * 100);
         const overall1 = Math.round(25 + ((i + 0.5) / chunkFiles.length) * 70);
-        emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall1);
+        emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall1, 'transcribing');
         console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
         const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE and AUDIBLE SONG VOCAL from the very first second to the absolute end of the audio file. DO NOT stop early!
@@ -1671,7 +1675,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
         
         const tPct = Math.round(((i + 1) / chunkFiles.length) * 100);
         const overall2 = Math.round(25 + ((i + 1) / chunkFiles.length) * 70);
-        emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall2);
+        emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall2, 'translating');
         console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
         const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
 I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
@@ -1773,7 +1777,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     project.subtitles = allParsedSubtitles;
 
     // Stage 4: Detect Anime Characters and generate Avatar Thumbnails
-    emitAndSaveProgress(100, 100, 100, 'فحص شخصيات الأنمي وبطاقات التعريف والوجوه...', 85);
+    emitAndSaveProgress(100, 100, 100, 'فحص شخصيات الأنمي وبطاقات التعريف والوجوه...', 85, 'characters');
     try {
       const charactersDir = path.join(targetDir, 'characters');
       console.log(`[CharacterService] Extracting character entities & avatars for ${projectId}...`);
@@ -1790,7 +1794,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     }
 
     // Stage 5: Detect On-Screen Visual Signs & Titles (Full-Video OCR)
-    emitAndSaveProgress(100, 100, 100, 'فحص اللوحات والنصوص والعناوين في الفيديو (Vision OCR)...', 93);
+    emitAndSaveProgress(100, 100, 100, 'فحص اللوحات والنصوص والعناوين في الفيديو (Vision OCR)...', 93, 'vision_ocr');
     try {
       const signsDir = path.join(targetDir, 'visual_signs');
       console.log(`[VisionOCR] Extracting on-screen signs, titles & notes for ${projectId}...`);
@@ -1830,7 +1834,7 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     const finalProject = freshDb[projectId];
 
     // Emit final process completion event so wizard transitions immediately!
-    emitAndSaveProgress(100, 100, 100, 'اكتملت جميع مراحل المعالجة بنجاح!', 100);
+    emitAndSaveProgress(100, 100, 100, 'اكتملت جميع مراحل المعالجة بنجاح!', 100, 'ready');
     socketService.emitProgress(projectId, {
       stage: 'process_completed',
       progress: 100,
@@ -2453,19 +2457,206 @@ app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req,
 });
 
 app.get('/api/torrent/:id/status', (req, res) => {
-  const status = torrentService.getJobStatus(req.params.id);
+  let status = torrentService.getJobStatus(req.params.id);
+  // Resilient DB fallback: if torrent job completed and was cleared from memory, inspect project database
+  if (!status) {
+    const projects = readProjects();
+    const p = projects[req.params.id];
+    if (p) {
+      status = {
+        projectId: req.params.id,
+        status: p.status === 'downloading_torrent' ? 'downloading' : (p.status || 'processing'),
+        progress: p.processingProgress !== undefined ? p.processingProgress : (p.status === 'ready' || p.status === 'Completed' ? 100 : 0),
+        message: p.processingStatus || '',
+        projectName: p.projectName || '',
+        mediaTitle: p.mediaTitle || '',
+        projectType: p.projectType || 'episode'
+      };
+    }
+  }
   res.json({ success: true, status });
 });
 
 app.post('/api/torrent/:id/cancel', (req, res) => {
-  const cancelled = torrentService.cancelJob(req.params.id);
+  const userId = req.headers['x-user-id'];
   const projects = readProjects();
+  const p = projects[req.params.id];
+  const users = readUsers();
+  const user = users[userId];
+
+  // Security check: only owner or admin can cancel
+  if (p && user && user.role !== 'Admin' && p.ownerId !== userId) {
+    return res.status(403).json({ error: 'Forbidden: You do not own this project.' });
+  }
+
+  const cancelled = torrentService.cancelJob(req.params.id);
   if (projects[req.params.id]) {
     projects[req.params.id].status = 'cancelled';
     projects[req.params.id].processingStatus = 'Torrent cancelled by user';
     writeProjects(projects);
   }
   res.json({ success: true, cancelled });
+});
+
+// Unified Activities & Ongoing Tasks Monitor API
+app.get('/api/activities', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  const user = users[userId];
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const projects = readProjects();
+  const torrentJobs = torrentService.getAllActiveJobs();
+  const activities = [];
+  const handledProjectIds = new Set();
+
+  // 1. Ingest active/recent torrent jobs
+  for (const tJob of torrentJobs) {
+    // Permission check
+    if (user.role !== 'Admin' && tJob.userId && tJob.userId !== userId) {
+      continue;
+    }
+
+    handledProjectIds.add(tJob.projectId);
+    const proj = projects[tJob.projectId] || {};
+    
+    // Determine if the torrent is downloading or has handed off to processing
+    const isProcessingInDb = proj.status === 'processing' || activeProcessingSet.has(tJob.projectId);
+    const effectiveStatus = isProcessingInDb ? 'processing' : (tJob.status === 'completed' ? 'ready' : 'downloading');
+    const effectiveProgress = isProcessingInDb ? (proj.processingProgress || 10) : tJob.progress;
+
+    activities.push({
+      id: tJob.projectId,
+      projectId: tJob.projectId,
+      projectName: proj.projectName || tJob.projectName || 'Uncategorized',
+      mediaTitle: proj.mediaTitle || tJob.mediaTitle || tJob.videoFileName || 'Video File',
+      projectType: proj.projectType || tJob.projectType || 'episode',
+      type: 'torrent',
+      status: effectiveStatus,
+      stage: isProcessingInDb ? (proj.processingStage || 'transcribing') : 'downloading',
+      stageDescription: isProcessingInDb ? (proj.processingStatus || 'معالجة الذكاء الاصطناعي...') : (tJob.message || `تحميل التورنت (${tJob.progress}%)`),
+      progress: effectiveProgress,
+      speed: tJob.downloadSpeed ? `${tJob.downloadSpeed} MB/s` : null,
+      downloadedMb: tJob.downloadedMb || null,
+      totalMb: tJob.totalMb || null,
+      numPeers: tJob.numPeers || 0,
+      numSeeds: tJob.numSeeds || 0,
+      eta: isProcessingInDb ? 'جاري التحليل...' : (tJob.eta || '--'),
+      canOpen: proj.status === 'ready' || proj.processingProgress === 100,
+      createdAt: proj.createdAt || new Date(tJob.createdAt || Date.now()).toISOString(),
+      updatedAt: proj.updatedAt || new Date().toISOString()
+    });
+  }
+
+  // 2. Ingest active processing tasks from projects.json
+  const now = Date.now();
+  for (const [pId, p] of Object.entries(projects)) {
+    if (handledProjectIds.has(pId)) continue;
+
+    // Security check: user isolation
+    if (user.role !== 'Admin' && p.ownerId !== userId && p.auditorId !== userId) {
+      continue;
+    }
+
+    const isDownloadingTorrent = p.status === 'downloading_torrent';
+    const isProcessing = p.status === 'processing' || activeProcessingSet.has(pId);
+    const isRecentlyCompleted = (p.status === 'ready' || p.status === 'Completed' || p.processingProgress === 100) &&
+                                (now - new Date(p.updatedAt || p.createdAt || now).getTime() < 30 * 60 * 1000);
+
+    if (isDownloadingTorrent || isProcessing || isRecentlyCompleted) {
+      handledProjectIds.add(pId);
+
+      let stage = 'processing';
+      if (isDownloadingTorrent) stage = 'downloading';
+      else if (isRecentlyCompleted) stage = 'ready';
+      else stage = p.processingStage || 'transcribing';
+
+      // Dynamic ETA estimation for processing tasks
+      let dynamicEta = '--';
+      if (isProcessing) {
+        const curProg = p.processingProgress || 10;
+        if (curProg < 30) dynamicEta = '~3m 45s';
+        else if (curProg < 60) dynamicEta = '~2m 15s';
+        else if (curProg < 85) dynamicEta = '~1m 10s';
+        else dynamicEta = '< 40s';
+      } else if (isRecentlyCompleted) {
+        dynamicEta = 'جاهز الآن';
+      }
+
+      activities.push({
+        id: pId,
+        projectId: pId,
+        projectName: p.projectName || 'Uncategorized',
+        mediaTitle: p.mediaTitle || 'Video Project',
+        projectType: p.projectType || 'episode',
+        type: p.sourceType || 'direct',
+        status: isRecentlyCompleted ? 'ready' : (isDownloadingTorrent ? 'downloading' : 'processing'),
+        stage,
+        stageDescription: p.processingStatus || (isRecentlyCompleted ? 'اكتملت المعالجة وهو جاهز للترجمة' : 'جاري المعالجة...'),
+        progress: p.processingProgress || (isRecentlyCompleted ? 100 : 15),
+        speed: null,
+        downloadedMb: null,
+        totalMb: null,
+        numPeers: null,
+        numSeeds: null,
+        eta: dynamicEta,
+        canOpen: isRecentlyCompleted,
+        createdAt: p.createdAt || new Date().toISOString(),
+        updatedAt: p.updatedAt || new Date().toISOString()
+      });
+    }
+  }
+
+  // Sort activities: active ones first, then newest
+  activities.sort((a, b) => {
+    const aActive = a.status === 'downloading' || a.status === 'processing';
+    const bActive = b.status === 'downloading' || b.status === 'processing';
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+    return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+  });
+
+  const activeCount = activities.filter(a => a.status === 'downloading' || a.status === 'processing').length;
+
+  res.json({
+    success: true,
+    activities,
+    activeCount
+  });
+});
+
+app.post('/api/activities/:id/cancel', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  const user = users[userId];
+  const { id } = req.params;
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const projects = readProjects();
+  const project = projects[id];
+
+  if (project && user.role !== 'Admin' && project.ownerId !== userId) {
+    return res.status(403).json({ error: 'Forbidden: You do not own this project.' });
+  }
+
+  // Cancel torrent if active
+  torrentService.cancelJob(id);
+  activeProcessingSet.delete(id);
+
+  if (project) {
+    project.status = 'cancelled';
+    project.processingStatus = 'Cancelled by user';
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+  }
+
+  res.json({ success: true, message: 'Activity cancelled successfully' });
 });
 
 // 20. Assign Auditor to Project

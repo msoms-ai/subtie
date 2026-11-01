@@ -56,6 +56,7 @@ class TorrentService {
     });
 
     this.activeJobs = new Map(); // projectId -> jobData
+    this.completedJobsCache = new Map(); // projectId -> cached status with timestamp
 
     this.client.on('error', (err) => {
       console.error('⚠️ [TorrentService Client Error]:', err.message);
@@ -210,8 +211,27 @@ class TorrentService {
 
     if (isVideoDone && !jobData.isCompleting) {
       jobData.isCompleting = true;
+      jobData.status = 'completed';
       jobData.progress = 100;
       console.log(`🎬 [TorrentService] Video download 100% reached for project ${projectId}! Finalizing...`);
+      
+      this.completedJobsCache.set(projectId, {
+        projectId,
+        status: 'completed',
+        progress: 100,
+        downloadSpeed: '0.00',
+        downloadedMb: totalMb,
+        totalMb,
+        numPeers,
+        numSeeds,
+        eta: '0m 0s',
+        fileName: videoFile?.name || '',
+        projectName: jobData.projectMeta?.projectName || '',
+        mediaTitle: jobData.projectMeta?.mediaTitle || '',
+        message: 'اكتمل تحميل ملف الفيديو بنجاح! جاري النقل وبدء المعالجة الذكية...',
+        timestamp: Date.now()
+      });
+
       socketService.emitProgress(projectId, {
         stage: 'torrent_completed',
         progress: 100,
@@ -504,28 +524,87 @@ class TorrentService {
    * Get active status of a job
    */
   getJobStatus(projectId) {
+    const now = Date.now();
+    // Clean up cache older than 10 minutes
+    for (const [id, entry] of this.completedJobsCache.entries()) {
+      if (now - (entry.timestamp || 0) > 10 * 60 * 1000) {
+        this.completedJobsCache.delete(id);
+      }
+    }
+
     const job = this.activeJobs.get(projectId);
-    if (!job) return null;
+    if (!job) {
+      const cached = this.completedJobsCache.get(projectId);
+      if (cached) return cached;
+      return null;
+    }
 
     const torrent = job.torrent;
     const numPeers = torrent?.numPeers || job.numPeers || 0;
     const downloaded = torrent?.downloaded || job.downloadedBytes || 0;
     const total = job.videoFile ? job.videoFile.length : (torrent?.length || job.totalBytes || 0);
     const speedBytes = torrent?.downloadSpeed || job.downloadSpeed || 0;
-    const pct = total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : job.progress;
 
-    return {
+    const isVideoDone = (job.videoFile && (job.videoFile.done || (job.videoFile.downloaded !== undefined && job.videoFile.downloaded >= job.videoFile.length))) ||
+                        (total > 0 && downloaded >= total) ||
+                        (torrent && torrent.progress >= 0.999 && total > 0) ||
+                        job.progress === 100 ||
+                        job.status === 'completed';
+
+    const pct = isVideoDone ? 100 : (total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : job.progress);
+    const speedMb = (speedBytes / (1024 * 1024)).toFixed(2);
+    const downloadedMb = (downloaded / (1024 * 1024)).toFixed(1);
+    const totalMb = total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...';
+
+    const statusObj = {
       projectId: job.projectId,
-      status: job.status,
+      status: isVideoDone ? 'completed' : job.status,
       progress: pct,
-      downloadSpeed: (speedBytes / (1024 * 1024)).toFixed(2),
-      downloadedMb: (downloaded / (1024 * 1024)).toFixed(1),
-      totalMb: total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...',
+      downloadSpeed: speedMb,
+      downloadedMb,
+      totalMb,
       numPeers,
       numSeeds: numPeers,
-      eta: formatEta(torrent?.timeRemaining),
+      eta: isVideoDone ? '0m 0s' : formatEta(torrent?.timeRemaining),
       videoFileName: job.videoFile?.name || '',
+      projectName: job.projectMeta?.projectName || '',
+      mediaTitle: job.projectMeta?.mediaTitle || '',
+      projectType: job.projectMeta?.projectType || 'episode',
+      userId: job.userId || 'usr_guest',
+      createdAt: job.createdAt || now,
     };
+
+    if (isVideoDone) {
+      this.completedJobsCache.set(projectId, { ...statusObj, timestamp: now });
+    }
+
+    return statusObj;
+  }
+
+  /**
+   * Get all active and recently completed torrent jobs for background tasks monitor
+   */
+  getAllActiveJobs() {
+    const list = [];
+    const seen = new Set();
+
+    for (const [projectId] of this.activeJobs.entries()) {
+      const st = this.getJobStatus(projectId);
+      if (st) {
+        list.push(st);
+        seen.add(projectId);
+      }
+    }
+
+    const now = Date.now();
+    for (const [projectId, entry] of this.completedJobsCache.entries()) {
+      if (!seen.has(projectId) && (now - (entry.timestamp || 0) < 5 * 60 * 1000)) {
+        list.push(entry);
+        seen.add(projectId);
+      }
+    }
+
+    return list;
   }
 
   cleanupJob(projectId, removeFiles = false) {
@@ -540,6 +619,7 @@ class TorrentService {
       } catch (e) {}
     }
     this.activeJobs.delete(projectId);
+    this.completedJobsCache.delete(projectId);
   }
 }
 

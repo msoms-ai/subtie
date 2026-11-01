@@ -158,6 +158,16 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           setErrorMessage(data.error || 'Failed to download torrent.');
           setCurrentStep(6);
         }
+      } else if (currentStep === 4 && (data.status === 'processing' || data.stage === 'audio_extraction' || data.stage === 'transcribing' || (data.progress > 0 && !data.stage?.startsWith('torrent_')))) {
+        // Instant resilient transition if backend has already begun AI processing
+        setCurrentStep(6);
+        setIsProcessing(true);
+        if (data.message || data.status) setProcessStatusMsg(data.message || data.status);
+        setTimeout(() => {
+          if (startAIProcessingRef.current) {
+            startAIProcessingRef.current(projectId);
+          }
+        }, 300);
       }
     });
 
@@ -180,7 +190,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           const st = data.status;
           setTorrentTelemetry(prev => ({ ...(prev || {}), ...st }));
           if (st.progress !== undefined) setUploadProgress(st.progress);
-          if (st.status === 'completed' || st.progress === 100) {
+          if (st.status === 'completed' || st.progress === 100 || st.status === 'processing' || st.status === 'ready') {
             clearInterval(pollInterval);
             setCurrentStep(6);
             setIsProcessing(true);
@@ -741,14 +751,14 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           </div>
 
           {/* 3-Tab Source Switcher */}
-          <div className="grid grid-cols-3 gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-purple-500/30">
+          <div className="grid grid-cols-3 gap-2 bg-slate-900/90 theme-light:bg-purple-100/90 p-1.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm">
             <button
               type="button"
               onClick={() => setSourceType('direct')}
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'direct'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
               }`}
             >
               <FileVideo className="w-4 h-4 shrink-0" />
@@ -761,7 +771,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'torrent'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
               }`}
             >
               <Radio className="w-4 h-4 shrink-0" />
@@ -774,7 +784,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'magnet'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
               }`}
             >
               <LinkIcon className="w-4 h-4 shrink-0" />
@@ -823,11 +833,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               />
 
               {videoFile ? (
-                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
-                  <FileVideo className="w-7 h-7 text-pink-300 shrink-0" />
+                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-100 px-6 py-4 rounded-2xl border-2 border-purple-400 theme-light:border-purple-500 shadow-xl max-w-lg mx-auto" dir="ltr">
+                  <FileVideo className="w-7 h-7 text-pink-300 theme-light:text-purple-700 shrink-0" />
                   <div className="text-left">
-                    <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{videoFile.name}</p>
-                    <p className="text-xs text-purple-200 font-bold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                    <p className="text-sm sm:text-base font-extrabold text-white theme-light:text-slate-950 truncate max-w-xs">{videoFile.name}</p>
+                    <p className="text-xs text-purple-200 theme-light:text-purple-900 font-extrabold">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                   </div>
                   <button
                     type="button"
@@ -843,10 +853,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 </div>
               ) : (
                 <>
-                  <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
+                  <h4 className="text-base font-black text-white theme-light:text-slate-950 mb-1">
                     {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
                   </h4>
-                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
+                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-extrabold mb-4">
                     {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
                   </p>
 
@@ -905,11 +915,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               />
 
               {torrentFile ? (
-                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-800 px-6 py-4 rounded-2xl border-2 border-purple-400 shadow-xl wizard-white-text max-w-lg mx-auto" dir="ltr">
-                  <Radio className="w-7 h-7 text-pink-300 shrink-0" />
+                <div className="flex items-center space-x-4 bg-purple-950 theme-light:bg-purple-100 px-6 py-4 rounded-2xl border-2 border-purple-400 theme-light:border-purple-500 shadow-xl max-w-lg mx-auto" dir="ltr">
+                  <Radio className="w-7 h-7 text-pink-300 theme-light:text-purple-700 shrink-0" />
                   <div className="text-left">
-                    <p className="text-sm sm:text-base font-extrabold text-white truncate max-w-xs">{torrentFile.name}</p>
-                    <p className="text-xs text-purple-200 font-bold">{(torrentFile.size / 1024).toFixed(1)} KB (Torrent Metadata)</p>
+                    <p className="text-sm sm:text-base font-extrabold text-white theme-light:text-slate-950 truncate max-w-xs">{torrentFile.name}</p>
+                    <p className="text-xs text-purple-200 theme-light:text-purple-900 font-extrabold">{(torrentFile.size / 1024).toFixed(1)} KB (Torrent Metadata)</p>
                   </div>
                   <button
                     type="button"
@@ -924,10 +934,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 </div>
               ) : (
                 <>
-                  <h4 className="text-base font-black text-white theme-light:text-purple-950 mb-1">
+                  <h4 className="text-base font-black text-white theme-light:text-slate-950 mb-1">
                     {isAr ? 'انقر أو اسحب ملف تورنت (.torrent) هنا' : 'Click or Drag & Drop .torrent File Here'}
                   </h4>
-                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-bold mb-4">
+                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-extrabold mb-4">
                     {isAr ? 'يجب أن يحتوي التورنت على ملف فيديو واحد فقط بحد أقصى 2 جيجابايت' : 'Single video torrent only, maximum size 2GB (Non-video files ignored)'}
                   </p>
 
@@ -942,7 +952,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               )}
 
               {/* Requirement pill */}
-              <div className="mt-4 flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+              <div className="mt-4 flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 theme-light:bg-amber-100 theme-light:border-amber-400 theme-light:text-amber-950 px-3 py-1.5 rounded-xl">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>{isAr ? 'حد أقصى 2GB • ملف فيديو فردي فقط • حماية انقطاع الموزعين لمدة 30 دقيقة' : 'Max 2GB • Single video file only • 30-min zero-seed safeguard active'}</span>
               </div>
@@ -951,16 +961,16 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
           {/* TAB 3: Magnet Link Input */}
           {sourceType === 'magnet' && (
-            <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/30 space-y-4">
+            <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-purple-500/30 theme-light:bg-white theme-light:border-purple-300 shadow-xl space-y-4">
               <div className="flex items-center space-x-3 rtl:space-x-reverse mb-2">
-                <div className="p-2.5 rounded-2xl bg-purple-600/30 text-pink-300 border border-purple-400/30">
+                <div className="p-2.5 rounded-2xl bg-purple-600/30 text-pink-300 border border-purple-400/30 theme-light:bg-purple-100 theme-light:text-purple-700 theme-light:border-purple-300">
                   <LinkIcon className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-white">
+                  <h4 className="text-sm font-black text-white theme-light:text-slate-950">
                     {isAr ? 'رابط التورنت المغناطيسي (Magnet URI)' : 'BitTorrent Magnet Link URI'}
                   </h4>
-                  <p className="text-[11px] text-purple-300 font-bold">
+                  <p className="text-[11px] text-purple-300 theme-light:text-purple-900 font-extrabold">
                     {isAr ? 'ألصق رابط التورنت المغناطيسي الذي يبدأ بـ magnet:?' : 'Paste the torrent magnet link starting with magnet:?'}
                   </p>
                 </div>
@@ -982,7 +992,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 }}
                 placeholder="magnet:?xt=urn:btih:..."
                 dir="ltr"
-                className="w-full bg-slate-950/80 border-2 border-purple-500/40 focus:border-pink-500 rounded-2xl p-4 text-white text-xs font-mono tracking-wide placeholder-slate-500 focus:outline-none transition"
+                className="w-full bg-slate-950/80 border-2 border-purple-500/40 focus:border-pink-500 theme-light:bg-purple-50/70 theme-light:border-purple-400 theme-light:text-slate-950 theme-light:placeholder-purple-400/80 rounded-2xl p-4 text-white text-xs font-mono font-bold tracking-wide placeholder-slate-500 focus:outline-none transition"
               />
 
               {magnetLink && !magnetLink.trim().startsWith('magnet:?') && (
@@ -993,7 +1003,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               )}
 
               {/* Requirement pill */}
-              <div className="flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-3 py-2 rounded-xl">
+              <div className="flex items-center space-x-2 rtl:space-x-reverse text-[11px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 theme-light:bg-amber-100 theme-light:border-amber-400 theme-light:text-amber-950 px-3 py-2 rounded-xl">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>{isAr ? 'حد أقصى 2GB • ملف فيديو واحد • حماية انقطاع الموزعين (Seeds) لمدة 30 دقيقة' : 'Max 2GB • Single video file only • 30-min zero-seed timeout safeguard'}</span>
               </div>
@@ -1115,32 +1125,32 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
               {/* Live 4-Card Telemetry Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-lg mx-auto text-left" dir="ltr">
-                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Speed</span>
-                  <span className="text-sm font-black text-white">{torrentTelemetry?.downloadSpeed || 0} MB/s</span>
+                <div className="bg-slate-900/90 theme-light:bg-purple-100/90 border border-purple-500/30 theme-light:border-purple-300 rounded-2xl p-3 shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 theme-light:text-purple-900 uppercase tracking-wider block">Speed</span>
+                  <span className="text-sm font-black text-white theme-light:text-slate-950">{torrentTelemetry?.downloadSpeed || 0} MB/s</span>
                 </div>
-                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Swarm Peers</span>
-                  <span className="text-sm font-black text-pink-300">{torrentTelemetry?.numPeers || 0} peers</span>
+                <div className="bg-slate-900/90 theme-light:bg-purple-100/90 border border-purple-500/30 theme-light:border-purple-300 rounded-2xl p-3 shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 theme-light:text-purple-900 uppercase tracking-wider block">Swarm Peers</span>
+                  <span className="text-sm font-black text-pink-300 theme-light:text-purple-800">{torrentTelemetry?.numPeers || 0} peers</span>
                 </div>
-                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Seeders</span>
-                  <span className="text-sm font-black text-emerald-400">{torrentTelemetry?.numSeeds !== undefined ? torrentTelemetry.numSeeds : 0} seeds</span>
+                <div className="bg-slate-900/90 theme-light:bg-purple-100/90 border border-purple-500/30 theme-light:border-purple-300 rounded-2xl p-3 shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 theme-light:text-purple-900 uppercase tracking-wider block">Seeders</span>
+                  <span className="text-sm font-black text-emerald-400 theme-light:text-emerald-700">{torrentTelemetry?.numSeeds !== undefined ? torrentTelemetry.numSeeds : 0} seeds</span>
                 </div>
-                <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Est. Time</span>
-                  <span className="text-sm font-black text-white">{torrentTelemetry?.eta !== undefined ? torrentTelemetry.eta : '--'}</span>
+                <div className="bg-slate-900/90 theme-light:bg-purple-100/90 border border-purple-500/30 theme-light:border-purple-300 rounded-2xl p-3 shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 theme-light:text-purple-900 uppercase tracking-wider block">Est. Time</span>
+                  <span className="text-sm font-black text-white theme-light:text-slate-950">{torrentTelemetry?.eta !== undefined ? torrentTelemetry.eta : '--'}</span>
                 </div>
               </div>
 
               {/* Zero-Seeds Safeguard Notice */}
-              <div className="max-w-lg mx-auto bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 flex items-start space-x-3 rtl:space-x-reverse text-right">
-                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-200">
-                  <p className="font-bold text-amber-300 mb-0.5">
+              <div className="max-w-lg mx-auto bg-amber-950/40 border border-amber-500/40 theme-light:bg-amber-100 theme-light:border-amber-400 rounded-2xl p-4 flex items-start space-x-3 rtl:space-x-reverse text-right">
+                <AlertTriangle className="w-5 h-5 text-amber-400 theme-light:text-amber-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-200 theme-light:text-amber-950">
+                  <p className="font-bold text-amber-300 theme-light:text-amber-900 mb-0.5">
                     {isAr ? 'حماية عدم توفر الموزعين (Seeds Safeguard)' : 'Zero-Seeds Safeguard Active'}
                   </p>
-                  <p className="leading-relaxed opacity-90 text-[11px]">
+                  <p className="leading-relaxed opacity-90 text-[11px] font-extrabold">
                     {isAr
                       ? 'إذا استمر عدد الموزعين (Seeds) عند 0 لأكثر من 30 دقيقة متواصلة، فسيقوم السيرفر بإلغاء التنزيل تلقائياً، وحذف الملفات الجزئية، وإرسال تنبيه بالبريد.'
                       : 'If seeds remain 0 for more than 30 consecutive minutes, the job will abort automatically, purge partial files, and notify you.'}
@@ -1153,7 +1163,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="px-6 py-2.5 rounded-xl bg-purple-900/60 hover:bg-purple-800 text-white font-extrabold text-xs border border-purple-400/40 shadow-md transition"
+                  className="px-6 py-2.5 rounded-xl bg-purple-900/60 theme-light:bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs border border-purple-400/40 shadow-md transition"
                 >
                   {isAr ? 'العمل في الخلفية (العودة للرئيسية)' : 'Run in Background (Return Home)'}
                 </button>
@@ -1335,6 +1345,18 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 {/* Overall Status Text & Immediate Action */}
                 <div className="text-center pt-2 space-y-3">
                   <span className="text-xs font-black text-purple-400 theme-light:text-purple-900 bg-purple-950/50 theme-light:bg-purple-100 px-4 py-1.5 rounded-xl inline-block border border-purple-500/20">{processStatusMsg}</span>
+
+                  {processProgress < 100 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={onCancel}
+                        className="px-6 py-2.5 rounded-xl bg-purple-900/60 theme-light:bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs border border-purple-400/40 shadow-md transition cursor-pointer"
+                      >
+                        {isAr ? 'متابعة المعالجة في الخلفية (العودة للرئيسية)' : 'Continue in Background (Return Home)'}
+                      </button>
+                    </div>
+                  )}
 
                   {processProgress === 100 && (
                     <div className="pt-2">

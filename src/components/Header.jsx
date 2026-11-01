@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Sparkles, Film, Sun, Moon, Globe, FolderKanban, User, LogIn, LogOut, ShieldCheck, Settings, ChevronDown } from 'lucide-react';
+import { Sparkles, Film, Sun, Moon, Globe, FolderKanban, Activity, User, LogIn, LogOut, ShieldCheck, Settings, ChevronDown } from 'lucide-react';
 
 export default function Header({
   onGoHome,
   onOpenProjects,
   onOpenPricing,
+  onOpenActivities,
+  activeActivitiesCount = 0,
   lang = 'en',
   theme = 'dark',
   onToggleLang,
@@ -88,6 +90,23 @@ export default function Header({
             >
               <span className="text-sm leading-none">🪙</span>
               <span className="font-extrabold whitespace-nowrap">{user.minuteBalance !== undefined ? user.minuteBalance : 0} {isAr ? 'دقيقة' : 'Mins'}</span>
+            </button>
+          )}
+
+          {/* Activities Button (Ongoing Tasks) */}
+          {user && (
+            <button
+              onClick={onOpenActivities}
+              className="relative flex items-center space-x-1.5 sm:space-x-2 rtl:space-x-reverse text-[10px] sm:text-xs font-black text-white bg-slate-900/90 theme-light:bg-purple-100 theme-light:text-purple-950 border border-purple-500/40 theme-light:border-purple-300 hover:opacity-95 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-md hover:scale-[1.02] cursor-pointer"
+              title={isAr ? 'المهام والنشاطات الجارية' : 'Ongoing Tasks & Activities'}
+            >
+              <Activity className={`w-4 h-4 text-pink-400 theme-light:text-purple-700 shrink-0 ${activeActivitiesCount > 0 ? 'animate-pulse' : ''}`} />
+              <span className="hidden sm:inline">{isAr ? 'النشاطات' : 'Activities'}</span>
+              {activeActivitiesCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black text-white bg-emerald-500 border border-emerald-300/40 shadow-sm shrink-0 animate-pulse">
+                  {activeActivitiesCount}
+                </span>
+              )}
             </button>
           )}
 

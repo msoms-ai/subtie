@@ -22,7 +22,7 @@ const MANGA_HERO_SLIDES = [
   }
 ];
 
-export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' }) {
+export default function LandingHero({ onStartWizard, onLoadProject, onOpenActivities, activeActivitiesCount = 0, lang = 'en' }) {
   const [hoveredCloud, setHoveredCloud] = useState(false);
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -58,6 +58,35 @@ export default function LandingHero({ onStartWizard, onLoadProject, lang = 'en' 
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-sky-500/10 via-purple-500/10 to-transparent pointer-events-none blur-3xl" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+
+        {/* Active Ongoing Background Tasks Banner */}
+        {activeActivitiesCount > 0 && (
+          <div
+            onClick={onOpenActivities}
+            className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 theme-light:from-purple-100 theme-light:via-pink-50 theme-light:to-indigo-100 border-2 border-pink-500/50 theme-light:border-pink-400 shadow-xl shadow-purple-950/40 cursor-pointer hover:scale-[1.01] transition"
+          >
+            <div className="flex items-center space-x-3 rtl:space-x-reverse">
+              <div className="relative w-10 h-10 rounded-xl bg-pink-500/30 text-pink-300 theme-light:text-pink-700 flex items-center justify-center shrink-0">
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping absolute" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 relative z-10" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white theme-light:text-slate-950 flex items-center space-x-2 rtl:space-x-reverse">
+                  <span>{isAr ? `لديك ${activeActivitiesCount} مهمة قيد التحميل والمعالجة في الخلفية!` : `You have ${activeActivitiesCount} active background task(s)!`}</span>
+                </h4>
+                <p className="text-xs text-purple-200 theme-light:text-purple-900 font-extrabold">
+                  {isAr ? 'انقر هنا لمتابعة تقدم التورنت وتفريغ الذكاء الاصطناعي مع الوقت المتبقي' : 'Click here to monitor torrent download & AI transcribing progress with ETA'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-pink-500/30 border border-pink-400/30 hover:scale-105 transition cursor-pointer"
+            >
+              {isAr ? 'متابعة المهام الآن ⚡' : 'Monitor Tasks ⚡'}
+            </button>
+          </div>
+        )}
         
         {/* HERO TOP: Clean Title & Fancy Anime Sky Display */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">

@@ -45,11 +45,19 @@ export async function ensureWebCompatibleVideo(sourcePath, targetDir) {
     return { mp4Path: targetMp4Path, fileName: 'video.mp4', converted: false };
   }
 
-  // If a valid converted MP4 already exists in targetDir, use it
+  // If a valid converted MP4 already exists in targetDir, use it and clean up source MKV
   if (fs.existsSync(targetMp4Path)) {
     try {
       const stats = fs.statSync(targetMp4Path);
-      if (stats.size > 1024 * 1024) { // At least 1MB
+      if (stats.size > 1000) { // Valid non-empty file
+        if (ext !== '.mp4' && path.resolve(sourcePath) !== path.resolve(targetMp4Path) && fs.existsSync(sourcePath)) {
+          try {
+            fs.unlinkSync(sourcePath);
+            console.log(`🗑️ [VideoService] Cleaned up original source "${path.basename(sourcePath)}" since valid video.mp4 already exists.`);
+          } catch (delErr) {
+            console.warn('⚠️ [VideoService] Cleanup warning:', delErr.message);
+          }
+        }
         return { mp4Path: targetMp4Path, fileName: 'video.mp4', converted: true };
       }
     } catch (_) {}
@@ -73,6 +81,20 @@ export async function ensureWebCompatibleVideo(sourcePath, targetDir) {
     });
 
     console.log(`✅ [VideoService] Fast stream remux successful: ${targetMp4Path}`);
+
+    // Automatic MKV cleanup: remove original source file once MP4 is confirmed
+    if (ext !== '.mp4' && path.resolve(sourcePath) !== path.resolve(targetMp4Path) && fs.existsSync(targetMp4Path)) {
+      try {
+        const stats = fs.statSync(targetMp4Path);
+        if (stats.size > 0 && fs.existsSync(sourcePath)) {
+          fs.unlinkSync(sourcePath);
+          console.log(`🗑️ [VideoService] Reclaimed disk space: deleted original MKV/source file "${path.basename(sourcePath)}"`);
+        }
+      } catch (delErr) {
+        console.warn('⚠️ [VideoService] Could not remove original source file:', delErr.message);
+      }
+    }
+
     return { mp4Path: targetMp4Path, fileName: 'video.mp4', converted: true };
   } catch (copyErr) {
     console.warn(`⚠️ [VideoService] Fast stream copy failed (${copyErr.message}). Falling back to ultrafast H.264/AAC transcode...`);
@@ -98,6 +120,20 @@ export async function ensureWebCompatibleVideo(sourcePath, targetDir) {
     });
 
     console.log(`✅ [VideoService] Transcoding to MP4 successful: ${targetMp4Path}`);
+
+    // Automatic MKV cleanup: remove original source file once MP4 is confirmed
+    if (ext !== '.mp4' && path.resolve(sourcePath) !== path.resolve(targetMp4Path) && fs.existsSync(targetMp4Path)) {
+      try {
+        const stats = fs.statSync(targetMp4Path);
+        if (stats.size > 0 && fs.existsSync(sourcePath)) {
+          fs.unlinkSync(sourcePath);
+          console.log(`🗑️ [VideoService] Reclaimed disk space: deleted original MKV/source file "${path.basename(sourcePath)}"`);
+        }
+      } catch (delErr) {
+        console.warn('⚠️ [VideoService] Could not remove original source file:', delErr.message);
+      }
+    }
+
     return { mp4Path: targetMp4Path, fileName: 'video.mp4', converted: true };
   } catch (transcodeErr) {
     console.error(`❌ [VideoService] Transcode failed:`, transcodeErr.message);
