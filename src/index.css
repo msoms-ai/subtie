@@ -159,10 +159,25 @@
   box-shadow: 8px 8px 0px #ec4899 !important;
 }
 
-/* 3. Manga Header & Input Adjustments */
+/* 3. Manga Header, Footer & Content Adjustments */
 .theme-light header {
   background: rgba(255, 255, 255, 0.98) !important;
   border-bottom: 2.5px solid #6b21a8 !important;
+}
+
+.theme-light footer {
+  background-color: #ffffff !important;
+  border-top: 2.5px solid #6b21a8 !important;
+  box-shadow: 0 -4px 20px rgba(107, 33, 168, 0.08) !important;
+}
+
+.theme-light footer nav button {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+.theme-light footer nav button:hover {
+  color: #7e22ce !important;
 }
 
 .theme-light h1,
@@ -175,30 +190,47 @@
   font-weight: 800 !important;
 }
 
-.theme-light p:not(.anime-subtitle-overlay):not(.footer-white-text p):not(.wizard-white-text p):not(.wizard-white-text),
+/* Base text contrast - do not turn white button text dark! */
+.theme-light p:not(.anime-subtitle-overlay):not(.footer-white-text p):not(.wizard-white-text p):not(.wizard-white-text):not(button p):not([class*="text-white"]):not([class*="text-yellow-"]):not([class*="text-pink-200"]):not([class*="text-purple-200"]),
 .theme-light label {
-  color: #1e293b !important;
+  color: #1e293b;
 }
 
-/* High Contrast Light Theme Color Overrides */
-.theme-light .text-purple-400,
-.theme-light .text-purple-300 {
-  color: #581c87 !important; /* Rich Dark Purple */
+/* Maintain crisp white text on buttons and badges that have dark/gradient backgrounds in light mode */
+.theme-light button.text-white,
+.theme-light button .text-white,
+.theme-light [class*="bg-purple-950"] .text-white,
+.theme-light [class*="bg-purple-900"] .text-white,
+.theme-light [class*="bg-purple-800"] .text-white,
+.theme-light [class*="bg-purple-700"] .text-white,
+.theme-light [class*="bg-emerald-600"] .text-white,
+.theme-light [class*="bg-gradient-"] .text-white,
+.theme-light [class*="from-purple-"] .text-white,
+.theme-light [class*="from-pink-"] .text-white,
+.theme-light [class*="from-emerald-"] .text-white,
+.theme-light [class*="from-indigo-"] .text-white {
+  color: #ffffff !important;
 }
 
-.theme-light .text-pink-400,
-.theme-light .text-pink-300 {
-  color: #9d174d !important; /* Rich Dark Pink */
+/* High Contrast Light Theme Color Overrides for Body Content (never inside buttons) */
+.theme-light :not(button):not([class*="bg-purple"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-purple-400,
+.theme-light :not(button):not([class*="bg-purple"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-purple-300 {
+  color: #581c87; /* Rich Dark Purple */
 }
 
-.theme-light .text-emerald-400,
-.theme-light .text-emerald-300 {
-  color: #047857 !important; /* Rich Dark Emerald */
+.theme-light :not(button):not([class*="bg-pink"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-pink-400,
+.theme-light :not(button):not([class*="bg-pink"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-pink-300 {
+  color: #9d174d; /* Rich Dark Pink */
 }
 
-.theme-light .text-slate-300,
-.theme-light .text-slate-400 {
-  color: #1e293b !important; /* Deep Slate Ink */
+.theme-light :not(button):not([class*="bg-emerald"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-emerald-400,
+.theme-light :not(button):not([class*="bg-emerald"]):not([class*="bg-gradient"]):not([class*="from-"]) > .text-emerald-300 {
+  color: #047857; /* Rich Dark Emerald */
+}
+
+.theme-light :not(button):not([class*="from-"]) > .text-slate-300,
+.theme-light :not(button):not([class*="from-"]) > .text-slate-400 {
+  color: #1e293b; /* Deep Slate Ink */
 }
 
 .theme-light input,
@@ -206,8 +238,8 @@
 .theme-light textarea {
   background-color: #ffffff !important;
   color: #0f172a !important;
-  border: 2.5px solid #6b21a8 !important;
-  box-shadow: 3px 3px 0px rgba(168, 85, 247, 0.25) !important;
+  border: 2px solid #6b21a8 !important;
+  box-shadow: 2px 2px 0px rgba(168, 85, 247, 0.25) !important;
   font-weight: 700 !important;
 }
 
@@ -215,7 +247,7 @@
 .theme-light select:focus,
 .theme-light textarea:focus {
   border-color: #ec4899 !important;
-  box-shadow: 4px 4px 0px #ec4899 !important;
+  box-shadow: 3px 3px 0px #ec4899 !important;
 }
 
 .theme-light input::placeholder {

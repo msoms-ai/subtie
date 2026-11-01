@@ -4,28 +4,28 @@ export default function Footer({ onOpenAbout, onOpenContact, onOpenRules, lang =
   const isAr = lang === 'ar';
 
   return (
-    <footer className="w-full border-t border-slate-800/80 theme-light:border-purple-300 bg-slate-950/95 theme-light:bg-white/95 py-10 px-4 sm:px-6 lg:px-8 mt-auto">
+    <footer className="w-full border-t border-slate-800/80 theme-light:border-purple-300 bg-slate-950/95 theme-light:bg-white py-10 px-4 sm:px-6 lg:px-8 mt-auto transition-colors">
       <div className="max-w-7xl mx-auto flex flex-col items-center justify-center space-y-6">
         
         {/* Navigation Links */}
         <nav className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 text-sm sm:text-base font-extrabold text-white theme-light:text-slate-950">
           <button
             onClick={onOpenAbout}
-            className="hover:text-purple-300 theme-light:hover:text-purple-700 transition-colors"
+            className="hover:text-purple-300 theme-light:text-slate-900 theme-light:hover:text-purple-700 transition-colors"
           >
             {isAr ? 'عن المنصة' : 'About'}
           </button>
           <span className="text-pink-400 font-black">•</span>
           <button
             onClick={onOpenContact}
-            className="hover:text-pink-300 theme-light:hover:text-pink-700 transition-colors"
+            className="hover:text-pink-300 theme-light:text-slate-900 theme-light:hover:text-pink-700 transition-colors"
           >
             {isAr ? 'اتصل بنا' : 'Contact'}
           </button>
           <span className="text-pink-400 font-black">•</span>
           <button
             onClick={onOpenRules}
-            className="hover:text-purple-300 theme-light:hover:text-purple-700 transition-colors"
+            className="hover:text-purple-300 theme-light:text-slate-900 theme-light:hover:text-purple-700 transition-colors"
           >
             {isAr ? 'القوانين والتعليمات' : 'Rules'}
           </button>

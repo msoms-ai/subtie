@@ -145,16 +145,15 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         if (data.progress !== undefined) setUploadProgress(data.progress);
         if (data.message) setUploadStatusText(data.message);
 
-        if (data.stage === 'torrent_completed') {
+        if (data.stage === 'torrent_completed' || data.progress === 100) {
+          setCurrentStep(6);
+          setIsProcessing(true);
+          setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! جاري استخراج الصوت وبدء المعالجة الذكية...' : 'Torrent downloaded! Initializing audio extraction & AI pipeline...');
           setTimeout(() => {
             if (startAIProcessingRef.current) {
               startAIProcessingRef.current(projectId);
-            } else {
-              setCurrentStep(6);
-              setIsProcessing(true);
-              setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! بدء المعالجة بالذكاء الاصطناعي...' : 'Torrent downloaded! Starting AI transcription...');
             }
-          }, 1000);
+          }, 300);
         } else if (data.stage === 'torrent_failed') {
           setErrorMessage(data.error || 'Failed to download torrent.');
           setCurrentStep(6);
@@ -181,13 +180,13 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           const st = data.status;
           setTorrentTelemetry(prev => ({ ...(prev || {}), ...st }));
           if (st.progress !== undefined) setUploadProgress(st.progress);
-          if (st.status === 'completed') {
+          if (st.status === 'completed' || st.progress === 100) {
             clearInterval(pollInterval);
+            setCurrentStep(6);
+            setIsProcessing(true);
+            setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! جاري استخراج الصوت وبدء المعالجة الذكية...' : 'Torrent downloaded! Starting audio extraction & AI pipeline...');
             if (startAIProcessingRef.current) {
               startAIProcessingRef.current(projectId);
-            } else {
-              setCurrentStep(6);
-              setIsProcessing(true);
             }
           } else if (st.status === 'failed') {
             clearInterval(pollInterval);
@@ -1293,11 +1292,43 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 {/* Step 3: Translating AI Processing */}
                 <div>
                   <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
-                    <span>{isAr ? '3. ترجمة الصوت الياباني' : '3. Japanese Audio Translating'}</span>
+                    <span>{isAr ? '3. ترجمة الحوارات للعربية الفصحى' : '3. Subtitles Translating (Arabic)'}</span>
                     <span className="text-indigo-400">{progressTranslate}%</span>
                   </div>
                   <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
                     <div className="h-full rounded-full shimmer-bar bg-gradient-to-r from-indigo-500 to-purple-400 transition-all duration-500" style={{ width: `${progressTranslate}%` }} />
+                  </div>
+                </div>
+
+                {/* Step 4: Vision OCR Sign Identification */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '4. فحص اللوحات والنصوص بالفيديو (Vision OCR)' : '4. Video Signs & On-screen Text (Vision OCR)'}</span>
+                    <span className="text-amber-400">
+                      {processProgress >= 95 ? 100 : processProgress >= 85 ? Math.min(100, Math.round(((processProgress - 85) / 10) * 100)) : 0}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
+                    <div
+                      className="h-full rounded-full shimmer-bar bg-gradient-to-r from-amber-500 to-orange-400 transition-all duration-500"
+                      style={{ width: `${processProgress >= 95 ? 100 : processProgress >= 85 ? Math.min(100, Math.round(((processProgress - 85) / 10) * 100)) : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Step 5: Character Entities & Avatars */}
+                <div>
+                  <div className="flex justify-between text-xs font-black text-purple-200 theme-light:text-purple-950 mb-1">
+                    <span>{isAr ? '5. استخراج شخصيات الأنمي والوجوه' : '5. Character Matrix & Avatar Detection'}</span>
+                    <span className="text-pink-400">
+                      {processProgress >= 100 ? 100 : processProgress >= 93 ? Math.min(100, Math.round(((processProgress - 93) / 7) * 100)) : 0}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden mt-2">
+                    <div
+                      className="h-full rounded-full shimmer-bar bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500"
+                      style={{ width: `${processProgress >= 100 ? 100 : processProgress >= 93 ? Math.min(100, Math.round(((processProgress - 93) / 7) * 100)) : 0}%` }}
+                    />
                   </div>
                 </div>
                 

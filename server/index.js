@@ -28,6 +28,7 @@ import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from 
 import { torrentService } from './services/torrentService.js';
 import { detectVisualSignsFromVideo } from './services/visionOcrService.js';
 import { getAllFolderCovers, generateFolderCover } from './services/folderCoverService.js';
+import { ensureWebCompatibleVideo } from './services/videoService.js';
 import paymentService, {
   getPackagesCatalogue,
   createPaymentIntent,
@@ -1407,9 +1408,24 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       throw new Error(errMsg);
     }
 
-    const videoPath = path.join(targetDir, foundVideoFile);
+    let videoPath = path.join(targetDir, foundVideoFile);
     const audioPath = path.join(targetDir, 'audio.mp3');
     const srtPath = path.join(targetDir, 'subtitle.srt');
+
+    // Auto-remux MKV or non-MP4 formats to web-friendly MP4 for smooth browser playback
+    if (path.extname(foundVideoFile).toLowerCase() !== '.mp4') {
+      try {
+        console.log(`🎬 [Process] Ensuring web-compatible MP4 for "${foundVideoFile}"...`);
+        const webRes = await ensureWebCompatibleVideo(videoPath, targetDir);
+        if (webRes && webRes.converted) {
+          videoPath = webRes.mp4Path;
+          project.videoUrl = `${urlPrefix}/${webRes.fileName}`;
+          console.log(`✅ [Process] Project video converted to web MP4: ${project.videoUrl}`);
+        }
+      } catch (convErr) {
+        console.warn('⚠️ [Process] Web conversion warning:', convErr.message);
+      }
+    }
 
     // Probe duration from video file if not passed from client
     let finalDurationSecs = Number(videoDurationSecs) || 0;
@@ -1756,7 +1772,8 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
 
     project.subtitles = allParsedSubtitles;
 
-    // Detect Anime Characters and generate Avatar Thumbnails
+    // Stage 4: Detect Anime Characters and generate Avatar Thumbnails
+    emitAndSaveProgress(100, 100, 100, 'فحص شخصيات الأنمي وبطاقات التعريف والوجوه...', 85);
     try {
       const charactersDir = path.join(targetDir, 'characters');
       console.log(`[CharacterService] Extracting character entities & avatars for ${projectId}...`);
@@ -1772,7 +1789,8 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
       project.characters = [];
     }
 
-    // Detect On-Screen Visual Signs & Titles (Full-Video OCR)
+    // Stage 5: Detect On-Screen Visual Signs & Titles (Full-Video OCR)
+    emitAndSaveProgress(100, 100, 100, 'فحص اللوحات والنصوص والعناوين في الفيديو (Vision OCR)...', 93);
     try {
       const signsDir = path.join(targetDir, 'visual_signs');
       console.log(`[VisionOCR] Extracting on-screen signs, titles & notes for ${projectId}...`);
@@ -1799,6 +1817,8 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     project.updatedAt = new Date().toISOString();
     project.processingProgress = 100;
     project.processingStatus = "Completed";
+    project.status = "ready";
+    project.isUnread = true;
 
     // Read fresh DB to avoid overwriting R2 URL or concurrent updates
     const freshDb = readProjects();
@@ -1808,6 +1828,15 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     };
     writeProjects(freshDb);
     const finalProject = freshDb[projectId];
+
+    // Emit final process completion event so wizard transitions immediately!
+    emitAndSaveProgress(100, 100, 100, 'اكتملت جميع مراحل المعالجة بنجاح!', 100);
+    socketService.emitProgress(projectId, {
+      stage: 'process_completed',
+      progress: 100,
+      status: 'Completed',
+      projectId
+    });
 
     const resultPayload = {
       success: true,
@@ -2000,6 +2029,30 @@ app.get('/api/project/:id', (req, res) => {
 
   if (user.role !== 'Admin' && project.ownerId !== userId && project.auditorId !== userId) {
     return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // Ensure web-playable MP4 if video is MKV
+  if (project.videoUrl && /\.mkv$/i.test(project.videoUrl)) {
+    const ownerId = project.ownerId || 'usr_guest';
+    const { targetDir, urlPrefix } = findProjectDirectories(ownerId, project.projectName, id);
+    const mkvPath = path.join(targetDir, 'video.mkv');
+    const mp4Path = path.join(targetDir, 'video.mp4');
+
+    if (fs.existsSync(mp4Path) && fs.statSync(mp4Path).size > 1024 * 1024) {
+      project.videoUrl = `${urlPrefix}/video.mp4`;
+      projects[id].videoUrl = project.videoUrl;
+      writeProjects(projects);
+    } else if (fs.existsSync(mkvPath)) {
+      ensureWebCompatibleVideo(mkvPath, targetDir).then(webRes => {
+        if (webRes && webRes.converted) {
+          const fresh = readProjects();
+          if (fresh[id]) {
+            fresh[id].videoUrl = `${urlPrefix}/video.mp4`;
+            writeProjects(fresh);
+          }
+        }
+      }).catch(e => console.warn('Background remux error:', e.message));
+    }
   }
 
   return res.json(project);

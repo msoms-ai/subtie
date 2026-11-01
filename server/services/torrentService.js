@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import socketService from './socket.js';
+import { ensureWebCompatibleVideo } from './videoService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,18 +189,47 @@ class TorrentService {
 
     const downloaded = torrent.downloaded || 0;
     const total = videoFile ? videoFile.length : (torrent.length || 0);
-    const pct = total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : 0;
+
+    // Precise completion check: either video file reached length, or overall progress completed
+    const isVideoDone = (videoFile && (videoFile.done || (videoFile.downloaded !== undefined && videoFile.downloaded >= videoFile.length))) ||
+                        (total > 0 && downloaded >= total) ||
+                        (torrent.progress >= 0.999 && total > 0);
+
+    const pct = isVideoDone ? 100 : (total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : 0);
     const speedBytes = torrent.downloadSpeed || 0;
     const speedMb = (speedBytes / (1024 * 1024)).toFixed(2);
     const downloadedMb = (downloaded / (1024 * 1024)).toFixed(1);
     const totalMb = total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...';
 
-    const etaFormatted = formatEta(torrent.timeRemaining);
+    const etaFormatted = isVideoDone ? '0m 0s' : formatEta(torrent.timeRemaining);
     const numSeeds = numPeers; // in webtorrent, numPeers is total active peers in swarm
 
     jobData.progress = pct;
     jobData.downloadedBytes = downloaded;
     jobData.downloadSpeed = speedBytes;
+
+    if (isVideoDone && !jobData.isCompleting) {
+      jobData.isCompleting = true;
+      jobData.progress = 100;
+      console.log(`🎬 [TorrentService] Video download 100% reached for project ${projectId}! Finalizing...`);
+      socketService.emitProgress(projectId, {
+        stage: 'torrent_completed',
+        progress: 100,
+        downloadSpeed: '0.00',
+        downloadedMb: totalMb,
+        totalMb,
+        numPeers,
+        numSeeds,
+        eta: '0m 0s',
+        fileName: videoFile?.name || '',
+        message: 'اكتمل تحميل ملف الفيديو بنجاح! جاري النقل وبدء المعالجة الذكية...',
+        status: 'completed',
+      });
+      setTimeout(() => {
+        this.handleTorrentCompleted(jobData, torrent);
+      }, 300);
+      return;
+    }
 
     socketService.emitProgress(projectId, {
       stage: jobData.status === 'fetching_metadata' ? 'torrent_connecting' : 'torrent_downloading',
@@ -277,8 +307,20 @@ class TorrentService {
     this.emitTelemetryUpdate(jobData);
 
     // Listen for completion
+    if (targetVideo && typeof targetVideo.on === 'function') {
+      targetVideo.on('done', () => {
+        if (!jobData.isCompleting) {
+          jobData.isCompleting = true;
+          this.handleTorrentCompleted(jobData, torrent);
+        }
+      });
+    }
+
     torrent.on('done', () => {
-      this.handleTorrentCompleted(jobData, torrent);
+      if (!jobData.isCompleting) {
+        jobData.isCompleting = true;
+        this.handleTorrentCompleted(jobData, torrent);
+      }
     });
 
     torrent.on('error', (err) => {
@@ -335,6 +377,24 @@ class TorrentService {
       fs.copyFileSync(sourceVideoPath, finalVideoPath);
       console.log(`📦 [TorrentService] Moved completed video to: ${finalVideoPath}`);
 
+      let effectiveVideoFileName = targetFileName;
+      let effectiveVideoPath = finalVideoPath;
+
+      // Ensure MKV is automatically remuxed into a web-compatible MP4
+      if (ext.toLowerCase() !== '.mp4') {
+        try {
+          console.log(`🎬 [TorrentService] Automatically ensuring web compatibility for ${targetFileName}...`);
+          const webRes = await ensureWebCompatibleVideo(finalVideoPath, projectTargetDir);
+          if (webRes && webRes.converted) {
+            effectiveVideoFileName = webRes.fileName;
+            effectiveVideoPath = webRes.mp4Path;
+            console.log(`✅ [TorrentService] Web-compatible MP4 created: ${effectiveVideoPath}`);
+          }
+        } catch (convErr) {
+          console.warn(`⚠️ [TorrentService] Automatic web conversion warning:`, convErr.message);
+        }
+      }
+
       // Destroy torrent cleanly to release memory and lock
       torrent.destroy({ destroyStore: true }, () => {
         // Clean up temporary torrent chunks dir
@@ -350,8 +410,8 @@ class TorrentService {
         onSuccess({
           projectId,
           userId,
-          videoPath: finalVideoPath,
-          videoFileName: targetFileName,
+          videoPath: effectiveVideoPath,
+          videoFileName: effectiveVideoFileName,
           originalName: videoFile.name,
           fileSize: videoFile.length,
           projectTargetDir,

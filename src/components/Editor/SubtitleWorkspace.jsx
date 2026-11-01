@@ -1,8 +1,63 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users, Eye, Cpu, Sparkles, RefreshCw } from 'lucide-react';
+import { Save, Download, CheckCircle2, Circle, Volume2, Film, Layers, ArrowLeft, Languages, Trash2, Clock, MessageSquare, AlertTriangle, X, FileText, Check, Maximize, Minimize, RefreshCcw, Plus, Users, Eye, Cpu, Sparkles, RefreshCw, ChevronUp, Play } from 'lucide-react';
 import ReSubtitleModal from './ReSubtitleModal.jsx';
 import CharacterMatrix from './CharacterMatrix.jsx';
 import VisualSignsMatrix from './VisualSignsMatrix.jsx';
+
+// Timestamp parsing & normalization helpers
+function parseTimestampToSeconds(ts) {
+  if (!ts) return 0;
+  try {
+    const clean = String(ts).trim().replace('.', ',');
+    const parts = clean.split(',');
+    const ms = parts[1] ? parseInt(parts[1].padEnd(3, '0').slice(0, 3), 10) : 0;
+    const timeParts = parts[0].split(':');
+    let h = 0, m = 0, s = 0;
+    if (timeParts.length === 3) {
+      h = parseInt(timeParts[0], 10) || 0;
+      m = parseInt(timeParts[1], 10) || 0;
+      s = parseInt(timeParts[2], 10) || 0;
+    } else if (timeParts.length === 2) {
+      m = parseInt(timeParts[0], 10) || 0;
+      s = parseInt(timeParts[1], 10) || 0;
+    } else if (timeParts.length === 1) {
+      s = parseInt(timeParts[0], 10) || 0;
+    }
+    return Math.max(0, h * 3600 + m * 60 + s + (ms / 1000));
+  } catch (_) {
+    return 0;
+  }
+}
+
+function formatSecondsToTimestamp(sec) {
+  const safeSec = Math.max(0, Number(sec) || 0);
+  const h = Math.floor(safeSec / 3600);
+  const m = Math.floor((safeSec % 3600) / 60);
+  const s = Math.floor(safeSec % 60);
+  const ms = Math.round((safeSec % 1) * 1000);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+}
+
+function normalizeTimestamp(str) {
+  if (!str) return '00:00:00,000';
+  const clean = String(str).trim().replace('.', ',');
+  const fullMatch = clean.match(/^(\d{1,2}):(\d{1,2}):(\d{1,2})(?:,(\d{1,3}))?$/);
+  if (fullMatch) {
+    const h = fullMatch[1].padStart(2, '0');
+    const m = fullMatch[2].padStart(2, '0');
+    const s = fullMatch[3].padStart(2, '0');
+    const ms = (fullMatch[4] || '0').padEnd(3, '0').slice(0, 3);
+    return `${h}:${m}:${s},${ms}`;
+  }
+  const minMatch = clean.match(/^(\d{1,2}):(\d{1,2})(?:,(\d{1,3}))?$/);
+  if (minMatch) {
+    const m = minMatch[1].padStart(2, '0');
+    const s = minMatch[2].padStart(2, '0');
+    const ms = (minMatch[3] || '0').padEnd(3, '0').slice(0, 3);
+    return `00:${m}:${s},${ms}`;
+  }
+  return formatSecondsToTimestamp(parseTimestampToSeconds(clean));
+}
 
 export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAddAnotherEpisode, user, lang = 'en' }) {
   const [project, setProject] = useState(initialProject);
@@ -40,6 +95,122 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
   const videoContainerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const isAr = lang === 'ar';
+
+  // Video Source with automatic MKV -> MP4 web compatibility fallback
+  const [currentVideoSrc, setCurrentVideoSrc] = useState(
+    initialProject?.videoUrl && /\.mkv$/i.test(initialProject.videoUrl)
+      ? initialProject.videoUrl.replace(/\.mkv$/i, '.mp4')
+      : (initialProject?.videoUrl || '')
+  );
+
+  useEffect(() => {
+    if (project?.videoUrl) {
+      const preferred = /\.mkv$/i.test(project.videoUrl)
+        ? project.videoUrl.replace(/\.mkv$/i, '.mp4')
+        : project.videoUrl;
+      setCurrentVideoSrc(preferred);
+    }
+  }, [project?.videoUrl]);
+
+  // Subtitle timing draft state: { [id]: { startTime, endTime, isDirty } }
+  const [timingDrafts, setTimingDrafts] = useState({});
+
+  const handleTimingDraftChange = (id, field, value) => {
+    setTimingDrafts(prev => {
+      const currentSub = subtitles.find(s => s.id === id);
+      const prevDraft = prev[id] || {
+        startTime: currentSub?.startTime || '00:00:00,000',
+        endTime: currentSub?.endTime || '00:00:02,000',
+        isDirty: false
+      };
+      return {
+        ...prev,
+        [id]: {
+          ...prevDraft,
+          [field]: value,
+          isDirty: true
+        }
+      };
+    });
+  };
+
+  const handleSaveTiming = async (id) => {
+    const draft = timingDrafts[id];
+    const sub = subtitles.find(s => s.id === id);
+    if (!sub) return;
+
+    const rawStart = draft?.startTime !== undefined ? draft.startTime : sub.startTime;
+    const rawEnd = draft?.endTime !== undefined ? draft.endTime : sub.endTime;
+
+    const cleanStart = normalizeTimestamp(rawStart);
+    let cleanEnd = normalizeTimestamp(rawEnd);
+
+    let startSec = parseTimestampToSeconds(cleanStart);
+    let endSec = parseTimestampToSeconds(cleanEnd);
+
+    if (endSec <= startSec) {
+      endSec = startSec + 1.5;
+      cleanEnd = formatSecondsToTimestamp(endSec);
+    }
+
+    const updatedSubtitles = subtitles.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          startTime: cleanStart,
+          endTime: cleanEnd,
+          startSeconds: startSec,
+          endSeconds: endSec
+        };
+      }
+      return s;
+    });
+
+    setSubtitles(updatedSubtitles);
+    setTimingDrafts(prev => ({
+      ...prev,
+      [id]: {
+        startTime: cleanStart,
+        endTime: cleanEnd,
+        isDirty: false
+      }
+    }));
+
+    setToastMsg(isAr ? 'تم حفظ التوقيت بنجاح!' : 'Subtitle timing updated successfully!');
+    setTimeout(() => setToastMsg(null), 2500);
+
+    // Auto-save to server
+    try {
+      await fetch(`/api/project/${project.id}/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({ subtitles: updatedSubtitles, characters })
+      });
+    } catch (saveErr) {
+      console.warn('Background timing auto-save error:', saveErr);
+    }
+  };
+
+  // Floating Scroll to Top state & listener
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 250) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleStartAIProcessing = async () => {
     setIsProcessingAI(true);
@@ -606,7 +777,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
           >
             <video
               ref={videoRef}
-              src={project.videoUrl}
+              src={currentVideoSrc}
               controls
               controlsList="nofullscreen"
               playsInline
@@ -614,6 +785,13 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
               preload="metadata"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={() => setVideoDurationSeconds(videoRef.current?.duration || 0)}
+              onError={() => {
+                if (currentVideoSrc && /\.mkv$/i.test(currentVideoSrc)) {
+                  setCurrentVideoSrc(currentVideoSrc.replace(/\.mkv$/i, '.mp4'));
+                } else if (currentVideoSrc && /\.mp4$/i.test(currentVideoSrc) && project?.videoUrl && /\.mkv$/i.test(project.videoUrl)) {
+                  setCurrentVideoSrc(project.videoUrl);
+                }
+              }}
               className="w-full h-full object-contain"
             />
             
@@ -930,16 +1108,64 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
                   }`}
                 >
                   {/* Line Header & Millisecond-Accurate Timestamp */}
-                  <div className="flex items-center justify-between" dir={isAr ? 'rtl' : 'ltr'}>
-                    <button
-                      onClick={() => handleSelectLine(sub)}
-                      className="flex items-center space-x-2 rtl:space-x-reverse px-3 py-1.5 rounded-xl bg-purple-950 theme-light:bg-purple-700 text-white border border-purple-500/40 theme-light:border-purple-800 font-mono text-xs font-black shadow-sm wizard-white-text transition hover:scale-105"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-pink-300" />
-                      <span>Line #{idx + 1}</span>
-                      <span className="text-purple-300">|</span>
-                      <span>{sub.startTime} → {sub.endTime}</span>
-                    </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2.5" dir={isAr ? 'rtl' : 'ltr'}>
+                    <div className="flex items-center flex-wrap gap-2">
+                      {/* Play line button */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLine(sub)}
+                        className="flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1.5 rounded-xl bg-purple-950 theme-light:bg-purple-700 text-white border border-purple-500/40 theme-light:border-purple-800 font-mono text-xs font-black shadow-sm wizard-white-text transition hover:scale-105 cursor-pointer"
+                        title={isAr ? 'تشغيل المقطع من البداية' : 'Play line from start'}
+                      >
+                        <Volume2 className="w-3.5 h-3.5 text-pink-300 shrink-0" />
+                        <span>#{idx + 1}</span>
+                      </button>
+
+                      {/* Editable Timings Container with Start, End and Green Tick Save */}
+                      <div className="flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1 rounded-xl bg-slate-950/80 theme-light:bg-white border border-purple-500/30 theme-light:border-purple-400 font-mono text-xs shadow-inner">
+                        <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        
+                        {/* Start Time Input */}
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={timingDrafts[sub.id]?.startTime !== undefined ? timingDrafts[sub.id].startTime : (sub.startTime || '00:00:00,000')}
+                          onChange={(e) => handleTimingDraftChange(sub.id, 'startTime', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTiming(sub.id); }}
+                          placeholder="00:00:00,000"
+                          className="w-24 bg-transparent text-center text-purple-200 theme-light:text-purple-950 font-bold font-mono text-[11px] outline-none border-b border-transparent focus:border-pink-500 transition px-0.5"
+                          title={isAr ? 'توقيت البداية (ساعة:دقيقة:ثانية,جزء)' : 'Start time (HH:MM:SS,mmm)'}
+                        />
+
+                        <span className="text-pink-400 font-black">→</span>
+
+                        {/* End Time Input */}
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={timingDrafts[sub.id]?.endTime !== undefined ? timingDrafts[sub.id].endTime : (sub.endTime || '00:00:02,000')}
+                          onChange={(e) => handleTimingDraftChange(sub.id, 'endTime', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTiming(sub.id); }}
+                          placeholder="00:00:00,000"
+                          className="w-24 bg-transparent text-center text-purple-200 theme-light:text-purple-950 font-bold font-mono text-[11px] outline-none border-b border-transparent focus:border-pink-500 transition px-0.5"
+                          title={isAr ? 'توقيت النهاية (ساعة:دقيقة:ثانية,جزء)' : 'End time (HH:MM:SS,mmm)'}
+                        />
+
+                        {/* Small Green Tick Button to Save Timing */}
+                        <button
+                          type="button"
+                          onClick={() => handleSaveTiming(sub.id)}
+                          className={`p-1 rounded-lg transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                            timingDrafts[sub.id]?.isDirty
+                              ? 'bg-emerald-500 text-white hover:bg-emerald-400 scale-110 ring-2 ring-emerald-300 animate-pulse'
+                              : 'bg-emerald-600/80 hover:bg-emerald-500 text-white'
+                          }`}
+                          title={isAr ? 'حفظ تعديل التوقيت (اضغط للحفظ)' : 'Save timing changes'}
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </button>
+                      </div>
+                    </div>
 
                     {/* Arabic Localized Approved Button with PURE WHITE CIRCLE ICON */}
                     <button
@@ -1201,14 +1427,19 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       )}
 
 
-      {/* Scroll to Top */}
-      <button
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-500 transition hover:-translate-y-1"
-        title="Scroll to Top"
-      >
-        <ArrowLeft className="w-6 h-6 rotate-90" />
-      </button>
+      {/* Floating Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 rtl:right-auto rtl:left-8 z-50 p-3 sm:p-3.5 rounded-full bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white shadow-2xl border-2 border-purple-300/60 hover:scale-110 active:scale-95 transition-all cursor-pointer group flex items-center justify-center animate-bounce"
+          style={{ animationIterationCount: 3 }}
+          title={isAr ? 'الصعود لأعلى الصفحة' : 'Scroll to top'}
+          aria-label="Scroll to top"
+        >
+          <ChevronUp className="w-6 h-6 stroke-[3] group-hover:-translate-y-0.5 transition-transform" />
+        </button>
+      )}
     </div>
   );
 }
