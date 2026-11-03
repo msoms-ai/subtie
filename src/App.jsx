@@ -47,6 +47,7 @@ export default function App() {
   const [isActivitiesOpen, setIsActivitiesOpen] = useState(false);
   const [activeActivitiesCount, setActiveActivitiesCount] = useState(0);
   const [preSelectedFolder, setPreSelectedFolder] = useState('');
+  const [lastSelectedFolder, setLastSelectedFolder] = useState(null);
   const [paymentModalData, setPaymentModalData] = useState(null); // { status: 'verifying' | 'success' | 'canceled' | 'error', minutesAdded, newBalance, message }
 
   const refreshActivitiesCount = useCallback(async () => {
@@ -237,6 +238,32 @@ export default function App() {
     setUser(updatedUser);
   };
 
+  useEffect(() => {
+    const onPopState = (e) => {
+      const state = e.state;
+      if (!state || state.view === 'landing') {
+        setView('landing');
+        setCurrentProject(null);
+      } else if (state.view === 'projects') {
+        setView('projects');
+        setCurrentProject(null);
+        if (state.subtieFolder !== undefined) {
+          setLastSelectedFolder(state.subtieFolder);
+        }
+      } else if (state.view === 'editor') {
+        if (state.projectId) {
+          setView('editor');
+        }
+      } else if (state.view === 'wizard') {
+        setView('wizard');
+      } else if (state.view === 'pricing') {
+        setView('pricing');
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   const handleLogout = () => {
     setUser(null);
     setIsProfileOpen(false);
@@ -250,21 +277,34 @@ export default function App() {
       return;
     }
     setView('wizard');
+    try {
+      window.history.pushState({ view: 'wizard' }, '', window.location.pathname);
+    } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenProjects = () => {
     setView('projects');
+    try {
+      window.history.pushState({ view: 'projects', subtieFolder: lastSelectedFolder }, '', window.location.pathname);
+    } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCompleteProcess = (project) => {
     if (project && project.id) {
       setCurrentProject(project);
+      if (project.projectName) setLastSelectedFolder(project.projectName);
       markProjectAsViewed(project.id);
       setView('editor');
+      try {
+        window.history.pushState({ view: 'editor', projectId: project.id, folder: project.projectName }, '', window.location.pathname);
+      } catch (e) {}
     } else {
       setView('projects');
+      try {
+        window.history.pushState({ view: 'projects', subtieFolder: lastSelectedFolder }, '', window.location.pathname);
+      } catch (e) {}
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -272,10 +312,17 @@ export default function App() {
   const handleLoadProject = (project) => {
     if (project && project.id) {
       setCurrentProject(project);
+      if (project.projectName) setLastSelectedFolder(project.projectName);
       markProjectAsViewed(project.id);
       setView('editor');
+      try {
+        window.history.pushState({ view: 'editor', projectId: project.id, folder: project.projectName }, '', window.location.pathname);
+      } catch (e) {}
     } else {
       setView('projects');
+      try {
+        window.history.pushState({ view: 'projects', subtieFolder: lastSelectedFolder }, '', window.location.pathname);
+      } catch (e) {}
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -283,7 +330,10 @@ export default function App() {
   const handleGoHome = () => {
     setView('landing');
     setCurrentProject(null);
-    window.history.pushState({}, '', window.location.pathname);
+    setLastSelectedFolder(null);
+    try {
+      window.history.pushState({ view: 'landing' }, '', window.location.pathname);
+    } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -363,6 +413,8 @@ export default function App() {
             onStartWizard={handleStartWizard}
             onOpenAssignAuditor={(proj) => setAssignAuditorProject(proj)}
             lang={lang}
+            initialFolder={lastSelectedFolder}
+            onFolderChange={(f) => setLastSelectedFolder(f)}
           />
         )}
 

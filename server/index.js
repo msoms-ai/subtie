@@ -1150,37 +1150,123 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   });
 });
 
+function getProjectTargetDir(project, id) {
+  const userId = project.ownerId || 'usr_guest';
+  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
+  
+  let targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
+  if (!fs.existsSync(targetDir)) {
+    targetDir = path.join(UPLOADS_DIR, userId, id);
+    if (!fs.existsSync(targetDir)) {
+      targetDir = path.join(UPLOADS_DIR, id);
+    }
+  }
+  return targetDir;
+}
+
+async function performAudioRechunk(targetDir, chunkDuration = 120) {
+  const audioPath = path.join(targetDir, 'audio.mp3');
+  // If audio.mp3 does not exist, try extracting from available video file
+  if (!fs.existsSync(audioPath)) {
+    const videoFiles = fs.readdirSync(targetDir).filter(f => f.match(/\.(mp4|mkv|webm|avi|mov)$/i));
+    if (videoFiles.length > 0) {
+      const sourceVideo = path.join(targetDir, videoFiles[0]);
+      console.log(`[Rechunk] Extracting audio from ${sourceVideo}...`);
+      await new Promise((resolve, reject) => {
+        ffmpeg(sourceVideo)
+          .noVideo()
+          .audioCodec('libmp3lame')
+          .audioBitrate(192)
+          .output(audioPath)
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+    } else {
+      throw new Error('No audio or video file found to re-chunk');
+    }
+  }
+
+  const chunksDir = path.join(targetDir, 'chunks');
+  if (!fs.existsSync(chunksDir)) {
+    fs.mkdirSync(chunksDir, { recursive: true });
+  } else {
+    // Purge old chunks
+    const oldFiles = fs.readdirSync(chunksDir);
+    for (const f of oldFiles) {
+      try { fs.unlinkSync(path.join(chunksDir, f)); } catch (e) {}
+    }
+  }
+
+  console.log(`[Rechunk] Slicing audio into fresh ${chunkDuration}-second chunks...`);
+  await new Promise((resolve, reject) => {
+    ffmpeg(audioPath)
+      .outputOptions(['-y', '-f segment', `-segment_time ${chunkDuration}`, '-reset_timestamps 1'])
+      .output(path.join(chunksDir, 'chunk_%03d.mp3'))
+      .on('end', resolve)
+      .on('error', reject)
+      .run();
+  });
+
+  let chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+  if (chunkFiles.length === 0 && fs.existsSync(audioPath)) {
+    fs.copyFileSync(audioPath, path.join(chunksDir, 'chunk_000.mp3'));
+    chunkFiles = ['chunk_000.mp3'];
+  }
+
+  console.log(`[Rechunk] Successfully re-chunked into ${chunkFiles.length} segments.`);
+  return { chunksDir, chunkFiles };
+}
+
+// 15b. Re-chunk audio endpoint
+app.post('/api/project/:id/rechunk', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const projects = readProjects();
+    const project = projects[id];
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const targetDir = getProjectTargetDir(project, id);
+    const { chunkFiles } = await performAudioRechunk(targetDir, 120);
+    return res.json({ success: true, chunkCount: chunkFiles.length, chunks: chunkFiles });
+  } catch (err) {
+    console.error('Rechunk error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 16. Process Audio & Transcribe/Translate with Gemini AI Engine
 app.post('/api/project/:id/resubtitle', async (req, res) => {
   try {
     const { id } = req.params;
-    const { chunkIndices } = req.body;
-    
-    if (!Array.isArray(chunkIndices) || chunkIndices.length === 0) {
-      return res.status(400).json({ error: 'chunkIndices array is required' });
-    }
+    let { chunkIndices, rechunk } = req.body;
 
     const projects = readProjects();
     const project = projects[id];
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    const userId = project.ownerId || 'usr_guest';
-    const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
-    
-    let targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
-    if (!fs.existsSync(targetDir)) {
-      targetDir = path.join(UPLOADS_DIR, userId, id);
-      if (!fs.existsSync(targetDir)) {
-        targetDir = path.join(UPLOADS_DIR, id);
+    const targetDir = getProjectTargetDir(project, id);
+    const chunksDir = path.join(targetDir, 'chunks');
+
+    let chunkFiles = [];
+    if (rechunk || !fs.existsSync(chunksDir)) {
+      const result = await performAudioRechunk(targetDir, 120);
+      chunkFiles = result.chunkFiles;
+    } else {
+      chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+      if (chunkFiles.length === 0) {
+        const result = await performAudioRechunk(targetDir, 120);
+        chunkFiles = result.chunkFiles;
       }
     }
-    
-    const chunksDir = path.join(targetDir, 'chunks');
-    if (!fs.existsSync(chunksDir)) {
-      return res.status(404).json({ error: 'Audio chunks not found on server' });
-    }
 
-    const chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
+    if (!Array.isArray(chunkIndices) || chunkIndices.length === 0) {
+      if (rechunk) {
+        chunkIndices = chunkFiles.map((_, i) => i);
+      } else {
+        return res.status(400).json({ error: 'chunkIndices array is required' });
+      }
+    }
     
     const settings = readSettings();
     const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();

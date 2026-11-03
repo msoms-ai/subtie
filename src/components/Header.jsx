@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Film, Sun, Moon, Globe, FolderKanban, Activity, User, LogIn, LogOut, ShieldCheck, Settings, ChevronDown } from 'lucide-react';
 
 export default function Header({
@@ -19,6 +19,23 @@ export default function Header({
   onLogout
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [dropdownOpen]);
 
   const isAr = lang === 'ar';
   const isLight = theme === 'light';
@@ -131,7 +148,7 @@ export default function Header({
 
           {/* User Profile Avatar & Dropdown Menu */}
           {user ? (
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center space-x-1 sm:space-x-2 rtl:space-x-reverse p-1 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-2xl bg-purple-950/90 theme-light:bg-purple-800 border sm:border-2 border-purple-400/80 shadow-lg hover:scale-105 transition"
@@ -153,17 +170,17 @@ export default function Header({
               {/* Dropdown Menu */}
               {dropdownOpen && (
                 <div
-                  className="absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-56 glass-panel rounded-2xl border border-purple-500/40 shadow-2xl p-2 z-50 text-xs font-bold space-y-1 bg-slate-950/95 text-white"
+                  className="profile-dropdown-menu absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-60 rounded-2xl border shadow-2xl p-2.5 z-50 text-xs font-bold space-y-1.5 transition-all"
                   onClick={() => setDropdownOpen(false)}
                 >
-                  <div className="p-2.5 border-b border-purple-500/20 text-center">
-                    <span className="block font-black text-white">{user.firstName} {user.lastName}</span>
-                    <span className="text-[10px] text-purple-300 block mb-1">{user.email}</span>
-                    <div className="bg-slate-900 rounded-lg p-1.5 mb-1.5 flex justify-center items-center space-x-1 border border-yellow-500/30">
-                       <span className="text-xs">🪙</span>
-                       <span className="text-yellow-400 text-xs font-black">{user.minuteBalance !== undefined ? user.minuteBalance : 0} {isAr ? 'دقيقة متاحة' : 'Minutes left'}</span>
+                  <div className="p-3 border-b border-purple-500/20 theme-light:border-purple-200 text-center">
+                    <span className="block font-black text-sm profile-dropdown-name">{user.firstName} {user.lastName}</span>
+                    <span className="text-[11px] block mb-2 profile-dropdown-email">{user.email}</span>
+                    <div className="profile-dropdown-wallet rounded-xl p-2 mb-2 flex justify-center items-center space-x-1.5 rtl:space-x-reverse border">
+                       <span className="text-sm">🪙</span>
+                       <span className="profile-dropdown-wallet-text text-xs font-black">{user.minuteBalance !== undefined ? user.minuteBalance : 0} {isAr ? 'دقيقة متاحة' : 'Minutes left'}</span>
                     </div>
-                    <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-black wizard-white-text ${
+                    <span className={`inline-block px-3 py-0.5 rounded-full text-[10px] font-black ${
                       user.role === 'Admin' ? 'bg-rose-600 text-white' : user.role === 'Auditor' ? 'bg-amber-600 text-white' : 'bg-purple-600 text-white'
                     }`}>
                       {user.role}
@@ -172,27 +189,27 @@ export default function Header({
 
                   <button
                     onClick={onOpenProfile}
-                    className="w-full flex items-center space-x-2 rtl:space-x-reverse px-3 py-2 rounded-xl hover:bg-purple-900/60 transition text-purple-200"
+                    className="w-full flex items-center space-x-2.5 rtl:space-x-reverse px-3 py-2.5 rounded-xl transition profile-dropdown-btn"
                   >
-                    <Settings className="w-4 h-4 text-pink-400" />
+                    <Settings className="w-4 h-4 text-pink-400 theme-light:text-purple-600 shrink-0" />
                     <span>{isAr ? 'الملف الشخصي والإعدادات' : 'Profile & Settings'}</span>
                   </button>
 
                   {user.role === 'Admin' && (
                     <button
                       onClick={onOpenAdminConsole}
-                      className="w-full flex items-center space-x-2 rtl:space-x-reverse px-3 py-2 rounded-xl hover:bg-purple-900/60 transition text-rose-300 font-black"
+                      className="w-full flex items-center space-x-2.5 rtl:space-x-reverse px-3 py-2.5 rounded-xl transition profile-dropdown-btn-admin font-black"
                     >
-                      <ShieldCheck className="w-4 h-4 text-rose-400" />
+                      <ShieldCheck className="w-4 h-4 text-rose-500 shrink-0" />
                       <span>{isAr ? 'لوحة تحكم المدير (Admin)' : 'Admin Console'}</span>
                     </button>
                   )}
 
                   <button
                     onClick={onLogout}
-                    className="w-full flex items-center space-x-2 rtl:space-x-reverse px-3 py-2 rounded-xl hover:bg-rose-950/80 transition text-rose-400 font-black border-t border-purple-500/20 pt-2"
+                    className="w-full flex items-center space-x-2.5 rtl:space-x-reverse px-3 py-2.5 rounded-xl transition profile-dropdown-btn-logout font-black border-t border-purple-500/20 theme-light:border-purple-200 pt-2.5"
                   >
-                    <LogOut className="w-4 h-4 text-rose-400" />
+                    <LogOut className="w-4 h-4 text-rose-500 shrink-0" />
                     <span>{isAr ? 'تسجيل الخروج' : 'Sign Out'}</span>
                   </button>
                 </div>

@@ -765,7 +765,7 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
               <Film className="w-4 h-4 text-purple-400 theme-light:text-purple-700" />
               <span>{isAr ? 'مشغل الفيديو' : 'Loaded Media Player'}</span>
             </span>
-            <span className="text-[11px] text-emerald-300 theme-light:text-white bg-emerald-950 theme-light:bg-emerald-700 px-3 py-0.5 rounded-full border border-emerald-500/30 font-black shadow-sm">
+            <span className="text-[11px] editor-approved-badge px-3 py-0.5 rounded-full font-black shadow-sm">
               {approvedCount}/{totalLines} {isAr ? 'معتمد' : 'Approved'}
             </span>
           </div>
@@ -950,20 +950,24 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
           </div>
 
           {/* Under Video Statistics Box: Video Duration & Line Count */}
-          <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-purple-950/80 theme-light:bg-purple-100 border border-purple-500/30 theme-light:border-purple-300 text-center" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="flex items-center justify-center space-x-2 rtl:space-x-reverse">
-              <Clock className="w-4 h-4 text-purple-400 theme-light:text-purple-700 shrink-0" />
-              <div className="text-left rtl:text-right">
-                <span className="text-[10px] text-purple-300 theme-light:text-purple-950 font-bold block">{isAr ? 'مدة الفيديو' : 'Video Duration'}</span>
-                <span className="text-xs font-black text-white theme-light:text-purple-950">{formatDuration(videoDurationSeconds)}</span>
+          <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl editor-stats-box text-center shadow-sm" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="flex items-center justify-center space-x-2.5 rtl:space-x-reverse">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 editor-stats-icon-bg-clock shadow-sm">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div className="text-right rtl:text-right ltr:text-left">
+                <span className="text-[10px] editor-stats-label font-bold block">{isAr ? 'مدة الفيديو' : 'Video Duration'}</span>
+                <span className="text-xs font-black editor-stats-val block">{formatDuration(videoDurationSeconds)}</span>
               </div>
             </div>
             
-            <div className="flex items-center justify-center space-x-2 rtl:space-x-reverse border-l rtl:border-r rtl:border-l-0 border-purple-500/30 theme-light:border-purple-300 pl-2 rtl:pr-2">
-              <MessageSquare className="w-4 h-4 text-pink-400 theme-light:text-pink-700 shrink-0" />
-              <div className="text-left rtl:text-right">
-                <span className="text-[10px] text-purple-300 theme-light:text-purple-950 font-bold block">{isAr ? 'عدد الأسطر' : 'Total Lines'}</span>
-                <span className="text-xs font-black text-white theme-light:text-purple-950">{totalLines} {isAr ? 'سطر' : 'lines'}</span>
+            <div className="flex items-center justify-center space-x-2.5 rtl:space-x-reverse border-l rtl:border-r rtl:border-l-0 border-purple-500/30 theme-light:border-purple-300 pl-2 rtl:pr-2">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 editor-stats-icon-bg-lines shadow-sm">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div className="text-right rtl:text-right ltr:text-left">
+                <span className="text-[10px] editor-stats-label font-bold block">{isAr ? 'عدد الأسطر' : 'Total Lines'}</span>
+                <span className="text-xs font-black editor-stats-val block">{totalLines} {isAr ? 'سطر' : 'lines'}</span>
               </div>
             </div>
           </div>

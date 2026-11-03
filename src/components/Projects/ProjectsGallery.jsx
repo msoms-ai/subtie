@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
 
-export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAssignAuditor, user, lang = 'en' }) {
+export default function ProjectsGallery({
+  onEditProject,
+  onStartWizard,
+  onOpenAssignAuditor,
+  user,
+  lang = 'en',
+  initialFolder = null,
+  onFolderChange = null
+}) {
   const isAr = lang === 'ar';
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,7 +17,46 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
   const [sortOption, setSortOption] = useState('newest');
   const [viewMode, setViewMode] = useState('folders');
-  const [selectedFolder, setSelectedFolder] = useState(null); // 'all', 'episode', 'movie', 'trailer', 'clip'
+  const [selectedFolder, setSelectedFolder] = useState(initialFolder || null); // 'all', 'episode', 'movie', 'trailer', 'clip'
+
+  // Push / Pop browser history sync for folder navigation
+  useEffect(() => {
+    if (initialFolder) {
+      try {
+        window.history.replaceState({ view: 'projects', subtieFolder: initialFolder }, '', window.location.pathname);
+      } catch (e) {}
+    }
+  }, [initialFolder]);
+
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state && event.state.view === 'projects') {
+        setSelectedFolder(event.state.subtieFolder || null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleSelectFolder = (folder) => {
+    setSelectedFolder(folder);
+    if (onFolderChange) onFolderChange(folder);
+    try {
+      window.history.pushState({ view: 'projects', subtieFolder: folder }, '', window.location.pathname);
+    } catch (e) {}
+  };
+
+  const handleBackToFolders = () => {
+    setSelectedFolder(null);
+    if (onFolderChange) onFolderChange(null);
+    if (window.history.state?.subtieFolder) {
+      window.history.back();
+    } else {
+      try {
+        window.history.pushState({ view: 'projects', subtieFolder: null }, '', window.location.pathname);
+      } catch (e) {}
+    }
+  };
 
   // AI Folder Covers State
   const [folderCovers, setFolderCovers] = useState({});
@@ -246,7 +293,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
       {/* VIEW MODE TOGGLE */}
       <div className="flex justify-end mb-4" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex bg-slate-900 theme-light:bg-white rounded-xl p-1 border border-slate-700 theme-light:border-purple-300 shadow-md">
-          <button onClick={() => { setViewMode('folders'); setSelectedFolder(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'folders' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
+          <button onClick={() => { setViewMode('folders'); setSelectedFolder(null); if (onFolderChange) onFolderChange(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'folders' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
             {isAr ? 'عرض المجلدات' : 'Folders'}
           </button>
           <button onClick={() => setViewMode('flat')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'flat' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
@@ -258,7 +305,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
       {/* FOLDER NAVIGATION BACK BUTTON */}
       {viewMode === 'folders' && selectedFolder && (
         <div className="mb-4 flex items-center" dir={isAr ? 'rtl' : 'ltr'}>
-           <button onClick={() => setSelectedFolder(null)} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
+           <button onClick={handleBackToFolders} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
              <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
              <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
            </button>
@@ -294,7 +341,7 @@ export default function ProjectsGallery({ onEditProject, onStartWizard, onOpenAs
                  return (
                    <div
                      key={folder}
-                     onClick={() => setSelectedFolder(folder)}
+                     onClick={() => handleSelectFolder(folder)}
                      className="group relative rounded-3xl overflow-hidden border border-purple-500/30 hover:border-pink-500/80 cursor-pointer hover:scale-[1.03] transition-all duration-300 shadow-xl h-60 flex flex-col justify-between p-5 bg-slate-950"
                      style={
                        coverUrl

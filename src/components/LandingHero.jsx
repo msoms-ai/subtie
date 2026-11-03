@@ -96,7 +96,7 @@ export default function LandingHero({ onStartWizard, onLoadProject, onOpenActivi
             
             <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950/80 theme-light:bg-purple-700 theme-light:text-white px-4 py-2 rounded-full border border-purple-500/40 theme-light:border-slate-900 text-purple-200 text-xs sm:text-sm font-extrabold shadow-md">
               <Sparkles className="w-4 h-4 text-pink-400 theme-light:text-yellow-300" />
-              <span>{isAr ? '第1章 • منصة ترجمة الأنمي المانغا' : '第1章 • Anime Manga Fansub Hub'}</span>
+              <span>{isAr ? 'أول منصة ذكاء اصطناعي لترجمة الأنمي' : '1st Anime AI Based Translator Platform'}</span>
             </div>
 
             {/* Clean Title */}

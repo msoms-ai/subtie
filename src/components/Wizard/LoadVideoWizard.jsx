@@ -751,14 +751,14 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           </div>
 
           {/* 3-Tab Source Switcher */}
-          <div className="grid grid-cols-3 gap-2 bg-slate-900/90 theme-light:bg-purple-100/90 p-1.5 rounded-2xl border border-purple-500/30 theme-light:border-purple-300 shadow-sm">
+          <div className="grid grid-cols-3 gap-2 source-switcher-container p-1.5 rounded-2xl shadow-sm">
             <button
               type="button"
               onClick={() => setSourceType('direct')}
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'direct'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
+                  : 'source-switcher-inactive'
               }`}
             >
               <FileVideo className="w-4 h-4 shrink-0" />
@@ -771,7 +771,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'torrent'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
+                  : 'source-switcher-inactive'
               }`}
             >
               <Radio className="w-4 h-4 shrink-0" />
@@ -784,7 +784,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               className={`flex items-center justify-center space-x-2 rtl:space-x-reverse py-3 px-3 rounded-xl font-black text-xs transition ${
                 sourceType === 'magnet'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800 theme-light:text-purple-900 theme-light:hover:text-purple-950 theme-light:hover:bg-purple-200/80 font-black'
+                  : 'source-switcher-inactive'
               }`}
             >
               <LinkIcon className="w-4 h-4 shrink-0" />
@@ -853,10 +853,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 </div>
               ) : (
                 <>
-                  <h4 className="text-base font-black text-white theme-light:text-slate-950 mb-1">
+                  <h4 className="text-base font-black wizard-dropzone-title mb-1">
                     {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
                   </h4>
-                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-extrabold mb-4">
+                  <p className="text-xs wizard-dropzone-subtitle font-extrabold mb-4">
                     {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
                   </p>
 
@@ -934,10 +934,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 </div>
               ) : (
                 <>
-                  <h4 className="text-base font-black text-white theme-light:text-slate-950 mb-1">
+                  <h4 className="text-base font-black wizard-dropzone-title mb-1">
                     {isAr ? 'انقر أو اسحب ملف تورنت (.torrent) هنا' : 'Click or Drag & Drop .torrent File Here'}
                   </h4>
-                  <p className="text-xs text-purple-300 theme-light:text-purple-900 font-extrabold mb-4">
+                  <p className="text-xs wizard-dropzone-subtitle font-extrabold mb-4">
                     {isAr ? 'يجب أن يحتوي التورنت على ملف فيديو واحد فقط بحد أقصى 2 جيجابايت' : 'Single video torrent only, maximum size 2GB (Non-video files ignored)'}
                   </p>
 
