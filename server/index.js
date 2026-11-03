@@ -2544,21 +2544,44 @@ app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req,
 
 app.get('/api/torrent/:id/status', (req, res) => {
   let status = torrentService.getJobStatus(req.params.id);
-  // Resilient DB fallback: if torrent job completed and was cleared from memory, inspect project database
-  if (!status) {
-    const projects = readProjects();
-    const p = projects[req.params.id];
-    if (p) {
-      status = {
-        projectId: req.params.id,
-        status: p.status === 'downloading_torrent' ? 'downloading' : (p.status || 'processing'),
-        progress: p.processingProgress !== undefined ? p.processingProgress : (p.status === 'ready' || p.status === 'Completed' ? 100 : 0),
-        message: p.processingStatus || '',
-        projectName: p.projectName || '',
-        mediaTitle: p.mediaTitle || '',
-        projectType: p.projectType || 'episode'
-      };
-    }
+  const projects = readProjects();
+  const p = projects[req.params.id];
+
+  // Resilient DB fallback: if project already has a video or has moved beyond download, ensure status is completed/processing
+  const isProjectReadyOrProcessing = p && (
+    p.videoUrl ||
+    p.status === 'ready' ||
+    p.status === 'Completed' ||
+    p.status === 'processing' ||
+    (p.status !== 'downloading_torrent' && p.status !== 'failed')
+  );
+
+  if (isProjectReadyOrProcessing) {
+    const sizeMb = p.videoSize ? (p.videoSize / (1024 * 1024)).toFixed(1) : (status?.totalMb || '...');
+    status = {
+      projectId: req.params.id,
+      status: (p.status === 'ready' || p.status === 'Completed') ? 'ready' : 'processing',
+      progress: 100,
+      downloadedMb: sizeMb,
+      totalMb: sizeMb,
+      downloadSpeed: '0.00',
+      eta: '0m 0s',
+      videoUrl: p.videoUrl,
+      message: p.processingStatus || 'اكتمل تحميل ملف الفيديو بنجاح وبدأت المعالجة.',
+      projectName: p.projectName || '',
+      mediaTitle: p.mediaTitle || '',
+      projectType: p.projectType || 'episode'
+    };
+  } else if (!status && p) {
+    status = {
+      projectId: req.params.id,
+      status: p.status === 'downloading_torrent' ? 'downloading' : (p.status || 'processing'),
+      progress: (p.videoUrl || p.status === 'ready' || p.status === 'Completed') ? 100 : (p.processingProgress || 0),
+      message: p.processingStatus || '',
+      projectName: p.projectName || '',
+      mediaTitle: p.mediaTitle || '',
+      projectType: p.projectType || 'episode'
+    };
   }
   res.json({ success: true, status });
 });

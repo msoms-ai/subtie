@@ -194,9 +194,11 @@ class TorrentService {
     // Precise completion check: either video file reached length, or overall progress completed
     const isVideoDone = (videoFile && (videoFile.done || (videoFile.downloaded !== undefined && videoFile.downloaded >= videoFile.length))) ||
                         (total > 0 && downloaded >= total) ||
-                        (torrent.progress >= 0.999 && total > 0);
+                        (torrent.progress >= 0.999 && total > 0) ||
+                        (total > 0 && (downloaded / total) >= 0.995);
 
-    const pct = isVideoDone ? 100 : (total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : 0);
+    const rawPct = total > 0 ? Math.round((downloaded / total) * 100) : (jobData.progress || 0);
+    const pct = isVideoDone ? 100 : Math.min(99, Math.max(jobData.progress || 0, rawPct));
     const speedBytes = torrent.downloadSpeed || 0;
     const speedMb = (speedBytes / (1024 * 1024)).toFixed(2);
     const downloadedMb = (downloaded / (1024 * 1024)).toFixed(1);
@@ -363,6 +365,26 @@ class TorrentService {
 
     jobData.status = 'completed';
     jobData.progress = 100;
+
+    const totalMb = videoFile ? (videoFile.length / (1024 * 1024)).toFixed(1) : '...';
+    this.completedJobsCache.set(projectId, {
+      projectId,
+      status: 'completed',
+      progress: 100,
+      downloadSpeed: '0.00',
+      downloadedMb: totalMb,
+      totalMb: totalMb,
+      numPeers: torrent.numPeers || 0,
+      numSeeds: torrent.numPeers || 0,
+      eta: '0m 0s',
+      videoFileName: videoFile?.name || '',
+      projectName: jobData.projectMeta?.projectName || '',
+      mediaTitle: jobData.projectMeta?.mediaTitle || '',
+      projectType: jobData.projectMeta?.projectType || 'episode',
+      userId: userId || 'usr_guest',
+      createdAt: jobData.createdAt || Date.now(),
+      timestamp: Date.now(),
+    });
 
     socketService.emitProgress(projectId, {
       stage: 'torrent_completed',
@@ -548,10 +570,12 @@ class TorrentService {
     const isVideoDone = (job.videoFile && (job.videoFile.done || (job.videoFile.downloaded !== undefined && job.videoFile.downloaded >= job.videoFile.length))) ||
                         (total > 0 && downloaded >= total) ||
                         (torrent && torrent.progress >= 0.999 && total > 0) ||
+                        (total > 0 && (downloaded / total) >= 0.995) ||
                         job.progress === 100 ||
                         job.status === 'completed';
 
-    const pct = isVideoDone ? 100 : (total > 0 ? Math.min(99, Math.round((downloaded / total) * 100)) : job.progress);
+    const rawPct = total > 0 ? Math.round((downloaded / total) * 100) : (job.progress || 0);
+    const pct = isVideoDone ? 100 : Math.min(99, Math.max(job.progress || 0, rawPct));
     const speedMb = (speedBytes / (1024 * 1024)).toFixed(2);
     const downloadedMb = (downloaded / (1024 * 1024)).toFixed(1);
     const totalMb = total > 0 ? (total / (1024 * 1024)).toFixed(1) : '...';

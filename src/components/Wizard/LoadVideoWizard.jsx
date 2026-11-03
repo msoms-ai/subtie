@@ -145,7 +145,11 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         if (data.progress !== undefined) setUploadProgress(data.progress);
         if (data.message) setUploadStatusText(data.message);
 
-        if (data.stage === 'torrent_completed' || data.progress === 100) {
+        const dl = parseFloat(data.downloadedMb);
+        const tot = parseFloat(data.totalMb);
+        const isBytesDone = (!isNaN(dl) && !isNaN(tot) && tot > 0 && (dl >= tot || (dl / tot) >= 0.995));
+
+        if (data.stage === 'torrent_completed' || data.progress === 100 || isBytesDone || data.status === 'completed' || data.status === 'processing') {
           setCurrentStep(6);
           setIsProcessing(true);
           setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! جاري استخراج الصوت وبدء المعالجة الذكية...' : 'Torrent downloaded! Initializing audio extraction & AI pipeline...');
@@ -177,31 +181,66 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     };
   }, [projectId]);
 
-  // Dual Fallback: Poll torrent status endpoint every 1.5s during download
+  // Dual Fallback: Poll torrent status endpoint and project database every 1.5s during download
   useEffect(() => {
     if (!projectId || currentStep !== 4 || sourceType === 'direct') return;
 
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/torrent/${projectId}/status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.success && data?.status) {
-          const st = data.status;
-          setTorrentTelemetry(prev => ({ ...(prev || {}), ...st }));
-          if (st.progress !== undefined) setUploadProgress(st.progress);
-          if (st.status === 'completed' || st.progress === 100 || st.status === 'processing' || st.status === 'ready') {
+        const res = await fetch(`/api/torrent/${projectId}/status?t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success && data?.status) {
+            const st = data.status;
+            setTorrentTelemetry(prev => {
+              const merged = { ...(prev || {}), ...st };
+              if (st.downloadedMb === undefined && prev?.downloadedMb) merged.downloadedMb = prev.downloadedMb;
+              if (st.totalMb === undefined && prev?.totalMb) merged.totalMb = prev.totalMb;
+              return merged;
+            });
+            if (st.progress !== undefined) setUploadProgress(st.progress);
+
+            const dl = parseFloat(st.downloadedMb);
+            const tot = parseFloat(st.totalMb);
+            const isBytesDone = (!isNaN(dl) && !isNaN(tot) && tot > 0 && (dl >= tot || (dl / tot) >= 0.995));
+
+            const isDone = st.status === 'completed' ||
+                           st.status === 'processing' ||
+                           st.status === 'ready' ||
+                           st.progress === 100 ||
+                           isBytesDone ||
+                           st.videoUrl;
+
+            if (isDone) {
+              clearInterval(pollInterval);
+              setCurrentStep(6);
+              setIsProcessing(true);
+              setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! جاري استخراج الصوت وبدء المعالجة الذكية...' : 'Torrent downloaded! Starting audio extraction & AI pipeline...');
+              if (startAIProcessingRef.current) {
+                startAIProcessingRef.current(projectId);
+              }
+              return;
+            } else if (st.status === 'failed') {
+              clearInterval(pollInterval);
+              setErrorMessage(st.error || 'Torrent download failed');
+              setCurrentStep(6);
+              return;
+            }
+          }
+        }
+
+        // Additional resilient check: inspect project database directly
+        const projRes = await fetch(`/api/project/${projectId}?t=${Date.now()}`);
+        if (projRes.ok) {
+          const p = await projRes.json();
+          if (p && !p.error && (p.videoUrl || p.status === 'processing' || p.status === 'ready' || p.status === 'Completed')) {
             clearInterval(pollInterval);
             setCurrentStep(6);
             setIsProcessing(true);
-            setProcessStatusMsg(isAr ? 'اكتمل تحميل التورنت! جاري استخراج الصوت وبدء المعالجة الذكية...' : 'Torrent downloaded! Starting audio extraction & AI pipeline...');
+            setProcessStatusMsg(isAr ? 'تم تجهيز ملف الفيديو! جاري المتابعة في المعالجة...' : 'Video ready! Continuing AI processing...');
             if (startAIProcessingRef.current) {
               startAIProcessingRef.current(projectId);
             }
-          } else if (st.status === 'failed') {
-            clearInterval(pollInterval);
-            setErrorMessage(st.error || 'Torrent download failed');
-            setCurrentStep(6);
           }
         }
       } catch (err) {
@@ -211,6 +250,25 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
     return () => clearInterval(pollInterval);
   }, [projectId, currentStep, sourceType]);
+
+  // Immediate check if on Step 4 and backend already completed download/video setup
+  useEffect(() => {
+    if (currentStep === 4 && projectId && sourceType !== 'direct') {
+      fetch(`/api/project/${projectId}?t=${Date.now()}`)
+        .then(r => r.json())
+        .then(p => {
+          if (p && !p.error && (p.videoUrl || p.status === 'processing' || p.status === 'ready' || p.status === 'Completed')) {
+            setCurrentStep(6);
+            setIsProcessing(true);
+            setProcessStatusMsg(isAr ? 'تم تجهيز ملف الفيديو! جاري المتابعة في المعالجة...' : 'Video ready! Continuing AI processing...');
+            if (startAIProcessingRef.current) {
+              startAIProcessingRef.current(projectId);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentStep, projectId, sourceType]);
 
   // Handle Torrent & Magnet Link Ingestion
   const handleTorrentIngest = async () => {
@@ -535,6 +593,16 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   useEffect(() => {
     startAIProcessingRef.current = startAIProcessing;
   });
+
+  const dlMb = parseFloat(torrentTelemetry?.downloadedMb);
+  const totMb = parseFloat(torrentTelemetry?.totalMb);
+  const byteRatioPct = (!isNaN(dlMb) && !isNaN(totMb) && totMb > 0)
+    ? Math.min(100, Math.round((dlMb / totMb) * 100))
+    : 0;
+  const rawProgress = torrentTelemetry?.progress !== undefined ? Number(torrentTelemetry.progress) : uploadProgress;
+  const effectiveTorrentProgress = (byteRatioPct > 0 && (rawProgress === 0 || rawProgress === undefined))
+    ? byteRatioPct
+    : Math.max(rawProgress || 0, byteRatioPct);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -1114,12 +1182,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                 <div className="w-full h-4 bg-slate-900 rounded-full border border-slate-800 overflow-hidden p-0.5">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-500 transition-all duration-300 shadow-md"
-                    style={{ width: `${torrentTelemetry?.progress !== undefined ? torrentTelemetry.progress : uploadProgress}%` }}
+                    style={{ width: `${effectiveTorrentProgress}%` }}
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs font-black text-white px-1" dir="ltr">
                   <span>{torrentTelemetry?.downloadedMb || 0} MB / {torrentTelemetry?.totalMb || 0} MB</span>
-                  <span className="text-pink-300">{torrentTelemetry?.progress !== undefined ? torrentTelemetry.progress : uploadProgress}%</span>
+                  <span className="text-pink-300">{effectiveTorrentProgress}%</span>
                 </div>
               </div>
 
