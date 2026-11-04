@@ -4,12 +4,39 @@ import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 
 const KEYS_STORE_PATH = path.resolve('server', 'data', 'gemini_keys.json');
+const STATS_STORE_PATH = path.resolve('server', 'data', 'gemini_keys_stats.json');
 
 class GeminiPoolManager {
   constructor() {
     this.keys = [];
     this.detectedEnvNames = [];
     this.initPool();
+  }
+
+  loadStats() {
+    try {
+      if (fs.existsSync(STATS_STORE_PATH)) {
+        const raw = fs.readFileSync(STATS_STORE_PATH, 'utf8');
+        return JSON.parse(raw);
+      }
+    } catch (e) {}
+    return {};
+  }
+
+  saveStats() {
+    try {
+      const dir = path.dirname(STATS_STORE_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const stats = {};
+      this.keys.forEach(k => {
+        stats[k.maskedKey] = {
+          totalRequests: k.totalRequests || 0,
+          lastUsed: k.lastUsed || null,
+          errorsCount: k.errorsCount || 0
+        };
+      });
+      fs.writeFileSync(STATS_STORE_PATH, JSON.stringify(stats, null, 2), 'utf8');
+    } catch (e) {}
   }
 
   loadStoredKeys() {
@@ -100,22 +127,25 @@ class GeminiPoolManager {
     // Remove duplicates and blanks
     rawKeys = [...new Set(rawKeys.map(k => k.trim()).filter(Boolean))];
 
-    // Preserve existing runtime telemetry for keys already in memory
+    // Preserve existing runtime telemetry for keys already in memory or from persisted storage
     const existingMap = new Map(this.keys.map(k => [k.rawKey, k]));
+    const savedStats = this.loadStats();
 
     this.keys = rawKeys.map((key, index) => {
       const prev = existingMap.get(key);
+      const masked = this.maskKey(key);
+      const saved = savedStats[masked] || {};
       return {
         id: `key_${index + 1}`,
         rawKey: key,
-        maskedKey: this.maskKey(key),
+        maskedKey: masked,
         status: prev ? prev.status : 'active',
         activeRequests: prev ? prev.activeRequests : 0,
-        totalRequests: prev ? prev.totalRequests : 0,
-        errorsCount: prev ? prev.errorsCount : 0,
+        totalRequests: prev ? prev.totalRequests : (saved.totalRequests || 0),
+        errorsCount: prev ? prev.errorsCount : (saved.errorsCount || 0),
         lastError: prev ? prev.lastError : null,
         cooldownUntil: prev ? prev.cooldownUntil : 0,
-        lastUsed: prev ? prev.lastUsed : null,
+        lastUsed: prev ? prev.lastUsed : (saved.lastUsed || null),
       };
     });
 
@@ -166,6 +196,7 @@ class GeminiPoolManager {
     chosen.totalRequests += 1;
     chosen.lastUsed = new Date().toISOString();
     this.lastUsedKeyId = chosen.id;
+    this.saveStats();
 
     return {
       keyId: chosen.id,
@@ -198,6 +229,7 @@ class GeminiPoolManager {
         console.error(`🚨 Gemini Key ${keyObj.maskedKey} invalid or expired.`);
       }
     }
+    this.saveStats();
   }
 
   /**

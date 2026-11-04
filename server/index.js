@@ -2660,7 +2660,7 @@ app.get('/api/activities', (req, res) => {
     });
   }
 
-  // 2. Ingest active processing tasks from projects.json
+  // 2. Ingest active processing tasks from in-memory activeProcessingSet or recently completed tasks
   const now = Date.now();
   for (const [pId, p] of Object.entries(projects)) {
     if (handledProjectIds.has(pId)) continue;
@@ -2670,18 +2670,15 @@ app.get('/api/activities', (req, res) => {
       continue;
     }
 
-    const isDownloadingTorrent = p.status === 'downloading_torrent';
-    const isProcessing = p.status === 'processing' || activeProcessingSet.has(pId);
+    const isProcessing = activeProcessingSet.has(pId);
     const isRecentlyCompleted = (p.status === 'ready' || p.status === 'Completed' || p.processingProgress === 100) &&
-                                (now - new Date(p.updatedAt || p.createdAt || now).getTime() < 30 * 60 * 1000);
+                                (now - new Date(p.updatedAt || p.createdAt || now).getTime() < 60 * 60 * 1000);
 
-    if (isDownloadingTorrent || isProcessing || isRecentlyCompleted) {
+    // Only ingest tasks that are actually processing in memory or completed recently (no zombie tasks)
+    if (isProcessing || isRecentlyCompleted) {
       handledProjectIds.add(pId);
 
-      let stage = 'processing';
-      if (isDownloadingTorrent) stage = 'downloading';
-      else if (isRecentlyCompleted) stage = 'ready';
-      else stage = p.processingStage || 'transcribing';
+      const stage = isRecentlyCompleted ? 'ready' : (p.processingStage || 'transcribing');
 
       // Dynamic ETA estimation for processing tasks
       let dynamicEta = '--';
@@ -2702,10 +2699,10 @@ app.get('/api/activities', (req, res) => {
         mediaTitle: p.mediaTitle || 'Video Project',
         projectType: p.projectType || 'episode',
         type: p.sourceType || 'direct',
-        status: isRecentlyCompleted ? 'ready' : (isDownloadingTorrent ? 'downloading' : 'processing'),
+        status: isRecentlyCompleted ? 'ready' : 'processing',
         stage,
         stageDescription: p.processingStatus || (isRecentlyCompleted ? 'اكتملت المعالجة وهو جاهز للترجمة' : 'جاري المعالجة...'),
-        progress: p.processingProgress || (isRecentlyCompleted ? 100 : 15),
+        progress: p.processingProgress !== undefined ? p.processingProgress : (isRecentlyCompleted ? 100 : 0),
         speed: null,
         downloadedMb: null,
         totalMb: null,
@@ -2911,8 +2908,29 @@ app.get('/api/admin/cluster-metrics', async (req, res) => {
     if (req.query.rescan === '1' || req.query.rescan === 'true') {
       geminiPool.initPool();
     }
-    const queueMetrics = await queueService.getMetrics();
+    const rawQueue = await queueService.getMetrics();
     const apiPoolStatus = geminiPool.getPoolStatus();
+
+    // Aggregate true active workloads across all services (Torrents, AI processing, BullMQ)
+    const activeTorrents = torrentService.activeJobs ? torrentService.activeJobs.size : 0;
+    const activeAIJobs = activeProcessingSet.size;
+    const totalActive = (rawQueue.active || 0) + activeTorrents + activeAIJobs;
+
+    const projects = readProjects();
+    const projList = Object.values(projects);
+    const completedCount = projList.filter(p => p.status === 'ready' || p.status === 'Completed' || p.processingProgress === 100).length;
+    const waitingCount = (rawQueue.waiting || 0) + projList.filter(p => p.status === 'queued').length;
+
+    const queueMetrics = {
+      ...rawQueue,
+      active: totalActive,
+      waiting: waitingCount,
+      completed: Math.max(rawQueue.completed || 0, completedCount),
+      activeTorrents,
+      activeAIJobs,
+      total: totalActive + waitingCount + Math.max(rawQueue.completed || 0, completedCount)
+    };
+
     res.json({
       success: true,
       queue: queueMetrics,
@@ -3035,6 +3053,35 @@ if (fs.existsSync(distPath)) {
 
 const server = http.createServer(app);
 socketService.init(server);
+
+function reconcileStartupWorkloads() {
+  try {
+    const projects = readProjects();
+    let modified = false;
+    for (const [id, p] of Object.entries(projects)) {
+      if (p.status === 'downloading_torrent' || p.status === 'processing') {
+        const hasFinishedSubtitles = Array.isArray(p.subtitles) && p.subtitles.length > 0;
+        if (hasFinishedSubtitles || p.processingProgress === 100) {
+          p.status = 'ready';
+          p.processingProgress = 100;
+          modified = true;
+        } else {
+          p.status = 'interrupted';
+          p.processingStatus = 'توقفت المهمة السابقة بسبب إعادة تشغيل السيرفر — يمكنك إعادة تشغيلها من معالج التحميل';
+          modified = true;
+        }
+      }
+    }
+    if (modified) {
+      writeProjects(projects);
+      console.log('🧹 [Startup Reconcile] Cleaned up legacy zombie tasks from previous server session.');
+    }
+  } catch (err) {
+    console.warn('⚠️ [Startup Reconcile] Warning:', err.message);
+  }
+}
+
+reconcileStartupWorkloads();
 
 server.listen(PORT, () => {
   console.log(`Subtie Backend running on http://localhost:${PORT}`);

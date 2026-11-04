@@ -173,7 +173,9 @@ export default function ClusterDashboard({ lang }) {
             {metrics?.queue?.active ?? 0}
           </div>
           <span className="text-[11px] text-indigo-300/80 mt-1 truncate">
-            {isAr ? 'قيد المعالجة' : 'Processing now'}
+            {metrics?.queue?.activeTorrents !== undefined || metrics?.queue?.activeAIJobs !== undefined
+              ? `${metrics?.queue?.activeTorrents || 0} ${isAr ? 'تورنت' : 'torrents'}, ${metrics?.queue?.activeAIJobs || 0} ${isAr ? 'معالجة ذكية' : 'AI jobs'}`
+              : (isAr ? 'قيد المعالجة' : 'Processing now')}
           </span>
         </div>
 

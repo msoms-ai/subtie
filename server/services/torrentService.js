@@ -50,7 +50,7 @@ function formatEta(ms) {
 class TorrentService {
   constructor() {
     this.client = new WebTorrent({
-      maxConns: 55,
+      maxConns: 200, // High-concurrency support for multiple simultaneous torrents
       dht: true,
       tracker: true,
     });
@@ -134,18 +134,26 @@ class TorrentService {
     }, 1000);
 
     try {
-      this.client.add(
+      const torrentInstance = this.client.add(
         torrentSource,
         {
           path: downloadDir,
           announce: HIGH_SPEED_TRACKERS,
           destroyStoreOnDestroy: true,
         },
-        (torrent) => {
-          jobData.torrent = torrent;
-          this.handleTorrentReady(jobData, torrent);
+        (readyTorrent) => {
+          jobData.torrent = readyTorrent;
+          this.handleTorrentReady(jobData, readyTorrent);
         }
       );
+      jobData.torrent = torrentInstance;
+
+      // Track peer discovery immediately even while fetching metadata
+      if (torrentInstance && typeof torrentInstance.on === 'function') {
+        torrentInstance.on('wire', () => {
+          jobData.numPeers = torrentInstance.numPeers || 0;
+        });
+      }
     } catch (err) {
       this.cleanupJob(projectId, true);
       throw err;
@@ -159,17 +167,21 @@ class TorrentService {
    */
   emitTelemetryUpdate(jobData) {
     const { projectId, videoFile, torrent } = jobData;
-    if (!torrent) {
+    const currentPeers = torrent?.numPeers || jobData.numPeers || 0;
+
+    if (!torrent || jobData.status === 'fetching_metadata') {
       socketService.emitProgress(projectId, {
         stage: 'torrent_connecting',
         progress: 0,
         downloadSpeed: '0.00',
         downloadedMb: '0.0',
         totalMb: '...',
-        numPeers: 0,
-        numSeeds: 0,
+        numPeers: currentPeers,
+        numSeeds: currentPeers,
         eta: '--',
-        message: 'Connecting to BitTorrent swarm and discovering seeds...',
+        message: currentPeers > 0
+          ? `جاري الاتصال بالسرب وفحص المحتوى (${currentPeers} متصلين)...`
+          : 'Connecting to BitTorrent swarm and discovering seeds...',
         status: 'fetching_metadata',
       });
       return;
