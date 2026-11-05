@@ -215,14 +215,29 @@ function ensureAdminUser() {
 
 ensureAdminUser();
 
+// Sanitize model name: automatically upgrade deprecated/expired 1.5/2.0/2.5 models to active models
+export function sanitizeGeminiModel(modelName) {
+  if (!modelName || typeof modelName !== 'string') return 'gemini-3.8-flash';
+  const m = modelName.trim().toLowerCase();
+  if (m.includes('1.5') || m.includes('2.0') || m.includes('2.5-flash') || m.includes('2.5-pro') || m === 'gemini-pro' || m === 'gemini-1.0-pro') {
+    return 'gemini-3.8-flash';
+  }
+  return modelName.trim();
+}
+
 // Helper functions for project store
 function readSettings() {
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return { geminiModel: 'gemini-1.5-pro' };
+    if (!fs.existsSync(SETTINGS_FILE)) return { geminiModel: 'gemini-3.8-flash', visionOcrModel: 'gemini-3.8-flash' };
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      geminiModel: sanitizeGeminiModel(parsed.geminiModel),
+      visionOcrModel: sanitizeGeminiModel(parsed.visionOcrModel || 'gemini-3.8-flash')
+    };
   } catch (err) {
-    return { geminiModel: 'gemini-1.5-pro' };
+    return { geminiModel: 'gemini-3.8-flash', visionOcrModel: 'gemini-3.8-flash' };
   }
 }
 function writeSettings(data) {
@@ -1039,8 +1054,8 @@ app.get('/api/settings', (req, res) => {
 
 app.get('/api/settings/models', async (req, res) => {
   try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("GEMINI_API_KEY missing from environment");
+    const key = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+    if (!key) throw new Error("GEMINI_API_KEY missing from environment or key pool");
     
     // Use raw REST API fetch to bypass SDK iterator bugs
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
@@ -1049,26 +1064,20 @@ app.get('/api/settings/models', async (req, res) => {
     if (!response.ok) throw new Error(data.error?.message || 'API rejected the request');
     
     const modelNames = data.models
-      .filter(m => m.name.includes('gemini'))
+      .filter(m => m.name.includes('gemini') && !m.name.includes('1.5') && !m.name.includes('2.0') && !m.name.includes('2.5'))
       .map(m => m.name.replace('models/', ''));
       
     res.json({ success: true, models: modelNames });
   } catch (err) {
     console.error('[Settings] Fetch models error:', err);
-    // Fallback to hardcoded known models if the API fails due to permissions or SDK issues
+    // Fallback to active known modern models
     const fallbackModels = [
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+      'gemini-pro-latest',
       'gemini-3.1-pro-preview',
-      'gemini-3.1-flash-preview',
-      'gemini-1.5-pro',
-      'gemini-1.5-pro-latest',
-      'gemini-1.5-pro-001',
-      'gemini-1.5-pro-002',
-      'gemini-1.5-flash',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash-8b',
-      'gemini-2.0-flash-exp',
-      'gemini-pro',
-      'gemini-1.0-pro'
+      'gemini-3.1-flash-lite'
     ];
     res.json({ 
       success: true, 
@@ -1269,10 +1278,12 @@ app.post('/api/project/:id/resubtitle', async (req, res) => {
     }
     
     const settings = readSettings();
-    const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
-    const fallbackModel = 'gemini-1.5-flash';
+    const targetModel = sanitizeGeminiModel(process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-3.8-flash');
+    const fallbackModel = 'gemini-flash-latest';
+    const secondaryFallbackModel = 'gemini-pro-latest';
     const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || settings.geminiApiKey });
+    const aiKey = process.env.GEMINI_API_KEY || settings.geminiApiKey || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+    const ai = new GoogleGenAI({ apiKey: aiKey });
 
     let newSubtitles = [];
 
@@ -1317,7 +1328,13 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
       try {
         response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
       } catch (err) {
-        response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+        console.warn(`[Gemini AI Resubtitle] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+        try {
+          response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+        } catch (err2) {
+          console.warn(`[Gemini AI Resubtitle] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+          response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+        }
       }
 
       let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -1375,7 +1392,13 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
       try {
         response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
       } catch (err) {
-        response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+        console.warn(`[Gemini AI Resubtitle] Stage 2 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+        try {
+          response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+        } catch (err2) {
+          console.warn(`[Gemini AI Resubtitle] Fallback 2 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+          response2 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage2Config });
+        }
       }
 
       let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -1719,8 +1742,9 @@ Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTi
 Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
 
         const settings = readSettings();
-        const targetModel = (process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-1.5-pro').trim();
-        const fallbackModel = 'gemini-1.5-flash';
+        const targetModel = sanitizeGeminiModel(process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-3.8-flash');
+        const fallbackModel = 'gemini-flash-latest';
+        const secondaryFallbackModel = 'gemini-pro-latest';
         const stage1Config = {
           contents: [
             { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
@@ -1736,8 +1760,13 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
         try {
           response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
         } catch (err) {
-          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
-          response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+          try {
+            response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+          } catch (err2) {
+            console.warn(`[Gemini AI] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+            response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+          }
         }
 
         let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -1793,8 +1822,13 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
         try {
           response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
         } catch (err) {
-          console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Falling back to ${fallbackModel}...`);
-          response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+          console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+          try {
+            response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
+          } catch (err2) {
+            console.warn(`[Gemini AI] Fallback 2 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+            response2 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage2Config });
+          }
         }
 
         // Chunk completed successfully

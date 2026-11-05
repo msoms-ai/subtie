@@ -8,7 +8,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [activeTab, setActiveTab] = useState('users'); // 'users' or 'settings'
-  const [settings, setSettings] = useState({ geminiModel: 'gemini-1.5-pro' });
+  const [settings, setSettings] = useState({ geminiModel: 'gemini-3.8-flash', visionOcrModel: 'gemini-3.8-flash' });
   const [isSaving, setIsSaving] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);

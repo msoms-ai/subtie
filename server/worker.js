@@ -79,19 +79,36 @@ Transcribe the spoken Japanese dialogue and translate it accurately into Arabic 
 Target Language: Arabic (${targetLang || 'ar'}).
 Output valid SRT formatted subtitle blocks only.`;
 
-        // Request Gemini translation
-        const response = await client.models.generateContent({
-          model: 'gemini-1.5-pro',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { inlineData: { mimeType: 'audio/mp3', data: base64Audio } },
-                { text: prompt },
-              ],
-            },
-          ],
-        });
+        // Request Gemini translation with modern active model
+        let response;
+        try {
+          response = await client.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { inlineData: { mimeType: 'audio/mp3', data: base64Audio } },
+                  { text: prompt },
+                ],
+              },
+            ],
+          });
+        } catch (mErr) {
+          console.warn(`[Worker] gemini-3.8-flash failed: ${mErr.message}. Trying gemini-flash-latest...`);
+          response = await client.models.generateContent({
+            model: 'gemini-flash-latest',
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { inlineData: { mimeType: 'audio/mp3', data: base64Audio } },
+                  { text: prompt },
+                ],
+              },
+            ],
+          });
+        }
 
         const srtContent = response.text || '';
         geminiPool.releaseKey(keyId, true);
