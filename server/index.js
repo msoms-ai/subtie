@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import socketService from './services/socket.js';
-import queueService from './services/queue.js';
+import queueService, { redisConnection } from './services/queue.js';
 import geminiPool from './services/geminiPool.js';
 import cloudStorage from './services/storage.js';
 import cors from 'cors';
@@ -33,8 +33,13 @@ import paymentService, {
   getPackagesCatalogue,
   createPaymentIntent,
   verifyAndCreditPayment,
-  getUserTransactions
+  getUserTransactions,
+  getUserTotalPaid,
+  recordAdminCreditTransaction
 } from './services/paymentService.js';
+import os from 'os';
+import { logSystemEvent, readSystemLogs, clearSystemLogs } from './services/logService.js';
+import { readNewsletters, writeNewsletters, generateNewsletterWithAI } from './services/newsletterService.js';
 
 // Set ffmpeg binary path from installer with system fallback & executable verification
 let resolvedFfmpegPath = ffmpegInstaller?.path;
@@ -102,7 +107,8 @@ if (fs.existsSync(envPath)) {
 // ----------------------------------------------------
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
-async function sendMailNotification(toEmail, subject, htmlContent) {
+async function sendMailNotification(toEmail, subject, htmlContent, customFrom = null) {
+  const fromAddress = customFrom || 'Subtie Platform <noreply@subtie.msoms.ai>';
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -111,7 +117,7 @@ async function sendMailNotification(toEmail, subject, htmlContent) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'Subtie Platform <ai@msoms.ai>',
+        from: fromAddress,
         to: [toEmail],
         subject: subject,
         html: htmlContent
@@ -120,7 +126,11 @@ async function sendMailNotification(toEmail, subject, htmlContent) {
 
     const data = await res.json();
     if (!res.ok) {
-      console.error(`[Resend Email Error] API returned status ${res.status}:`, data);
+      console.warn(`[Resend Email Error] API returned status ${res.status}:`, data);
+      // Fallback with primary verified domain address if custom sub-address fails
+      if (fromAddress !== 'Subtie Platform <ai@msoms.ai>') {
+        return sendMailNotification(toEmail, subject, htmlContent, 'Subtie Platform <ai@msoms.ai>');
+      }
       return { success: false, error: data.message || 'Resend email error' };
     }
 
@@ -226,22 +236,76 @@ export function sanitizeGeminiModel(modelName) {
 }
 
 // Helper functions for project store
+const DEFAULT_SETTINGS = {
+  geminiModel: 'gemini-3.8-flash',
+  fallbackModel1: 'gemini-flash-latest',
+  fallbackModel2: 'gemini-pro-latest',
+  visionOcrModel: 'gemini-3.8-flash',
+  apiCallStrategy: 'file_api',
+  audioMimeType: 'audio/mpeg',
+  chunkDuration: 120,
+  maxOutputTokens: 8192,
+  temperature: 0.2,
+  promptStage1: '',
+  promptStage2: '',
+  adminAlertEmail: 'admin@msoms.ai'
+};
+
 function readSettings() {
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return { geminiModel: 'gemini-3.8-flash', visionOcrModel: 'gemini-3.8-flash' };
+    if (!fs.existsSync(SETTINGS_FILE)) return { ...DEFAULT_SETTINGS };
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     return {
+      ...DEFAULT_SETTINGS,
       ...parsed,
-      geminiModel: sanitizeGeminiModel(parsed.geminiModel),
-      visionOcrModel: sanitizeGeminiModel(parsed.visionOcrModel || 'gemini-3.8-flash')
+      geminiModel: sanitizeGeminiModel(parsed.geminiModel || DEFAULT_SETTINGS.geminiModel),
+      fallbackModel1: sanitizeGeminiModel(parsed.fallbackModel1 || DEFAULT_SETTINGS.fallbackModel1),
+      fallbackModel2: sanitizeGeminiModel(parsed.fallbackModel2 || DEFAULT_SETTINGS.fallbackModel2),
+      visionOcrModel: sanitizeGeminiModel(parsed.visionOcrModel || DEFAULT_SETTINGS.visionOcrModel)
     };
   } catch (err) {
-    return { geminiModel: 'gemini-3.8-flash', visionOcrModel: 'gemini-3.8-flash' };
+    return { ...DEFAULT_SETTINGS };
   }
 }
 function writeSettings(data) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Proactive Admin Email Alert for Model Deprecations or Engine Errors
+async function notifyAdminModelDeprecation(failedModel, fallbackModel, errorMsg) {
+  try {
+    const settings = readSettings();
+    const adminEmail = settings.adminAlertEmail || 'admin@msoms.ai';
+    const emailSubject = `⚠️ [تنبيه منصة Subtie] تحذير نموذج الذكاء الاصطناعي — ${failedModel}`;
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e11d48; background-color: #0f172a; color: #ffffff; border-radius: 16px;">
+        <h2 style="color: #fb7185; margin-top: 0;">⚠️ تنبيه محرك الذكاء الاصطناعي — Subtie Platform</h2>
+        <p style="font-size: 14px; line-height: 1.6;">تم اكتشاف خطأ أو انتهاء صلاحية في استدعاء نموذج Google Gemini التالي:</p>
+        <div style="background-color: #1e293b; padding: 14px 18px; border-radius: 10px; border-left: 4px solid #f43f5e; margin: 16px 0; font-family: monospace; font-size: 13px;">
+          <strong style="color: #fca5a5;">النموذج المتأثر:</strong> ${failedModel}<br/>
+          <strong style="color: #fca5a5;">رسالة الخطأ:</strong> ${errorMsg}
+        </div>
+        <p style="font-size: 14px; line-height: 1.6; color: #4ade80;">
+          ✅ قامت المنصة تلقائياً بالتحويل إلى النموذج البديل: <strong>${fallbackModel}</strong> لضمان استمرار معالجة أعمال المستخدمين دون توقف.
+        </p>
+        <p style="font-size: 14px; line-height: 1.6;">
+          يرجى الدخول إلى <strong>لوحة تحكم المدير &gt; تبويب إعدادات الذكاء الاصطناعي (AI Settings)</strong> لتحديث المعرف الأساسي للنموذج المعتمد رسمياً من Google Gemini.
+        </p>
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="https://subtie.msoms.ai" style="display: inline-block; background: linear-gradient(135deg, #9333ea, #db2777); color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold;">
+            الانتقال إلى لوحة تحكم Subtie
+          </a>
+        </div>
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 24px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; text-align: center;">تم إرسال هذا التنبيه التلقائي من نظام الرقابة الذاتي لمنصة Subtie AI.</p>
+      </div>
+    `;
+    await sendMailNotification(adminEmail, emailSubject, emailHtml);
+    logSystemEvent('warning', 'gemini_api', `Model deprecation alert sent to admin for model ${failedModel}`, { failedModel, fallbackModel, errorMsg });
+  } catch (err) {
+    console.error('[Model Deprecation Alert Error]', err.message);
+  }
 }
 
 function readProjects() {
@@ -761,6 +825,13 @@ app.post('/api/auth/login', (req, res) => {
     });
   }
 
+  if (user.isSuspended) {
+    return res.status(403).json({
+      error: 'حسابك معلق حالياً من قبل الإدارة. يرجى التواصل مع الدعم الفني.',
+      isSuspended: true
+    });
+  }
+
   const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
 
   return res.json({
@@ -1053,8 +1124,44 @@ app.post('/api/auth/change-password', (req, res) => {
   });
 });
 
-// 13. Admin Endpoint: Get All Registered Users
-app.get('/api/auth/users', (req, res) => {
+// 13. Admin Endpoint: Get All Registered Users (Enriched with Projects, Videos, Usage & Payments)
+function getEnrichedUsersList() {
+  const users = readUsers();
+  const projects = readProjects();
+  const allProjects = Object.values(projects);
+
+  return Object.values(users).map(u => {
+    const userProjects = allProjects.filter(p => p.ownerId === u.id);
+    const userVideos = userProjects.filter(p => p.videoUrl && p.videoUrl.trim() !== '');
+
+    let totalMinutesUsed = 0;
+    for (const p of userProjects) {
+      if (p.duration) {
+        totalMinutesUsed += Math.ceil(Number(p.duration) / 60);
+      } else if (Array.isArray(p.subtitles) && p.subtitles.length > 0) {
+        const lastSub = p.subtitles[p.subtitles.length - 1];
+        if (lastSub?.endTime) {
+          totalMinutesUsed += Math.ceil(parseTimestampToSeconds(lastSub.endTime) / 60);
+        }
+      }
+    }
+
+    const totalPaid = getUserTotalPaid(u.id);
+    const { passwordHash, verificationCode, passwordResetCode, ...safe } = u;
+
+    return {
+      ...safe,
+      totalProjects: userProjects.length,
+      totalVideos: userVideos.length,
+      totalMinutesUsed,
+      minuteBalance: u.minuteBalance || 0,
+      totalPaid,
+      isSuspended: Boolean(u.isSuspended)
+    };
+  });
+}
+
+app.get(['/api/auth/users', '/api/admin/users'], (req, res) => {
   const userId = req.headers['x-user-id'];
   const users = readUsers();
   const requester = users[userId];
@@ -1063,16 +1170,12 @@ app.get('/api/auth/users', (req, res) => {
     return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
   }
 
-  const safeUsers = Object.values(users).map(u => {
-    const { passwordHash, verificationCode, passwordResetCode, ...safe } = u;
-    return safe;
-  });
-
-  return res.json({ success: true, users: safeUsers });
+  const enriched = getEnrichedUsersList();
+  return res.json({ success: true, users: enriched });
 });
 
 // 14. Admin Endpoint: Change User Role
-app.put('/api/auth/users/:id/role', (req, res) => {
+app.put(['/api/auth/users/:id/role', '/api/admin/users/:id/role'], (req, res) => {
   const userId = req.headers['x-user-id'];
   const targetId = req.params.id;
   const { role } = req.body;
@@ -1097,11 +1200,132 @@ app.put('/api/auth/users/:id/role', (req, res) => {
   users[targetId] = target;
   writeUsers(users);
 
+  logSystemEvent('info', 'auth', `Admin changed role of ${target.email} to ${role}`);
   const { passwordHash, verificationCode, passwordResetCode, ...safeTarget } = target;
   return res.json({
     success: true,
     message: `User ${target.email} role updated to ${role}.`,
     user: safeTarget
+  });
+});
+
+// 14b. Admin Endpoint: Credit / Deduct User Minutes
+app.post('/api/admin/users/:id/credit', (req, res) => {
+  const adminId = req.headers['x-user-id'];
+  const users = readUsers();
+  const requester = users[adminId];
+
+  if (!requester || requester.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const targetId = req.params.id;
+  const target = users[targetId];
+  if (!target) {
+    return res.status(404).json({ error: 'Target user account not found.' });
+  }
+
+  const { minutes, reason } = req.body;
+  const creditMins = Number(minutes) || 0;
+  if (creditMins === 0) {
+    return res.status(400).json({ error: 'Invalid minutes amount specified.' });
+  }
+
+  target.minuteBalance = Math.max(0, (target.minuteBalance || 0) + creditMins);
+  writeUsers(users);
+
+  recordAdminCreditTransaction(targetId, creditMins, reason || 'Admin balance grant');
+  logSystemEvent('info', 'auth', `Admin granted ${creditMins} mins to ${target.email}. New balance: ${target.minuteBalance}`, { targetId, creditMins, reason });
+
+  return res.json({
+    success: true,
+    message: `Successfully credited ${creditMins} minutes to ${target.email}.`,
+    minuteBalance: target.minuteBalance
+  });
+});
+
+// 14c. Admin Endpoint: Suspend / Unsuspend User Account
+app.put('/api/admin/users/:id/suspend', (req, res) => {
+  const adminId = req.headers['x-user-id'];
+  const users = readUsers();
+  const requester = users[adminId];
+
+  if (!requester || requester.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const targetId = req.params.id;
+  if (targetId === adminId) {
+    return res.status(400).json({ error: 'Cannot suspend your own admin account.' });
+  }
+
+  const target = users[targetId];
+  if (!target) {
+    return res.status(404).json({ error: 'Target user account not found.' });
+  }
+
+  const { isSuspended } = req.body;
+  target.isSuspended = Boolean(isSuspended);
+  writeUsers(users);
+
+  logSystemEvent('warning', 'auth', `Admin ${target.isSuspended ? 'suspended' : 'unsuspended'} account ${target.email}`);
+  return res.json({
+    success: true,
+    message: `Account ${target.email} is now ${target.isSuspended ? 'Suspended' : 'Active'}.`,
+    isSuspended: target.isSuspended
+  });
+});
+
+// 14d. Admin Endpoint: Delete User Account and All Associated Content
+app.delete('/api/admin/users/:id', (req, res) => {
+  const adminId = req.headers['x-user-id'];
+  const users = readUsers();
+  const requester = users[adminId];
+
+  if (!requester || requester.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const targetId = req.params.id;
+  if (targetId === adminId) {
+    return res.status(400).json({ error: 'Cannot delete your own admin account.' });
+  }
+
+  const target = users[targetId];
+  if (!target) {
+    return res.status(404).json({ error: 'Target user account not found.' });
+  }
+
+  // 1. Purge user projects from projects.json
+  const projects = readProjects();
+  let deletedCount = 0;
+  for (const [pId, p] of Object.entries(projects)) {
+    if (p.ownerId === targetId) {
+      delete projects[pId];
+      deletedCount++;
+    }
+  }
+  writeProjects(projects);
+
+  // 2. Purge user storage directory
+  const userUploadsDir = path.join(UPLOADS_DIR, targetId);
+  if (fs.existsSync(userUploadsDir)) {
+    try {
+      fs.rmSync(userUploadsDir, { recursive: true, force: true });
+    } catch (rmErr) {
+      console.warn(`[Delete User Purge Warning]: ${rmErr.message}`);
+    }
+  }
+
+  // 3. Delete user account
+  const deletedEmail = target.email;
+  delete users[targetId];
+  writeUsers(users);
+
+  logSystemEvent('warning', 'auth', `Admin completely deleted user ${deletedEmail} (${targetId}) and purged ${deletedCount} project(s).`);
+  return res.json({
+    success: true,
+    message: `User ${deletedEmail} and all ${deletedCount} associated project(s) & media files have been permanently deleted.`
   });
 });
 
@@ -1159,8 +1383,62 @@ app.put('/api/settings', (req, res) => {
   const currentSettings = readSettings();
   const newSettings = { ...currentSettings, ...req.body };
   writeSettings(newSettings);
+  logSystemEvent('info', 'system', 'Admin updated AI system settings', { newSettings });
   
   res.json({ success: true, message: 'Settings saved successfully', settings: newSettings });
+});
+
+// Comprehensive Multi-Model AI Engine Health Check
+app.post('/api/settings/health-check', async (req, res) => {
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const settings = readSettings();
+    const aiKey = process.env.GEMINI_API_KEY || settings.geminiApiKey || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+    if (!aiKey) {
+      return res.status(400).json({ success: false, error: 'No Gemini API keys configured.' });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: aiKey });
+    const modelsToTest = [
+      { role: 'Primary ASR/Transcribe', name: settings.geminiModel },
+      { role: 'Fallback Model 1', name: settings.fallbackModel1 },
+      { role: 'Fallback Model 2', name: settings.fallbackModel2 },
+      { role: 'Vision OCR Model', name: settings.visionOcrModel }
+    ];
+
+    const results = [];
+    for (const m of modelsToTest) {
+      if (!m.name) continue;
+      const start = Date.now();
+      try {
+        const resp = await ai.models.generateContent({
+          model: m.name,
+          contents: 'Translate the word "Hello" to Arabic. Output 1 word only.',
+          config: { maxOutputTokens: 20 }
+        });
+        results.push({
+          role: m.role,
+          model: m.name,
+          status: 'healthy',
+          latencyMs: Date.now() - start,
+          response: resp.text?.trim() || 'OK'
+        });
+      } catch (err) {
+        results.push({
+          role: m.role,
+          model: m.name,
+          status: 'error',
+          latencyMs: Date.now() - start,
+          error: err.message
+        });
+      }
+    }
+
+    logSystemEvent('info', 'gemini_api', 'Admin executed AI Engine Health Check', { results });
+    return res.json({ success: true, results, timestamp: Date.now() });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ====================================================
@@ -1382,6 +1660,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
         response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
       } catch (err) {
         console.warn(`[Gemini AI Resubtitle] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+        notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
         try {
           response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
         } catch (err2) {
@@ -1831,6 +2110,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
           response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
         } catch (err) {
           console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+          notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
           try {
             response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
           } catch (err2) {
@@ -3073,6 +3353,510 @@ app.delete('/api/admin/gemini-keys/:id', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ====================================================
+// SERVER INFRASTRUCTURE & PROCESS MONITORING ENDPOINTS
+// ====================================================
+
+app.get('/api/admin/system/metrics', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const memUsagePct = Math.round((usedMem / totalMem) * 100);
+
+  const cpus = os.cpus();
+  const loadAvg = os.loadavg();
+  const systemUptime = os.uptime();
+  const processUptime = process.uptime();
+  const procMem = process.memoryUsage();
+
+  // Test Redis connection & ping
+  let redisStatus = 'offline';
+  let redisPingMs = null;
+  if (typeof redisConnection !== 'undefined' && redisConnection && (redisConnection.status === 'ready' || redisConnection.status === 'connect')) {
+    try {
+      const start = Date.now();
+      await redisConnection.ping();
+      redisPingMs = Date.now() - start;
+      redisStatus = 'connected';
+    } catch (_) {
+      redisStatus = 'error';
+    }
+  }
+
+  const activeTorrents = (torrentService && torrentService.activeJobs) ? torrentService.activeJobs.size : 0;
+  const activeAIJobs = activeProcessingSet ? activeProcessingSet.size : 0;
+
+  return res.json({
+    success: true,
+    timestamp: Date.now(),
+    ram: {
+      totalMb: (totalMem / (1024 * 1024)).toFixed(0),
+      usedMb: (usedMem / (1024 * 1024)).toFixed(0),
+      freeMb: (freeMem / (1024 * 1024)).toFixed(0),
+      usagePct: memUsagePct
+    },
+    cpu: {
+      model: cpus[0]?.model || 'Host CPU',
+      cores: cpus.length,
+      load1m: loadAvg[0]?.toFixed(2) || '0.00',
+      load5m: loadAvg[1]?.toFixed(2) || '0.00',
+      load15m: loadAvg[2]?.toFixed(2) || '0.00'
+    },
+    system: {
+      platform: os.platform(),
+      arch: os.arch(),
+      release: os.release(),
+      hostname: os.hostname(),
+      nodeVersion: process.version,
+      uptimeSeconds: Math.round(systemUptime)
+    },
+    process: {
+      pid: process.pid,
+      rssMb: (procMem.rss / (1024 * 1024)).toFixed(1),
+      heapUsedMb: (procMem.heapUsed / (1024 * 1024)).toFixed(1),
+      heapTotalMb: (procMem.heapTotal / (1024 * 1024)).toFixed(1),
+      uptimeSeconds: Math.round(processUptime)
+    },
+    services: {
+      nodeApp: { status: 'online', pid: process.pid, uptime: Math.round(processUptime) },
+      redis: { status: redisStatus, pingMs: redisPingMs },
+      torrentService: { status: 'running', activeJobs: activeTorrents },
+      aiEngine: { status: 'ready', activeJobs: activeAIJobs }
+    }
+  });
+});
+
+app.post('/api/admin/system/restart-app', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  logSystemEvent('info', 'system', 'Admin initiated application restart sequence');
+  
+  // Touch passenger restart.txt if running on Plesk/Passenger
+  const passengerRestart = path.join(__dirname, '..', 'tmp', 'restart.txt');
+  try {
+    const tmpDir = path.dirname(passengerRestart);
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(passengerRestart, String(Date.now()));
+  } catch (_) {}
+
+  res.json({
+    success: true,
+    message: 'Application restart sequence initiated. Server will reload in 1 second.'
+  });
+
+  setTimeout(() => {
+    process.exit(0);
+  }, 1000);
+});
+
+app.post('/api/admin/system/restart-redis', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  logSystemEvent('info', 'redis', 'Admin initiated Redis reconnect attempt');
+  try {
+    if (typeof redisConnection !== 'undefined' && redisConnection) {
+      try { redisConnection.disconnect(); } catch (_) {}
+      await redisConnection.connect().catch(() => {});
+    }
+    return res.json({ success: true, message: 'Redis connection refreshed successfully.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Redis restart error: ' + err.message });
+  }
+});
+
+app.post('/api/admin/system/clear-cache', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  let cleanedFolders = 0;
+  try {
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const scanAndClean = (dir) => {
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const e of entries) {
+            const fullPath = path.join(dir, e.name);
+            if (e.isDirectory()) {
+              if (e.name === 'chunks' || e.name === 'temp_torrents') {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+                cleanedFolders++;
+              } else {
+                scanAndClean(fullPath);
+              }
+            }
+          }
+        } catch (_) {}
+      };
+      scanAndClean(UPLOADS_DIR);
+    }
+
+    if (typeof redisConnection !== 'undefined' && redisConnection && (redisConnection.status === 'ready' || redisConnection.status === 'connect')) {
+      try { await redisConnection.flushdb(); } catch (_) {}
+    }
+
+    logSystemEvent('info', 'system', `Admin cleared cache. Cleaned ${cleanedFolders} temporary folder(s).`);
+    return res.json({
+      success: true,
+      message: `System cache cleared successfully. Purged ${cleanedFolders} temporary audio chunk folder(s).`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Cache clearing error: ' + err.message });
+  }
+});
+
+// ====================================================
+// SYSTEM LOGS & INCIDENT RECOVERY ENDPOINTS
+// ====================================================
+
+app.get('/api/admin/system/logs', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const { level, category, search, limit = 200 } = req.query;
+  let logs = readSystemLogs();
+
+  if (level && level !== 'all') {
+    logs = logs.filter(l => l.level === level);
+  }
+  if (category && category !== 'all') {
+    logs = logs.filter(l => l.category === category);
+  }
+  if (search && search.trim()) {
+    const q = search.trim().toLowerCase();
+    logs = logs.filter(l => 
+      (l.message && l.message.toLowerCase().includes(q)) ||
+      (l.category && l.category.toLowerCase().includes(q)) ||
+      (l.meta && JSON.stringify(l.meta).toLowerCase().includes(q))
+    );
+  }
+
+  const trimmed = logs.slice(0, Number(limit) || 200);
+  return res.json({
+    success: true,
+    logs: trimmed,
+    total: logs.length
+  });
+});
+
+app.delete('/api/admin/system/logs', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  clearSystemLogs();
+  logSystemEvent('info', 'system', 'Admin cleared all system logs history');
+  return res.json({ success: true, message: 'All system logs have been cleared.' });
+});
+
+app.post('/api/admin/system/recover-task', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const { action, projectId } = req.body;
+
+  if (action === 'clear_locks') {
+    const releasedLocksCount = activeProcessingSet.size;
+    activeProcessingSet.clear();
+
+    // Reset stuck processing projects
+    const projects = readProjects();
+    let resetCount = 0;
+    for (const [pId, p] of Object.entries(projects)) {
+      if (p.status === 'processing') {
+        p.status = 'ready';
+        p.processingStatus = 'Unlocked by Administrator for reprocessing.';
+        resetCount++;
+      }
+    }
+    writeProjects(projects);
+
+    logSystemEvent('warning', 'system', `Admin unlocked ${releasedLocksCount} active lock(s) and reset ${resetCount} stuck project(s).`);
+    return res.json({
+      success: true,
+      message: `Released ${releasedLocksCount} active lock(s) and restored ${resetCount} stuck project(s) to ready state.`
+    });
+  }
+
+  if (action === 'retry_project' && projectId) {
+    const projects = readProjects();
+    const p = projects[projectId];
+    if (!p) return res.status(404).json({ error: 'Project not found' });
+
+    activeProcessingSet.delete(projectId);
+    p.status = 'processing';
+    p.processingStatus = 'Admin initiated task recovery & processing restart...';
+    writeProjects(projects);
+
+    // Fire processing in background
+    executeVideoProcessing(projectId, 0, null).catch(err => {
+      console.error(`[Task Recovery Failed] Project ${projectId}:`, err.message);
+      logSystemEvent('error', 'video_proc', `Task recovery failed for project ${projectId}: ${err.message}`, { projectId });
+    });
+
+    logSystemEvent('info', 'video_proc', `Admin triggered task recovery for project ${projectId}`);
+    return res.json({
+      success: true,
+      message: `Project ${projectId} processing restarted successfully.`
+    });
+  }
+
+  if (action === 'rechunk_project' && projectId) {
+    const projects = readProjects();
+    const p = projects[projectId];
+    if (!p) return res.status(404).json({ error: 'Project not found' });
+
+    try {
+      const targetDir = getProjectTargetDir(p, projectId);
+      const rechunkResult = await performAudioRechunk(targetDir, 120);
+
+      activeProcessingSet.delete(projectId);
+      p.status = 'processing';
+      p.processingStatus = `Audio re-chunked (${rechunkResult.chunkFiles.length} segments). Restarting AI transcription...`;
+      writeProjects(projects);
+
+      executeVideoProcessing(projectId, 0, null).catch(err => {
+        logSystemEvent('error', 'video_proc', `Re-chunk processing failed for project ${projectId}: ${err.message}`);
+      });
+
+      return res.json({
+        success: true,
+        message: `Successfully re-chunked audio into ${rechunkResult.chunkFiles.length} segments and restarted transcription.`
+      });
+    } catch (rcErr) {
+      return res.status(500).json({ error: 'Re-chunk failed: ' + rcErr.message });
+    }
+  }
+
+  return res.status(400).json({ error: 'Invalid recovery action specified.' });
+});
+
+// ====================================================
+// NEWSLETTER & ANNOUNCEMENTS ENDPOINTS
+// ====================================================
+
+app.get('/api/admin/newsletter/subscribers', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const subscribers = Object.values(users)
+    .filter(u => u.isVerified && u.subscriptions?.newsletter !== false)
+    .map(u => ({
+      id: u.id,
+      email: u.email,
+      name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+      role: u.role,
+      subscribedAt: u.createdAt
+    }));
+
+  return res.json({
+    success: true,
+    count: subscribers.length,
+    subscribers
+  });
+});
+
+app.post('/api/admin/newsletter/generate', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const { topic, tone = 'exciting', lang = 'ar' } = req.body;
+  if (!topic || !topic.trim()) {
+    return res.status(400).json({ error: 'Please provide a topic or announcement details.' });
+  }
+
+  const settings = readSettings();
+  const aiKey = process.env.GEMINI_API_KEY || settings.geminiApiKey || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
+  if (!aiKey) {
+    return res.status(400).json({ error: 'No Gemini API key available for newsletter generation.' });
+  }
+
+  try {
+    const result = await generateNewsletterWithAI({
+      topic,
+      tone,
+      lang,
+      aiKey,
+      modelName: sanitizeGeminiModel(settings.geminiModel)
+    });
+
+    logSystemEvent('info', 'system', `Admin generated newsletter template: "${result.subject}"`);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Newsletter Generate Error]', err);
+    logSystemEvent('error', 'gemini_api', `Newsletter generation failed: ${err.message}`);
+    return res.status(500).json({ error: 'Failed to generate newsletter: ' + err.message });
+  }
+});
+
+app.post('/api/admin/newsletter/send', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  const adminUser = users[userId];
+  if (adminUser?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const { subject, htmlContent, isTest = false, testEmail } = req.body;
+  if (!subject || !htmlContent) {
+    return res.status(400).json({ error: 'Subject and HTML content are required.' });
+  }
+
+  const senderAddress = 'Subtie Anime Platform <noreply@subtie.msoms.ai>';
+
+  if (isTest) {
+    const targetTestEmail = testEmail || adminUser.email;
+    const testResult = await sendMailNotification(
+      targetTestEmail,
+      `[معاينة تجريبية] ${subject}`,
+      htmlContent.replace(/\{\{EMAIL\}\}/g, encodeURIComponent(targetTestEmail)),
+      senderAddress
+    );
+
+    if (!testResult.success) {
+      return res.status(500).json({ error: 'Failed to send test email: ' + (testResult.error || 'Unknown error') });
+    }
+
+    logSystemEvent('info', 'system', `Admin sent test newsletter to ${targetTestEmail}`);
+    return res.json({ success: true, message: `Test email dispatched successfully to ${targetTestEmail}.` });
+  }
+
+  // Full Live Campaign Broadcast
+  const subscribers = Object.values(users).filter(u => u.isVerified && u.subscriptions?.newsletter !== false);
+  if (subscribers.length === 0) {
+    return res.status(400).json({ error: 'No subscribed users found to receive this campaign.' });
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  // Process dispatch
+  for (const sub of subscribers) {
+    const personalizedHtml = htmlContent.replace(/\{\{EMAIL\}\}/g, encodeURIComponent(sub.email));
+    try {
+      const res = await sendMailNotification(sub.email, subject, personalizedHtml, senderAddress);
+      if (res.success) successCount++;
+      else failCount++;
+    } catch (_) {
+      failCount++;
+    }
+    // Small delay between sends to respect rate limits
+    await new Promise(r => setTimeout(r, 80));
+  }
+
+  // Record in newsletter history
+  const history = readNewsletters();
+  const campaignRecord = {
+    id: 'camp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    subject,
+    sentAt: new Date().toISOString(),
+    recipientsCount: subscribers.length,
+    deliveredCount: successCount,
+    failedCount: failCount,
+    sentBy: adminUser.email,
+    previewSnippet: subject.substring(0, 100)
+  };
+  history.unshift(campaignRecord);
+  writeNewsletters(history);
+
+  logSystemEvent('info', 'system', `Admin broadcasted newsletter "${subject}" to ${successCount}/${subscribers.length} subscribers.`);
+  return res.json({
+    success: true,
+    message: `Newsletter campaign dispatched to ${successCount} subscriber(s). Failed: ${failCount}.`,
+    campaign: campaignRecord
+  });
+});
+
+app.get('/api/admin/newsletter/history', (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const history = readNewsletters();
+  return res.json({ success: true, history });
+});
+
+// Public Unsubscribe Endpoint
+app.get('/api/newsletter/unsubscribe', (req, res) => {
+  const { email } = req.query;
+  if (email) {
+    const users = readUsers();
+    let found = false;
+    for (const u of Object.values(users)) {
+      if (u.email && u.email.toLowerCase() === String(email).trim().toLowerCase()) {
+        u.subscriptions = u.subscriptions || {};
+        u.subscriptions.newsletter = false;
+        found = true;
+      }
+    }
+    if (found) {
+      writeUsers(users);
+      logSystemEvent('info', 'auth', `User ${email} unsubscribed from newsletter.`);
+    }
+  }
+
+  res.send(`
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>إلغاء الاشتراك — Subtie</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, sans-serif; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: #1e293b; padding: 48px 32px; border-radius: 28px; border: 1px solid rgba(168, 85, 247, 0.4); max-width: 480px; width: 100%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+          .icon { width: 64px; height: 64px; background: rgba(168, 85, 247, 0.2); border: 2px solid #a855f7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 28px; }
+          h2 { color: #c084fc; margin-bottom: 12px; font-size: 24px; font-weight: 800; }
+          p { color: #94a3b8; line-height: 1.7; font-size: 15px; margin-bottom: 28px; }
+          a { display: inline-block; background: linear-gradient(135deg, #7c3aed, #ec4899); color: white; padding: 12px 32px; border-radius: 16px; text-decoration: none; font-weight: bold; font-size: 14px; box-shadow: 0 10px 20px -5px rgba(124, 58, 237, 0.5); }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="icon">✓</div>
+          <h2>تم إلغاء الاشتراك بنجاح</h2>
+          <p>تم إزالة بريدك الإلكتروني من قائمة النشرة الإخبارية لمنصة Subtie. لن تتلقى رسائل البريد الدورية بعد الآن. يمكنك إعادة الاشتراك من إعدادات حسابك في أي وقت.</p>
+          <a href="/">العودة إلى منصة Subtie</a>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 // ====================================================

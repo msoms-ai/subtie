@@ -529,11 +529,49 @@ export function getUserTransactions(userId) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+/**
+ * Returns the total monetary amount successfully paid by a user across all transactions
+ */
+export function getUserTotalPaid(userId) {
+  const transactions = readTransactions();
+  let total = 0;
+  for (const t of Object.values(transactions)) {
+    if (t.userId === userId && (t.status === 'completed' || t.status === 'success' || t.status === 'credited')) {
+      const amt = Number(t.amount) || Number(t.amountSar) || Number(t.amountAed) || 0;
+      total += amt;
+    }
+  }
+  return total;
+}
+
+/**
+ * Logs an administrative minutes grant or deduction
+ */
+export function recordAdminCreditTransaction(userId, minutes, reason = 'Admin adjustment') {
+  const transactions = readTransactions();
+  const txId = 'tx_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  transactions[txId] = {
+    id: txId,
+    userId,
+    amount: 0,
+    currency: 'USD',
+    minutes: Number(minutes) || 0,
+    status: 'completed',
+    type: 'admin_credit',
+    reason,
+    createdAt: new Date().toISOString()
+  };
+  writeTransactions(transactions);
+  return transactions[txId];
+}
+
 export default {
   PACKAGES,
   calculateBulkTier,
   getPackagesCatalogue,
   createPaymentIntent,
   verifyAndCreditPayment,
-  getUserTransactions
+  getUserTransactions,
+  getUserTotalPaid,
+  recordAdminCreditTransaction
 };

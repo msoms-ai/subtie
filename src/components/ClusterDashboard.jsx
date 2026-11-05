@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Server, Cpu, Key, Plus, Trash2, RefreshCw, AlertTriangle, CheckCircle, Clock, Cloud } from 'lucide-react';
+import { Activity, Server, Cpu, Key, Plus, Trash2, RefreshCw, AlertTriangle, CheckCircle, Clock, Cloud, Power, RotateCcw, Database, HardDrive, Terminal } from 'lucide-react';
 
-export default function ClusterDashboard({ lang }) {
+export default function ClusterDashboard({ lang, currentUser }) {
   const isAr = lang === 'ar';
   const [metrics, setMetrics] = useState(null);
+  const [sysMetrics, setSysMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [addingKey, setAddingKey] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [serviceActionLoading, setServiceActionLoading] = useState('');
   const [error, setError] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
 
@@ -27,19 +29,44 @@ export default function ClusterDashboard({ lang }) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  const formatUptime = (seconds) => {
+    if (!seconds && seconds !== 0) return '—';
+    const d = Math.floor(seconds / (3600 * 24));
+    const h = Math.floor((seconds % (3600 * 24)) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m ${Math.floor(seconds % 60)}s`;
+  };
+
   const fetchMetrics = async (isManual = false, forceRescan = false) => {
     if (isManual) setRefreshing(true);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
     try {
       const qs = forceRescan ? `rescan=1&t=${Date.now()}` : `t=${Date.now()}`;
-      const res = await fetch(`/api/admin/cluster-metrics?${qs}`, {
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(isAr ? 'تعذر الاتصال بخادم المراقبة' : 'Failed to load cluster metrics');
-      const data = await res.json();
+      const [resCluster, resSys] = await Promise.all([
+        fetch(`/api/admin/cluster-metrics?${qs}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: currentUser?.id ? { 'x-user-id': currentUser.id } : {}
+        }),
+        fetch(`/api/admin/system/metrics?t=${Date.now()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: currentUser?.id ? { 'x-user-id': currentUser.id } : {}
+        }).catch(() => null)
+      ]);
+
+      if (!resCluster.ok) throw new Error(isAr ? 'تعذر الاتصال بخادم المراقبة' : 'Failed to load cluster metrics');
+      const data = await resCluster.json();
       setMetrics(data);
+
+      if (resSys && resSys.ok) {
+        const sysData = await resSys.json();
+        setSysMetrics(sysData);
+      }
+
       setError(null);
       if (forceRescan) {
         const count = Array.isArray(data?.apiPool) ? data.apiPool.length : (data?.apiPool?.keys?.length || 0);
@@ -73,6 +100,59 @@ export default function ClusterDashboard({ lang }) {
       await fetchMetrics(true, true);
     } finally {
       setRescanning(false);
+    }
+  };
+
+  const handleRestartApp = async () => {
+    if (!window.confirm(isAr ? 'هل أنت متأكد من رغبتك في إعادة تشغيل تطبيق NodeJS؟ سيعاد تحميل السيرفر في غضون ثوانٍ قليلة.' : 'Are you sure you want to restart the NodeJS application? Server will reload in seconds.')) return;
+    setServiceActionLoading('restart-app');
+    try {
+      const res = await fetch('/api/admin/system/restart-app', {
+        method: 'POST',
+        headers: currentUser?.id ? { 'x-user-id': currentUser.id } : {}
+      });
+      const data = await res.json();
+      showToast(data.message || (isAr ? 'جاري إعادة تشغيل السيرفر...' : 'Restarting server...'));
+      setTimeout(() => fetchMetrics(true, false), 3500);
+    } catch (e) {
+      showToast(isAr ? 'تم إرسال إشارة إعادة التشغيل' : 'Restart signal sent');
+    } finally {
+      setTimeout(() => setServiceActionLoading(''), 2000);
+    }
+  };
+
+  const handleRestartRedis = async () => {
+    setServiceActionLoading('restart-redis');
+    try {
+      const res = await fetch('/api/admin/system/restart-redis', {
+        method: 'POST',
+        headers: currentUser?.id ? { 'x-user-id': currentUser.id } : {}
+      });
+      const data = await res.json();
+      showToast(data.message || (isAr ? 'تم تجديد اتصال Redis' : 'Redis refreshed'));
+      await fetchMetrics(true, false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setServiceActionLoading('');
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (!window.confirm(isAr ? 'هل أنت متأكد من تنظيف الذاكرة المؤقتة ومجلدات Chunks القديمة؟' : 'Clear temporary cache and orphaned chunks?')) return;
+    setServiceActionLoading('clear-cache');
+    try {
+      const res = await fetch('/api/admin/system/clear-cache', {
+        method: 'POST',
+        headers: currentUser?.id ? { 'x-user-id': currentUser.id } : {}
+      });
+      const data = await res.json();
+      showToast(data.message || (isAr ? 'تم تنظيف الكاش بنجاح' : 'Cache cleared successfully'));
+      await fetchMetrics(true, false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setServiceActionLoading('');
     }
   };
 
@@ -133,7 +213,7 @@ export default function ClusterDashboard({ lang }) {
         <div className="flex items-center gap-2.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-sm font-black text-white">
-            {isAr ? 'مراقبة السيرفر والتخزين السحابي (V2 Cluster)' : 'Live Cluster & Cloud Storage Telemetry'}
+            {isAr ? 'مراقبة السيرفر وموارد النظام (Hardware & Services)' : 'Live Hardware, Server Services & Cluster Telemetry'}
           </span>
         </div>
 
@@ -158,6 +238,120 @@ export default function ClusterDashboard({ lang }) {
         <div className="p-3.5 bg-red-950/60 border border-red-500/40 rounded-2xl flex items-center gap-2.5 text-red-200 text-xs font-bold">
           <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* HARDWARE RESOURCES & RESTART ACTIONS ROW */}
+      {sysMetrics && (
+        <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/20 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                <HardDrive className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white">{isAr ? 'مراقبة العتاد وموارد النظام (RAM & CPU)' : 'Hardware & System Resources'}</h4>
+                <p className="text-[11px] text-slate-400">{sysMetrics.system?.hostname} • {sysMetrics.system?.platform} ({sysMetrics.system?.arch}) • Node {sysMetrics.system?.nodeVersion}</p>
+              </div>
+            </div>
+
+            {/* Service Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleRestartApp}
+                disabled={Boolean(serviceActionLoading)}
+                className="px-3 py-1.5 bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-200 hover:text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title={isAr ? 'إعادة تشغيل خدمة NodeJS' : 'Restart NodeJS Backend Service'}
+              >
+                <Power className={`w-3.5 h-3.5 text-rose-400 ${serviceActionLoading === 'restart-app' ? 'animate-spin' : ''}`} />
+                <span>{isAr ? 'إعادة تشغيل NodeJS' : 'Restart NodeJS'}</span>
+              </button>
+
+              <button
+                onClick={handleRestartRedis}
+                disabled={Boolean(serviceActionLoading)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-purple-500/30 text-purple-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title={isAr ? 'تجديد اتصال Redis' : 'Reconnect Redis Broker'}
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-pink-400 ${serviceActionLoading === 'restart-redis' ? 'animate-spin' : ''}`} />
+                <span>{isAr ? 'تجديد Redis' : 'Reconnect Redis'}</span>
+              </button>
+
+              <button
+                onClick={handleClearCache}
+                disabled={Boolean(serviceActionLoading)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-purple-500/30 text-purple-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title={isAr ? 'تنظيف الكاش والملفات المؤقتة' : 'Clear Temporary Chunks & Cache'}
+              >
+                <Trash2 className={`w-3.5 h-3.5 text-amber-400 ${serviceActionLoading === 'clear-cache' ? 'animate-spin' : ''}`} />
+                <span>{isAr ? 'تنظيف الكاش' : 'Clear Cache'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* RAM USAGE */}
+            <div className="bg-slate-950/70 border border-purple-500/20 rounded-xl p-3.5">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-slate-300">{isAr ? 'الذاكرة العشوائية (RAM)' : 'System RAM'}</span>
+                <span className="font-mono font-black text-purple-300">{sysMetrics.ram?.usagePct}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-2">
+                <div
+                  className={`h-full transition-all duration-500 rounded-full ${
+                    sysMetrics.ram?.usagePct > 85 ? 'bg-rose-500' : sysMetrics.ram?.usagePct > 65 ? 'bg-amber-500' : 'bg-gradient-to-r from-purple-500 to-emerald-400'
+                  }`}
+                  style={{ width: `${Math.min(100, sysMetrics.ram?.usagePct || 0)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                <span>{sysMetrics.ram?.usedMb} MB {isAr ? 'مستخدم' : 'Used'}</span>
+                <span>{sysMetrics.ram?.totalMb} MB {isAr ? 'الإجمالي' : 'Total'}</span>
+              </div>
+            </div>
+
+            {/* CPU LOAD */}
+            <div className="bg-slate-950/70 border border-purple-500/20 rounded-xl p-3.5">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-slate-300">{isAr ? 'المعالج (CPU)' : 'CPU Load'}</span>
+                <span className="font-mono text-[10px] text-slate-400">{sysMetrics.cpu?.cores} {isAr ? 'أنوية' : 'cores'}</span>
+              </div>
+              <div className="text-sm font-black text-white font-mono mb-1">
+                {sysMetrics.cpu?.load1m} <span className="text-[10px] text-slate-400 font-normal">/ {sysMetrics.cpu?.load5m} / {sysMetrics.cpu?.load15m}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate" title={sysMetrics.cpu?.model}>
+                {sysMetrics.cpu?.model}
+              </p>
+            </div>
+
+            {/* PROCESS MEMORY */}
+            <div className="bg-slate-950/70 border border-purple-500/20 rounded-xl p-3.5">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-slate-300">{isAr ? 'استهلاك تطبيق Node' : 'Node Process RSS'}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+              <div className="text-sm font-black text-emerald-400 font-mono mb-1">
+                {sysMetrics.process?.rssMb} MB
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">
+                PID: {sysMetrics.process?.pid} • Heap: {sysMetrics.process?.heapUsedMb} MB
+              </div>
+            </div>
+
+            {/* SYSTEM UPTIME */}
+            <div className="bg-slate-950/70 border border-purple-500/20 rounded-xl p-3.5">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-slate-300">{isAr ? 'وقت تشغيل النظام' : 'System Uptime'}</span>
+                <Clock className="w-3.5 h-3.5 text-indigo-400" />
+              </div>
+              <div className="text-sm font-black text-indigo-300 font-mono mb-1">
+                {formatUptime(sysMetrics.system?.uptimeSeconds)}
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">
+                {isAr ? 'عملية التطبيق:' : 'App Uptime:'} {formatUptime(sysMetrics.process?.uptimeSeconds)}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -237,13 +431,13 @@ export default function ClusterDashboard({ lang }) {
             <Server className="w-4 h-4 text-pink-400 shrink-0" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${metrics?.queue?.status === 'online' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`w-2 h-2 rounded-full shrink-0 ${metrics?.queue?.status === 'online' || sysMetrics?.services?.redis?.status === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
             <span className="text-sm font-black text-white whitespace-nowrap">
-              {metrics?.queue?.status === 'online' ? 'Connected' : 'Standalone'}
+              {metrics?.queue?.status === 'online' || sysMetrics?.services?.redis?.status === 'connected' ? 'Connected' : 'Standalone'}
             </span>
           </div>
           <span className="text-[11px] text-slate-400 mt-1 truncate">
-            {metrics?.queue?.host || 'Port 6380'}
+            {sysMetrics?.services?.redis?.pingMs ? `${sysMetrics.services.redis.pingMs}ms latency` : (metrics?.queue?.host || 'Port 6380')}
           </span>
         </div>
       </div>
