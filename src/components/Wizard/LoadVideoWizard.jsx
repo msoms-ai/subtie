@@ -478,11 +478,15 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       if (user?.id) {
         xhr.setRequestHeader('x-user-id', user.id);
       }
+      if (projectName) {
+        xhr.setRequestHeader('x-project-name', encodeURIComponent(projectName));
+      }
       xhr.timeout = 0;
       xhr.send(createFormData());
     };
 
-    runUploadXHR('/api/upload');
+    const qs = `?projectName=${encodeURIComponent(projectName || '')}&userId=${encodeURIComponent(user?.id || '')}`;
+    runUploadXHR(`/api/upload${qs}`);
   };
 
   // Step 5 -> Step 6 AI Processing Pipeline

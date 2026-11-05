@@ -257,27 +257,86 @@ function writeProjects(data) {
   fs.writeFileSync(PROJECTS_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
-function findProjectDirectories(userId, projectName, projectId) {
+function findProjectDirectories(userId, projectName, projectId, explicitVideoUrl = null) {
   const safeFolderName = projectName ? projectName.replace(/[\/\\?%*:|"<>]/g, '_').trim() : 'Uncategorized';
-  const newNestedDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
-  const oldFlatDir = path.join(UPLOADS_DIR, userId, projectId);
-  const rootDir = path.join(UPLOADS_DIR, projectId);
+  const isVideoExt = (f) => f.startsWith('video.') || /\.(mp4|mkv|avi|mov|webm|flv|ts|wmv|m4v)$/i.test(f);
 
-  let targetDir = newNestedDir;
-  let urlPrefix = `/uploads/${userId}/${safeFolderName}/${projectId}`;
-
-  if (!fs.existsSync(newNestedDir) || !fs.readdirSync(newNestedDir).some(f => f.startsWith('video.'))) {
-    if (fs.existsSync(oldFlatDir) && fs.readdirSync(oldFlatDir).some(f => f.startsWith('video.'))) {
-      targetDir = oldFlatDir;
-      urlPrefix = `/uploads/${userId}/${projectId}`;
-    } else if (fs.existsSync(rootDir) && fs.readdirSync(rootDir).some(f => f.startsWith('video.'))) {
-      targetDir = rootDir;
-      urlPrefix = `/uploads/${projectId}`;
+  // 1. Direct resolution via explicitVideoUrl (from project.videoUrl) if local file exists
+  if (explicitVideoUrl && typeof explicitVideoUrl === 'string' && !explicitVideoUrl.startsWith('http')) {
+    const cleanUrl = explicitVideoUrl.startsWith('/') ? explicitVideoUrl.slice(1) : explicitVideoUrl;
+    const candidates = [
+      path.join(__dirname, cleanUrl),
+      path.join(__dirname, '..', cleanUrl),
+      path.join(UPLOADS_DIR, cleanUrl.replace(/^uploads\/?/, ''))
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        const dir = path.dirname(cand);
+        const dirFiles = fs.readdirSync(dir).filter(isVideoExt);
+        const urlPrefix = path.dirname(explicitVideoUrl);
+        return {
+          targetDir: dir,
+          urlPrefix: urlPrefix.startsWith('/') ? urlPrefix : `/${urlPrefix}`,
+          safeFolderName,
+          videoFiles: dirFiles.length > 0 ? dirFiles : [path.basename(cand)]
+        };
+      }
     }
   }
 
-  const videoFiles = fs.existsSync(targetDir) ? fs.readdirSync(targetDir).filter(f => f.startsWith('video.')) : [];
-  return { targetDir, urlPrefix, safeFolderName, videoFiles };
+  // 2. Search candidate directories in priority order
+  const candidateDirs = [
+    { dir: path.join(UPLOADS_DIR, userId, safeFolderName, projectId), prefix: `/uploads/${userId}/${safeFolderName}/${projectId}` },
+    { dir: path.join(UPLOADS_DIR, userId, projectName || 'Uncategorized', projectId), prefix: `/uploads/${userId}/${projectName || 'Uncategorized'}/${projectId}` },
+    { dir: path.join(UPLOADS_DIR, userId, 'Uncategorized', projectId), prefix: `/uploads/${userId}/Uncategorized/${projectId}` },
+    { dir: path.join(UPLOADS_DIR, userId, projectId), prefix: `/uploads/${userId}/${projectId}` },
+    { dir: path.join(UPLOADS_DIR, projectId), prefix: `/uploads/${projectId}` }
+  ];
+
+  for (const cand of candidateDirs) {
+    if (fs.existsSync(cand.dir)) {
+      const files = fs.readdirSync(cand.dir).filter(isVideoExt);
+      if (files.length > 0) {
+        return {
+          targetDir: cand.dir,
+          urlPrefix: cand.prefix,
+          safeFolderName,
+          videoFiles: files
+        };
+      }
+    }
+  }
+
+  // 3. Recursive directory scan under UPLOADS_DIR / userId for any folder named projectId
+  const userDir = path.join(UPLOADS_DIR, userId);
+  if (fs.existsSync(userDir)) {
+    try {
+      const subEntries = fs.readdirSync(userDir, { withFileTypes: true });
+      for (const entry of subEntries) {
+        if (entry.isDirectory()) {
+          const possibleProjectDir = path.join(userDir, entry.name, projectId);
+          if (fs.existsSync(possibleProjectDir)) {
+            const files = fs.readdirSync(possibleProjectDir).filter(isVideoExt);
+            if (files.length > 0) {
+              return {
+                targetDir: possibleProjectDir,
+                urlPrefix: `/uploads/${userId}/${entry.name}/${projectId}`,
+                safeFolderName: entry.name,
+                videoFiles: files
+              };
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 4. Default fallback: targetDir is standard nested directory
+  const defaultTargetDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
+  const defaultUrlPrefix = `/uploads/${userId}/${safeFolderName}/${projectId}`;
+  const defaultVideoFiles = fs.existsSync(defaultTargetDir) ? fs.readdirSync(defaultTargetDir).filter(isVideoExt) : [];
+
+  return { targetDir: defaultTargetDir, urlPrefix: defaultUrlPrefix, safeFolderName, videoFiles: defaultVideoFiles };
 }
 
 // Helper to probe video duration in seconds via FFprobe
@@ -325,13 +384,15 @@ function extractAudioTrack(videoPath, audioPath) {
 // ----------------------------------------------------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const userId = req.headers['x-user-id'] || req.body?.userId || 'usr_guest';
-    const projectId = 'subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const userId = req.headers['x-user-id'] || req.query?.userId || req.body?.userId || 'usr_guest';
+    const projectId = req.headers['x-project-id'] || req.query?.projectId || ('subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
     req.projectId = projectId;
     req.userId = userId;
     
-    // Create physical folder structure using projectName
-    const rawFolderName = req.body?.projectName || 'Uncategorized';
+    // Create physical folder structure using projectName from headers, query, or body
+    const rawFolderName = req.headers['x-project-name']
+      ? decodeURIComponent(req.headers['x-project-name'])
+      : (req.query?.projectName || req.body?.projectName || 'Uncategorized');
     const safeFolderName = rawFolderName.replace(/[\/\\?%*:|\"<>]/g, '_').trim();
     req.safeFolderName = safeFolderName;
     
@@ -1160,16 +1221,8 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
 });
 
 function getProjectTargetDir(project, id) {
-  const userId = project.ownerId || 'usr_guest';
-  const safeFolderName = project.projectName ? project.projectName.replace(/[\/\\?%*:|\"<>]/g, '_').trim() : 'Uncategorized';
-  
-  let targetDir = path.join(UPLOADS_DIR, userId, safeFolderName, id);
-  if (!fs.existsSync(targetDir)) {
-    targetDir = path.join(UPLOADS_DIR, userId, id);
-    if (!fs.existsSync(targetDir)) {
-      targetDir = path.join(UPLOADS_DIR, id);
-    }
-  }
+  const userId = project?.ownerId || 'usr_guest';
+  const { targetDir } = findProjectDirectories(userId, project?.projectName, id, project?.videoUrl);
   return targetDir;
 }
 
@@ -1295,7 +1348,7 @@ app.post('/api/project/:id/resubtitle', async (req, res) => {
       
       const uploadResult = await ai.files.upload({
         file: chunkPath,
-        mimeType: 'audio/mp3'
+        mimeType: 'audio/mpeg'
       });
       await new Promise(r => setTimeout(r, 2000));
 
@@ -1319,7 +1372,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
 
       const stage1Config = {
         contents: [
-          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
+          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType || 'audio/mpeg' } }, { text: promptStage1 }] }
         ],
         config: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
       };
@@ -1498,7 +1551,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     }
 
     const userId = project.ownerId || 'usr_guest';
-    const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, projectId);
+    const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, projectId, project.videoUrl);
 
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -1509,6 +1562,23 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     if (!foundVideoFile && fs.existsSync(targetDir)) {
       const allFiles = fs.readdirSync(targetDir);
       foundVideoFile = allFiles.find(f => /\.(mp4|mkv|avi|mov|webm|flv|ts|wmv|m4v)$/i.test(f) || f.startsWith('video.'));
+    }
+
+    // Fallback: If still not found, check if project.videoUrl is remote HTTP (e.g. Cloudflare R2 / CDN)
+    if (!foundVideoFile && project.videoUrl && project.videoUrl.startsWith('http')) {
+      try {
+        console.log(`☁️ [Process] Local video missing on disk, downloading from cloud: ${project.videoUrl}`);
+        const downloadTarget = path.join(targetDir, 'video.mp4');
+        const dlRes = await fetch(project.videoUrl);
+        if (dlRes.ok) {
+          const buf = await dlRes.arrayBuffer();
+          fs.writeFileSync(downloadTarget, Buffer.from(buf));
+          foundVideoFile = 'video.mp4';
+          console.log(`✅ [Process] Downloaded video from cloud: ${downloadTarget}`);
+        }
+      } catch (dlErr) {
+        console.warn('⚠️ [Process] Cloud video download warning:', dlErr.message);
+      }
     }
 
     if (!foundVideoFile) {
@@ -1706,7 +1776,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       try {
         const uploadResult = await ai.files.upload({
           file: chunkPath,
-          mimeType: 'audio/mp3'
+          mimeType: 'audio/mpeg'
         });
         await new Promise(r => setTimeout(r, 2000));
 
@@ -1747,7 +1817,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
         const secondaryFallbackModel = 'gemini-pro-latest';
         const stage1Config = {
           contents: [
-            { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: 'audio/mp3' } }, { text: promptStage1 }] }
+            { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType || 'audio/mpeg' } }, { text: promptStage1 }] }
           ],
           config: { 
             responseMimeType: 'application/json', 
@@ -2158,7 +2228,7 @@ app.get('/api/project/:id', (req, res) => {
   // Ensure web-playable MP4 if video is MKV
   if (project.videoUrl && /\.mkv$/i.test(project.videoUrl)) {
     const ownerId = project.ownerId || 'usr_guest';
-    const { targetDir, urlPrefix } = findProjectDirectories(ownerId, project.projectName, id);
+    const { targetDir, urlPrefix } = findProjectDirectories(ownerId, project.projectName, id, project.videoUrl);
     const mkvPath = path.join(targetDir, 'video.mkv');
     const mp4Path = path.join(targetDir, 'video.mp4');
 
@@ -2246,7 +2316,7 @@ app.post('/api/project/:id/characters/detect', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const userId = project.ownerId || 'usr_guest';
-  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id);
+  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id, project.videoUrl);
   const charactersDir = path.join(targetDir, 'characters');
   const videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
 
@@ -2327,7 +2397,7 @@ app.post('/api/project/:id/visual-signs/detect', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const userId = project.ownerId || 'usr_guest';
-  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id);
+  const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, id, project.videoUrl);
   const signsDir = path.join(targetDir, 'visual_signs');
   let videoPath = videoFiles.length > 0 ? path.join(targetDir, videoFiles[0]) : null;
 

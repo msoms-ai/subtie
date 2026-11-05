@@ -88,7 +88,7 @@ Output valid SRT formatted subtitle blocks only.`;
               {
                 role: 'user',
                 parts: [
-                  { inlineData: { mimeType: 'audio/mp3', data: base64Audio } },
+                  { inlineData: { mimeType: 'audio/mpeg', data: base64Audio } },
                   { text: prompt },
                 ],
               },
@@ -102,7 +102,7 @@ Output valid SRT formatted subtitle blocks only.`;
               {
                 role: 'user',
                 parts: [
-                  { inlineData: { mimeType: 'audio/mp3', data: base64Audio } },
+                  { inlineData: { mimeType: 'audio/mpeg', data: base64Audio } },
                   { text: prompt },
                 ],
               },

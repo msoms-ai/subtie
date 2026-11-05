@@ -416,8 +416,9 @@ class TorrentService {
       const sourceVideoPath = path.join(downloadDir, videoFile.path);
 
       // Target project dir: server/uploads/{userId}/{safeFolderName}/{projectId}
+      const effectiveUserId = userId || 'usr_guest';
       const safeFolderName = (jobData.projectMeta?.safeFolderName || jobData.projectMeta?.projectName || 'Uncategorized').replace(/[/\\?%*:|"<>]/g, '_').trim();
-      const projectTargetDir = path.join(__dirname, '..', 'uploads', userId || 'guest', safeFolderName, projectId);
+      const projectTargetDir = path.join(__dirname, '..', 'uploads', effectiveUserId, safeFolderName, projectId);
       if (!fs.existsSync(projectTargetDir)) {
         fs.mkdirSync(projectTargetDir, { recursive: true });
       }

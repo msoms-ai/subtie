@@ -15,3 +15,4 @@ server/data/projects.json
 server/data/users.json
 server/data/folder_covers.json
 server/data/settings.json
+server/data/gemini_keys_stats.json
