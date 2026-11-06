@@ -514,7 +514,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 }
+  limits: { fileSize: 4 * 1024 * 1024 * 1024 } // 4GB max file size for 3GB+ anime movies and episodes
 });
 
 // Configure Multer storage for User Avatar Uploads:
@@ -1547,7 +1547,7 @@ async function performAudioRechunk(targetDir, chunkDuration = 120) {
   const audioPath = path.join(targetDir, 'audio.mp3');
   // If audio.mp3 does not exist, try extracting from available video file
   if (!fs.existsSync(audioPath)) {
-    const videoFiles = fs.readdirSync(targetDir).filter(f => f.match(/\.(mp4|mkv|webm|avi|mov)$/i));
+    const videoFiles = fs.readdirSync(targetDir).filter(f => f.match(/\.(mp4|mkv|webm|avi|mov|flv|ts|wmv|m4v)$/i));
     if (videoFiles.length > 0) {
       const sourceVideo = path.join(targetDir, videoFiles[0]);
       console.log(`[Rechunk] Extracting audio from ${sourceVideo}...`);

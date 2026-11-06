@@ -25,18 +25,25 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const [videoDurationSecs, setVideoDurationSecs] = useState(0);
 
   const extractDuration = (file) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.onloadedmetadata = () => {
-      window.URL.revokeObjectURL(video.src);
-      const seconds = video.duration;
-      setVideoDurationSecs(Math.ceil(seconds));
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      const s = Math.floor(seconds % 60);
-      setVideoDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-    };
-    video.src = URL.createObjectURL(file);
+    try {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        try { window.URL.revokeObjectURL(video.src); } catch (_) {}
+        const seconds = video.duration;
+        if (!isNaN(seconds) && isFinite(seconds) && seconds > 0) {
+          setVideoDurationSecs(Math.ceil(seconds));
+          const h = Math.floor(seconds / 3600);
+          const m = Math.floor((seconds % 3600) / 60);
+          const s = Math.floor(seconds % 60);
+          setVideoDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        }
+      };
+      video.onerror = () => {
+        try { window.URL.revokeObjectURL(video.src); } catch (_) {}
+      };
+      video.src = URL.createObjectURL(file);
+    } catch (_) {}
   };
   const [projectId, setProjectId] = useState(null);
   const projectIdRef = useRef(null);
@@ -388,7 +395,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   // Robust XHR Upload with Real Byte Tracking & Direct Fallback
   const handleUploadClick = () => {
     if (!videoFile) {
-      alert(isAr ? 'الرجاء اختيار ملف فيديو MP4 أولاً' : 'Please select an MP4 video file first.');
+      alert(isAr ? 'الرجاء اختيار ملف فيديو أولاً' : 'Please select a video file first.');
       return;
     }
 
@@ -898,7 +905,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               }`}
             >
               <FileVideo className="w-4 h-4 shrink-0" />
-              <span className="truncate">{isAr ? 'ملف فيديو MP4' : 'Direct MP4 File'}</span>
+              <span className="truncate">{isAr ? 'ملف فيديو (MP4, MKV, AVI...)' : 'Direct Video (MP4, MKV...)'}</span>
             </button>
 
             <button
@@ -955,7 +962,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               <input
                 id="hidden-video-input"
                 type="file"
-                accept="video/*"
+                accept="video/*,.mkv,.avi,.mp4,.mov,.webm,.flv,.ts,.wmv,.m4v"
                 onChange={(e) => {
                   if (e.target.files?.[0]) {
                     setVideoFile(e.target.files[0]);
@@ -990,10 +997,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               ) : (
                 <>
                   <h4 className="text-base font-black wizard-dropzone-title mb-1">
-                    {isAr ? 'انقر أو اسحب ملف فيديو MP4 هنا' : 'Click or Drag & Drop MP4 Video File Here'}
+                    {isAr ? 'انقر أو اسحب ملف الفيديو هنا (MP4, MKV, AVI...)' : 'Click or Drag & Drop Video File Here (MP4, MKV, AVI...)'}
                   </h4>
                   <p className="text-xs wizard-dropzone-subtitle font-extrabold mb-4">
-                    {isAr ? 'يدعم مقاطع فيديو الأنمي بصيغة MP4 حتى 500 ميجابايت' : 'Supports MP4 anime video files up to 500MB'}
+                    {isAr ? 'يدعم جميع صيغ الفيديو (MP4, MKV, AVI, MOV, WEBM) بمختلف الأحجام والأفلام حتى 3GB+' : 'Supports all major video formats (MP4, MKV, AVI, MOV, WEBM) up to 3GB+'}
                   </p>
 
                   <button
@@ -1001,7 +1008,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
                     className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white font-black text-xs shadow-lg shadow-purple-500/30 flex items-center space-x-2 rtl:space-x-reverse border border-purple-400/40 wizard-white-text hover:scale-105 transition"
                   >
                     <Upload className="w-4 h-4 text-white" />
-                    <span>{isAr ? 'تصفح واختيار ملف من الجهاز' : 'Browse MP4 Video File'}</span>
+                    <span>{isAr ? 'تصفح واختيار ملف من الجهاز' : 'Browse Video File from Device'}</span>
                   </button>
                 </>
               )}
