@@ -1837,9 +1837,9 @@ ${JSON.stringify(jpSubtitles, null, 2)}`;
 const activeProcessingSet = new Set();
 
 async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes = null) {
-  if (!projectId) {
-    if (optionalRes) return optionalRes.status(400).json({ error: 'projectId is required' });
-    throw new Error('projectId is required');
+  if (!projectId || typeof projectId !== 'string' || projectId === '[object Object]') {
+    if (optionalRes) return optionalRes.status(400).json({ error: 'Valid projectId string is required' });
+    throw new Error('Valid projectId string is required');
   }
 
   // Prevent duplicate concurrent runs for the exact same project
@@ -2534,14 +2534,14 @@ app.post('/api/process', async (req, res) => {
   res.setTimeout(0);
   const { projectId, videoDurationSecs, sync } = req.body;
 
-  if (!projectId) {
-    return res.status(400).json({ error: 'projectId is required' });
+  if (!projectId || typeof projectId !== 'string' || projectId === '[object Object]') {
+    return res.status(400).json({ error: 'Valid projectId string is required' });
   }
 
   const projects = readProjects();
   const project = projects[projectId];
   if (!project) {
-    return res.status(404).json({ error: 'Project not found' });
+    return res.status(404).json({ error: `Project not found: ${projectId}` });
   }
 
   // If already completed, return cached result immediately
@@ -2777,10 +2777,16 @@ app.get('/api/project/:id/progress', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  const projectId = req.params.id;
+  if (!projectId || projectId === '[object Object]') {
+    return res.status(400).json({ progress: 0, status: 'Invalid Project ID', error: 'Invalid Project ID', isProcessing: false });
+  }
   const projects = readProjects();
-  const project = projects[req.params.id];
-  if (!project) return res.json({ progress: 0, status: 'Not found', isProcessing: false });
-  const isProc = activeProcessingSet.has(req.params.id) || project.status === 'processing';
+  const project = projects[projectId];
+  if (!project) {
+    return res.status(404).json({ progress: 0, status: 'Project not found in database', error: 'Project not found in database', isProcessing: false });
+  }
+  const isProc = activeProcessingSet.has(projectId) || project.status === 'processing';
   return res.json({ 
     progress: project.processingProgress || 0, 
     status: project.processingStatus || '',

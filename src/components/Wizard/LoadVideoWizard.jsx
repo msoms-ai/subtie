@@ -39,6 +39,21 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     video.src = URL.createObjectURL(file);
   };
   const [projectId, setProjectId] = useState(null);
+  const projectIdRef = useRef(null);
+
+  const updateProjectId = (id) => {
+    if (typeof id === 'string' && id.trim() && id !== '[object Object]') {
+      const cleanId = id.trim();
+      projectIdRef.current = cleanId;
+      setProjectId(cleanId);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof projectId === 'string' && projectId.trim() && projectId !== '[object Object]') {
+      projectIdRef.current = projectId.trim();
+    }
+  }, [projectId]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCompleted, setUploadCompleted] = useState(false);
@@ -344,7 +359,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         data = await sendIngestRequest(directUrl);
       }
 
-      setProjectId(data.projectId);
+      updateProjectId(data.projectId);
       setUploadStatusText(isAr ? 'تم بدء الاتصال بالسرب والتحميل في الخلفية...' : 'Connected to swarm. Downloading video in background...');
     } catch (err) {
       console.error('Torrent ingest error:', err);
@@ -416,7 +431,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           if (xhr.status >= 200 && xhr.status < 300 && data.success) {
             setUploadProgress(100);
             setUploadStatusText(isAr ? 'اكتمل نقل الملف إلى السيرفر بنجاح!' : 'File upload completed successfully!');
-            setProjectId(data.projectId);
+            updateProjectId(data.projectId);
             setTimeout(() => {
               setIsUploading(false);
               setUploadCompleted(true);
@@ -491,8 +506,20 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
   // Step 5 -> Step 6 AI Processing Pipeline
   const startAIProcessing = async (overrideProjectId = null) => {
-    const activeId = overrideProjectId || projectId;
-    if (!activeId) return;
+    // CRITICAL BUGFIX: Filter out React synthetic events (e.g. from onClick) and validate project ID string
+    const activeId = (typeof overrideProjectId === 'string' && overrideProjectId.trim() && overrideProjectId !== '[object Object]')
+      ? overrideProjectId.trim()
+      : (typeof projectId === 'string' && projectId.trim() && projectId !== '[object Object]'
+          ? projectId.trim()
+          : (typeof projectIdRef.current === 'string' && projectIdRef.current !== '[object Object]' ? projectIdRef.current.trim() : null));
+
+    if (!activeId) {
+      console.error('Cannot start AI processing: activeId is missing or invalid:', activeId);
+      setErrorMessage(isAr ? 'لم يتم العثور على معرّف المشروع. يرجى إعادة رفع الفيديو.' : 'Project ID is missing. Please re-upload the video.');
+      return;
+    }
+
+    updateProjectId(activeId);
 
     setCurrentStep(6);
     setIsProcessing(true);
@@ -515,6 +542,14 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         consecutivePollErrors = 0;
 
         if (pData) {
+          if (pData.status === 'Not found' || pData.status === 'Project not found in database' || pData.error === 'Project not found in database') {
+            isDoneOrFailed = true;
+            clearInterval(progressTimer);
+            setIsProcessing(false);
+            setErrorMessage(isAr ? 'لم يتم العثور على المشروع على السيرفر (قد يكون السيرفر أعيد تشغيله). يرجى المحاولة مجدداً.' : 'Project was not found on server. Please try re-uploading.');
+            return;
+          }
+
           if (pData.progress > 0) {
             setProcessProgress(pData.progress);
           }
@@ -1316,7 +1351,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
           <div className="pt-4">
             <button
-              onClick={startAIProcessing}
+              onClick={() => startAIProcessing()}
               className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-4 mx-auto rounded-2xl bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white font-black text-base shadow-xl shadow-purple-500/30 hover:scale-105 transition-all wizard-white-text border-2 border-purple-400"
             >
               <Cpu className="w-5 h-5 text-pink-200" />
@@ -1341,7 +1376,7 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
               
               <div className="pt-4 flex justify-center space-x-4">
                 <button
-                  onClick={startAIProcessing}
+                  onClick={() => startAIProcessing()}
                   className="flex items-center space-x-2 rtl:space-x-reverse px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-700 to-pink-600 text-white font-black text-sm transition shadow-lg shadow-purple-500/30 wizard-white-text border-2 border-purple-400"
                 >
                   <RefreshCw className="w-4 h-4 text-white" />
