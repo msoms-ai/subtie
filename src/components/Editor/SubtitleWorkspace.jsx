@@ -217,13 +217,43 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
     setProcessingProgress(10);
     setProcessingStatusText(isAr ? 'جاري بدء استخراج الصوت والترجمة...' : 'Starting audio extraction and transcription...');
 
+    let isDone = false;
     const pollTimer = setInterval(async () => {
+      if (isDone) return;
       try {
         const res = await fetch(`/api/project/${project.id}/progress?t=${Date.now()}`);
         const pData = await res.json();
         if (pData?.progress > 0) {
           setProcessingProgress(pData.progress);
           if (pData.status) setProcessingStatusText(pData.status);
+        }
+        if (pData?.progress === 100 || pData?.status === 'Completed' || pData?.status === 'ready') {
+          isDone = true;
+          clearInterval(pollTimer);
+          try {
+            const pRes = await fetch(`/api/project/${project.id}`, {
+              headers: user?.id ? { 'x-user-id': user.id } : {}
+            });
+            const freshPrj = await pRes.json();
+            if (freshPrj && freshPrj.id) {
+              setProject(freshPrj);
+              if (Array.isArray(freshPrj.subtitles)) setSubtitles(freshPrj.subtitles);
+              if (Array.isArray(freshPrj.characters)) setCharacters(freshPrj.characters);
+              if (Array.isArray(freshPrj.visualSigns)) setVisualSigns(freshPrj.visualSigns);
+            }
+          } catch (_) {}
+          setIsProcessingAI(false);
+          setProcessingProgress(0);
+          setProcessingStatusText('');
+          setToastMsg(isAr ? 'اكتمل تفريغ الصوت وتوليد الترجمة بنجاح!' : 'AI Transcription completed successfully!');
+          setTimeout(() => setToastMsg(null), 4000);
+        } else if (pData?.stage === 'process_failed' || pData?.error) {
+          isDone = true;
+          clearInterval(pollTimer);
+          setIsProcessingAI(false);
+          setProcessingProgress(0);
+          setProcessingStatusText('');
+          alert(pData.error || (isAr ? 'فشلت معالجة الصوت' : 'Audio processing failed'));
         }
       } catch (_) {}
     }, 2000);
@@ -245,28 +275,30 @@ export default function SubtitleWorkspace({ initialProject, onSaveAndClose, onAd
       });
 
       const data = await res.json();
-      clearInterval(pollTimer);
 
-      if (!res.ok || !data.success) {
+      if (!res.ok || (!data.success && !data.project)) {
+        isDone = true;
+        clearInterval(pollTimer);
         throw new Error(data.error || 'Failed to process audio');
       }
 
-      if (data.project) {
+      if (data.project && data.project.processingProgress === 100) {
+        isDone = true;
+        clearInterval(pollTimer);
         setProject(data.project);
         if (Array.isArray(data.project.subtitles)) setSubtitles(data.project.subtitles);
         if (Array.isArray(data.project.characters)) setCharacters(data.project.characters);
         if (Array.isArray(data.project.visualSigns)) setVisualSigns(data.project.visualSigns);
+        setIsProcessingAI(false);
+        setProcessingProgress(0);
+        setProcessingStatusText('');
+        setToastMsg(isAr ? 'اكتمل تفريغ الصوت وتوليد الترجمة بنجاح!' : 'AI Transcription completed successfully!');
+        setTimeout(() => setToastMsg(null), 4000);
       }
-      setToastMsg(isAr ? 'اكتمل تفريغ الصوت وتوليد الترجمة بنجاح!' : 'AI Transcription completed successfully!');
-      setTimeout(() => setToastMsg(null), 4000);
     } catch (err) {
-      clearInterval(pollTimer);
-      console.error('Trigger process error:', err);
-      alert(err.message || 'Failed to process video');
-    } finally {
-      setIsProcessingAI(false);
-      setProcessingProgress(0);
-      setProcessingStatusText('');
+      if (!isDone) {
+        console.warn('Process initial call note:', err.message);
+      }
     }
   };
 

@@ -503,25 +503,76 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     setProgressTranslate(0);
     setProcessStatusMsg(isAr ? 'جاري بدء استخراج الصوت والمعالجة...' : 'Initializing audio extraction and processing...');
 
+    let isDoneOrFailed = false;
+    let consecutivePollErrors = 0;
+
     // Start polling the server for real progress
     const progressTimer = setInterval(async () => {
+      if (isDoneOrFailed) return;
       try {
         const pRes = await fetch(`/api/project/${activeId}/progress?t=${Date.now()}`, { cache: 'no-store' });
         const pData = await pRes.json();
-        if (pData.progress > 0) {
-          setProcessProgress(pData.progress);
+        consecutivePollErrors = 0;
+
+        if (pData) {
+          if (pData.progress > 0) {
+            setProcessProgress(pData.progress);
+          }
           if (pData.status) {
             setProcessStatusMsg(pData.status);
           }
           if (pData.progressExtract !== undefined) setProgressExtract(pData.progressExtract);
           if (pData.progressTranscode !== undefined) setProgressTranscode(pData.progressTranscode);
           if (pData.progressTranslate !== undefined) setProgressTranslate(pData.progressTranslate);
-        }
-      } catch (err) {
-        // Ignore polling errors
-      }
-    }, 2000);
 
+          // Completion detection
+          if (pData.progress === 100 || pData.status === 'Completed' || pData.status === 'ready') {
+            isDoneOrFailed = true;
+            clearInterval(progressTimer);
+            setProcessProgress(100);
+            setProcessStatusMsg(isAr ? 'اكتملت المعالجة! جاري فتح محرر الترجمة...' : 'Processing complete! Loading Working Table Workspace...');
+
+            try {
+              const fullRes = await fetch(`/api/project/${activeId}`, {
+                headers: user?.id ? { 'x-user-id': user.id } : {}
+              });
+              const fullData = await fullRes.json();
+              setTimeout(() => {
+                setIsProcessing(false);
+                if (fullData && fullData.id && !fullData.error) {
+                  onCompleteProcess(fullData);
+                } else {
+                  onCompleteProcess({ id: activeId, ...pData });
+                }
+              }, 500);
+            } catch (_) {
+              setIsProcessing(false);
+              onCompleteProcess({ id: activeId });
+            }
+          } else if (
+            pData.stage === 'process_failed' ||
+            pData.error ||
+            (pData.status && (pData.status.startsWith('فشل') || pData.status.toLowerCase().includes('fail') || pData.status === 'failed'))
+          ) {
+            isDoneOrFailed = true;
+            clearInterval(progressTimer);
+            setIsProcessing(false);
+            setErrorMessage(pData.error || pData.status || (isAr ? 'فشلت معالجة الصوت بالذكاء الاصطناعي.' : 'Audio extraction / Gemini AI Processing failed.'));
+          }
+        }
+      } catch (pollErr) {
+        consecutivePollErrors++;
+        // If server is completely unreachable for 10 consecutive attempts (15 seconds)
+        if (consecutivePollErrors > 10 && !isDoneOrFailed) {
+          isDoneOrFailed = true;
+          clearInterval(progressTimer);
+          setIsProcessing(false);
+          setErrorMessage(isAr ? 'تعذر الاتصال بالسيرفر أثناء متابعة تقدم المعالجة.' : 'Lost connection to server during audio processing.');
+        }
+      }
+    }, 1500);
+
+    // Call /api/process to initiate the processing pipeline
     try {
       const res = await fetch('/api/process', {
         method: 'POST',
@@ -539,58 +590,36 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       });
 
       const data = await res.json();
-      clearInterval(progressTimer);
 
       if (res.status === 402 || res.status === 403) {
+        isDoneOrFailed = true;
+        clearInterval(progressTimer);
         setIsProcessing(false);
         setErrorMessage(data.error || 'Permission denied.');
         return;
       }
-      if (!data.success && !data.project) {
+
+      if (!res.ok || (!data.success && !data.project)) {
+        isDoneOrFailed = true;
+        clearInterval(progressTimer);
         setIsProcessing(false);
         setErrorMessage(data.error || data.message || (isAr ? 'فشلت معالجة الصوت بالذكاء الاصطناعي.' : 'Audio extraction / Gemini AI Processing failed.'));
         return;
       }
 
-      let finalProject = data.project;
-      if (!finalProject) {
-        try {
-          const pRes = await fetch(`/api/project/${activeId}`, {
-            headers: user?.id ? { 'x-user-id': user.id } : {}
-          });
-          const pData = await pRes.json();
-          if (pData && pData.id && !pData.error) {
-            finalProject = pData;
-          }
-        } catch (fetchErr) {
-          console.warn('Could not fetch final project immediately:', fetchErr);
-        }
+      // If the project was already completed and returned immediately
+      if (data.project && data.project.processingProgress === 100) {
+        isDoneOrFailed = true;
+        clearInterval(progressTimer);
+        setProcessProgress(100);
+        setTimeout(() => {
+          setIsProcessing(false);
+          onCompleteProcess(data.project);
+        }, 400);
       }
-
-      setProcessProgress(100);
-      setProcessStatusMsg(isAr ? 'اكتملت المعالجة! جاري فتح محرر الترجمة...' : 'Processing complete! Loading Working Table Workspace...');
-      setTimeout(async () => {
-        setIsProcessing(false);
-        if (finalProject && finalProject.id) {
-          onCompleteProcess(finalProject);
-        } else {
-          try {
-            const pRes = await fetch(`/api/project/${activeId}`, {
-              headers: user?.id ? { 'x-user-id': user.id } : {}
-            });
-            const pData = await pRes.json();
-            if (pData && pData.id && !pData.error) {
-              onCompleteProcess(pData);
-            }
-          } catch (e) {}
-        }
-      }, 600);
-
     } catch (err) {
-      clearInterval(progressTimer);
-      setIsProcessing(false);
-      console.error('AI Processing fetch error:', err);
-      setErrorMessage(isAr ? 'خطأ في الاتصال أثناء معالجة الصوت بالذكاء الاصطناعي.' : 'Network connection error during audio extraction / Gemini AI processing.');
+      console.warn('Initial /api/process trigger note:', err.message);
+      // Do not abort immediately; allow polling loop to verify server progress
     }
   };
 

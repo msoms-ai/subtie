@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { execFile } from 'child_process';
 import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { GoogleGenAI } from '@google/genai';
+
+let resolvedFfmpegPath = ffmpegInstaller?.path || (fs.existsSync('/usr/bin/ffmpeg') ? '/usr/bin/ffmpeg' : 'ffmpeg');
 
 /**
  * Extracts candidate frames from a video file at strategic intervals.
@@ -16,23 +20,30 @@ export async function extractCandidateFrames(videoPath, outputDir, intervalSecon
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  // Get video duration using ffprobe
+  // Get video duration accurately using ffmpeg directly
   const duration = await new Promise((resolve) => {
-    ffmpeg.ffprobe(videoPath, (err, metadata) => {
-      if (err || !metadata?.format?.duration) {
+    try {
+      execFile(resolvedFfmpegPath, ['-i', videoPath], (err, stdout, stderr) => {
+        const match = (stderr || '').match(/Duration:\s*(\d+):(\d+):(\d+\.?\d*)/);
+        if (match) {
+          const secs = Math.round(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+          return resolve(Math.max(1, secs));
+        }
         resolve(1200); // Fallback: 20 minutes
-      } else {
-        resolve(metadata.format.duration);
-      }
-    });
+      });
+    } catch (_) {
+      resolve(1200);
+    }
   });
 
   const timestamps = [];
-  // Sample frames: Start at 30 seconds (skip black intro), sample up to duration - 30 seconds
-  const startSec = 15;
-  const endSec = Math.max(startSec + 30, duration - 15);
+  const startSec = duration <= 30 ? 0 : 15;
+  const endSec = duration <= 30 ? Math.max(1, duration) : Math.max(startSec + 15, duration - 15);
   for (let s = startSec; s < endSec; s += intervalSeconds) {
     timestamps.push(Math.round(s));
+  }
+  if (timestamps.length === 0) {
+    timestamps.push(0);
   }
 
   // Limit max candidate frames to 60 per video to keep API calls ultra-fast and within token limits

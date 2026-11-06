@@ -40,6 +40,7 @@ import paymentService, {
 import os from 'os';
 import { logSystemEvent, readSystemLogs, clearSystemLogs } from './services/logService.js';
 import { readNewsletters, writeNewsletters, generateNewsletterWithAI } from './services/newsletterService.js';
+import { execFile } from 'child_process';
 
 // Set ffmpeg binary path from installer with system fallback & executable verification
 let resolvedFfmpegPath = ffmpegInstaller?.path;
@@ -403,21 +404,49 @@ function findProjectDirectories(userId, projectName, projectId, explicitVideoUrl
   return { targetDir: defaultTargetDir, urlPrefix: defaultUrlPrefix, safeFolderName, videoFiles: defaultVideoFiles };
 }
 
-// Helper to probe video duration in seconds via FFprobe
+// Helper to probe video duration in seconds accurately via FFmpeg
 function probeVideoDuration(videoPath) {
   return new Promise((resolve) => {
     try {
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (!err && metadata?.format?.duration) {
-          resolve(Math.round(metadata.format.duration));
-        } else {
-          resolve(0);
+      if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
+        return resolve(0);
+      }
+      execFile(resolvedFfmpegPath, ['-i', videoPath], (err, stdout, stderr) => {
+        const match = (stderr || '').match(/Duration:\s*(\d+):(\d+):(\d+\.?\d*)/);
+        if (match) {
+          const secs = Math.round(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+          return resolve(Math.max(1, secs));
         }
+        resolve(0);
       });
     } catch (_) {
       resolve(0);
     }
   });
+}
+
+// Ingests audio chunk for Gemini: supports both Google File API and Direct Base64 Inline, with automatic failover
+async function prepareAudioPartForGemini(ai, chunkPath, strategy = 'file_api') {
+  if (strategy === 'inline_base64') {
+    const base64Data = fs.readFileSync(chunkPath).toString('base64');
+    return { inlineData: { data: base64Data, mimeType: 'audio/mp3' }, mode: 'inline' };
+  }
+
+  // Strategy: file_api with seamless inline fallback
+  try {
+    const uploadResult = await ai.files.upload({
+      file: chunkPath,
+      mimeType: 'audio/mpeg'
+    });
+    // Brief delay to allow Google File propagation
+    await new Promise(r => setTimeout(r, 1500));
+    const mime = uploadResult.mimeType || 'audio/mpeg';
+    return { fileData: { fileUri: uploadResult.uri, mimeType: mime }, mode: 'file_api', fileUri: uploadResult.uri };
+  } catch (uploadErr) {
+    console.warn(`⚠️ [Gemini Audio Ingestion] File API upload failed (${uploadErr.message}). Automatically falling back to direct Base64 inline payload...`);
+    const base64Data = fs.readFileSync(chunkPath).toString('base64');
+    return { inlineData: { data: base64Data, mimeType: 'audio/mp3' }, mode: 'inline_fallback' };
+  }
 }
 
 // Extract Audio Track from MP4/MKV/Video File locally
@@ -1610,8 +1639,8 @@ app.post('/api/project/:id/resubtitle', async (req, res) => {
     
     const settings = readSettings();
     const targetModel = sanitizeGeminiModel(process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-3.8-flash');
-    const fallbackModel = 'gemini-flash-latest';
-    const secondaryFallbackModel = 'gemini-pro-latest';
+    const fallbackModel = sanitizeGeminiModel(settings.fallbackModel1 || 'gemini-flash-latest');
+    const secondaryFallbackModel = sanitizeGeminiModel(settings.fallbackModel2 || 'gemini-pro-latest');
     const { GoogleGenAI } = await import('@google/genai');
     const aiKey = process.env.GEMINI_API_KEY || settings.geminiApiKey || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
     const ai = new GoogleGenAI({ apiKey: aiKey });
@@ -1623,12 +1652,8 @@ app.post('/api/project/:id/resubtitle', async (req, res) => {
       if (i < 0 || i >= chunkFiles.length) continue;
       
       const chunkPath = path.join(chunksDir, chunkFiles[i]);
-      
-      const uploadResult = await ai.files.upload({
-        file: chunkPath,
-        mimeType: 'audio/mpeg'
-      });
-      await new Promise(r => setTimeout(r, 2000));
+      const strategy = settings.apiIngestionStrategy || 'file_api';
+      let audioPart = await prepareAudioPartForGemini(ai, chunkPath, strategy);
 
       const promptStage1 = `You are an expert anime Japanese ASR engine.
 Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE from the very first second to the absolute end of the audio file. Never truncate, never summarize, never stop early. If there is dialogue, you MUST output it.
@@ -1650,7 +1675,7 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
 
       const stage1Config = {
         contents: [
-          { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType || 'audio/mpeg' } }, { text: promptStage1 }] }
+          { role: 'user', parts: [audioPart, { text: promptStage1 }] }
         ],
         config: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
       };
@@ -1661,11 +1686,27 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
       } catch (err) {
         console.warn(`[Gemini AI Resubtitle] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
         notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
-        try {
-          response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
-        } catch (err2) {
-          console.warn(`[Gemini AI Resubtitle] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-          response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+
+        // Retry with inline Base64 if fileData had a MIME or connection issue
+        if (audioPart.fileData && (err.message.includes('MIME') || err.message.includes('File') || err.message.includes('fileUri'))) {
+          try {
+            console.warn(`🔄 [Gemini AI Resubtitle] Retrying with inline Base64 audio payload...`);
+            const b64 = fs.readFileSync(chunkPath).toString('base64');
+            audioPart = { inlineData: { data: b64, mimeType: 'audio/mp3' } };
+            stage1Config.contents[0].parts[0] = audioPart;
+            response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
+          } catch (inlineErr) {
+            console.warn(`[Gemini AI Resubtitle] Inline retry failed: ${inlineErr.message}. Trying ${fallbackModel}...`);
+          }
+        }
+
+        if (!response1) {
+          try {
+            response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+          } catch (err2) {
+            console.warn(`[Gemini AI Resubtitle] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+            response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+          }
         }
       }
 
@@ -1993,22 +2034,23 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     })();
 
     // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
-    const chunkDuration = 120; // 2 minutes per chunk to prevent AI truncation
+    const settings = readSettings();
+    const chunkDuration = Number(settings.audioChunkDurationSec) || 120;
     const chunksDir = path.join(targetDir, 'chunks');
-    if (!fs.existsSync(chunksDir)) {
-      fs.mkdirSync(chunksDir);
+    if (fs.existsSync(chunksDir)) {
+      try { fs.rmSync(chunksDir, { recursive: true, force: true }); } catch (_) {}
     }
+    fs.mkdirSync(chunksDir, { recursive: true });
     
-    
-      (function() {
-        const db = readProjects();
-        if(db[projectId]) {
-          db[projectId].processingProgress = 15;
-          db[projectId].processingStatus = "Splitting audio into chunks...";
-          writeProjects(db);
-        }
-      })();
-      console.log(`[Audio Splitter] Segmenting audio into 2-minute chunks...`);
+    (function() {
+      const db = readProjects();
+      if (db[projectId]) {
+        db[projectId].processingProgress = 15;
+        db[projectId].processingStatus = "Splitting audio into chunks...";
+        writeProjects(db);
+      }
+    })();
+    console.log(`[Audio Splitter] Segmenting audio into ${chunkDuration}-second chunks...`);
     await new Promise((resolve, reject) => {
       ffmpeg(audioPath)
         .outputOptions(['-y', '-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
@@ -2053,11 +2095,8 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       console.log(`[Gemini AI] Processing chunk ${i + 1}/${chunkFiles.length} using ${chunkKeyInfo.keyId} (${chunkKeyInfo.maskedKey})...`);
 
       try {
-        const uploadResult = await ai.files.upload({
-          file: chunkPath,
-          mimeType: 'audio/mpeg'
-        });
-        await new Promise(r => setTimeout(r, 2000));
+        const strategy = settings.apiIngestionStrategy || 'file_api';
+        let audioPart = await prepareAudioPartForGemini(ai, chunkPath, strategy);
 
         // --- STAGE 1: JAPANESE ASR ---
         
@@ -2090,18 +2129,16 @@ For each subtitle block, provide:
 Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "track".
 Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
 
-        const settings = readSettings();
         const targetModel = sanitizeGeminiModel(process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-3.8-flash');
-        const fallbackModel = 'gemini-flash-latest';
-        const secondaryFallbackModel = 'gemini-pro-latest';
+        const fallbackModel = sanitizeGeminiModel(settings.fallbackModel1 || 'gemini-flash-latest');
+        const secondaryFallbackModel = sanitizeGeminiModel(settings.fallbackModel2 || 'gemini-pro-latest');
         const stage1Config = {
           contents: [
-            { role: 'user', parts: [{ fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType || 'audio/mpeg' } }, { text: promptStage1 }] }
+            { role: 'user', parts: [audioPart, { text: promptStage1 }] }
           ],
           config: { 
             responseMimeType: 'application/json', 
             maxOutputTokens: 8192,
-
           }
         };
         
@@ -2109,13 +2146,29 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
         try {
           response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
         } catch (err) {
-          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
+          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}.`);
           notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
-          try {
-            response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
-          } catch (err2) {
-            console.warn(`[Gemini AI] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-            response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+
+          // Retry with inline Base64 if fileData had a MIME or connection issue
+          if (audioPart.fileData && (err.message.includes('MIME') || err.message.includes('File') || err.message.includes('fileUri'))) {
+            try {
+              console.warn(`🔄 [Gemini AI] Retrying chunk with inline Base64 audio payload...`);
+              const b64 = fs.readFileSync(chunkPath).toString('base64');
+              audioPart = { inlineData: { data: b64, mimeType: 'audio/mp3' } };
+              stage1Config.contents[0].parts[0] = audioPart;
+              response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
+            } catch (inlineErr) {
+              console.warn(`[Gemini AI] Inline retry failed: ${inlineErr.message}. Trying ${fallbackModel}...`);
+            }
+          }
+
+          if (!response1) {
+            try {
+              response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
+            } catch (err2) {
+              console.warn(`[Gemini AI] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
+              response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+            }
           }
         }
 
@@ -2360,8 +2413,76 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
 app.post('/api/process', async (req, res) => {
   req.setTimeout(0);
   res.setTimeout(0);
-  const { projectId, videoDurationSecs } = req.body;
-  await executeVideoProcessing(projectId, videoDurationSecs, res);
+  const { projectId, videoDurationSecs, sync } = req.body;
+
+  if (!projectId) {
+    return res.status(400).json({ error: 'projectId is required' });
+  }
+
+  const projects = readProjects();
+  const project = projects[projectId];
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  // If already completed, return cached result immediately
+  if (project.processingProgress === 100 && Array.isArray(project.subtitles) && project.subtitles.length > 0) {
+    return res.json({
+      success: true,
+      projectId,
+      audioUrl: project.audioUrl,
+      srtUrl: project.srtUrl,
+      subtitles: project.subtitles,
+      visualSigns: project.visualSigns || [],
+      characters: project.characters || [],
+      project
+    });
+  }
+
+  // Pre-validate user minute balance before starting to fail early with 402/403
+  const userId = project.ownerId || 'usr_guest';
+  if (userId !== 'usr_guest') {
+    const users = readUsers();
+    const user = users[userId];
+    if (user && user.role !== 'Admin') {
+      const approxDuration = Number(videoDurationSecs) || project.duration || 60;
+      const videoMinutes = Math.ceil(approxDuration / 60);
+      if (videoMinutes > 40 && !user.hasPurchased) {
+        return res.status(403).json({ error: 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.' });
+      }
+      if (user.minuteBalance < videoMinutes) {
+        return res.status(402).json({ error: `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.` });
+      }
+    }
+  }
+
+  // If already processing in background, return progress state
+  if (activeProcessingSet.has(projectId)) {
+    return res.json({
+      success: true,
+      status: 'processing',
+      message: 'Processing already in progress',
+      projectId,
+      project
+    });
+  }
+
+  if (sync === true || req.query.sync === 'true') {
+    await executeVideoProcessing(projectId, videoDurationSecs, res);
+  } else {
+    // Asynchronous non-blocking start: Prevents HTTP proxy timeouts and socket dropouts
+    res.json({
+      success: true,
+      status: 'processing',
+      projectId,
+      message: 'AI audio processing pipeline started in background'
+    });
+
+    // Run in background safely
+    executeVideoProcessing(projectId, videoDurationSecs, null).catch(err => {
+      console.error(`[Background Process Error for ${projectId}]:`, err.message);
+    });
+  }
 });
 
 function parseTimestampToSeconds(ts) {
@@ -2539,10 +2660,14 @@ app.get('/api/project/:id/progress', (req, res) => {
   res.setHeader('Expires', '0');
   const projects = readProjects();
   const project = projects[req.params.id];
-  if (!project) return res.json({ progress: 0, status: 'Not found' });
+  if (!project) return res.json({ progress: 0, status: 'Not found', isProcessing: false });
+  const isProc = activeProcessingSet.has(req.params.id) || project.status === 'processing';
   return res.json({ 
     progress: project.processingProgress || 0, 
     status: project.processingStatus || '',
+    stage: project.processingStage || '',
+    error: project.error || null,
+    isProcessing: isProc,
     progressExtract: project.progressExtract || 0,
     progressTranscode: project.progressTranscode || 0,
     progressTranslate: project.progressTranslate || 0
