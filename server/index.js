@@ -427,7 +427,12 @@ function probeVideoDuration(videoPath) {
 
 // Ingests audio chunk for Gemini: supports both Google File API and Direct Base64 Inline, with automatic failover
 async function prepareAudioPartForGemini(ai, chunkPath, strategy = 'file_api') {
-  if (strategy === 'inline_base64') {
+  const chunkStats = fs.existsSync(chunkPath) ? fs.statSync(chunkPath) : null;
+  const chunkSizeMb = chunkStats ? chunkStats.size / (1024 * 1024) : 0;
+
+  // For chunks under 15MB or if strategy is inline_base64, use base64 inline directly:
+  // It is instant, eliminates Google File API propagation delays, avoids MIME mismatch errors, and never leaves orphaned cloud files.
+  if (strategy === 'inline_base64' || chunkSizeMb <= 15) {
     const base64Data = fs.readFileSync(chunkPath).toString('base64');
     return { inlineData: { data: base64Data, mimeType: 'audio/mp3' }, mode: 'inline' };
   }
@@ -455,13 +460,18 @@ function extractAudioTrack(videoPath, audioPath) {
     console.log(`[Audio Extractor] Extracting audio track from: ${videoPath} -> ${audioPath}`);
     ffmpeg(videoPath)
       .output(audioPath)
-      .outputOptions(['-y'])
-      .noVideo()
-      .audioCodec('libmp3lame')
-      .audioBitrate(128)
+      .outputOptions(['-y', '-vn', '-acodec libmp3lame', '-ab 128k', '-ar 44100', '-ac 2', '-map 0:a:0?'])
       .on('end', () => {
-        console.log(`[Audio Extractor] Audio extraction completed: ${audioPath}`);
-        resolve(audioPath);
+        try {
+          const stats = fs.statSync(audioPath);
+          if (stats.size < 100) {
+            return reject(new Error(`Extracted audio file is empty or corrupted (${stats.size} bytes)`));
+          }
+          console.log(`[Audio Extractor] Audio extraction completed: ${audioPath} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
+          resolve(audioPath);
+        } catch (statErr) {
+          reject(statErr);
+        }
       })
       .on('error', (err) => {
         console.error('[Audio Extractor Error]', err);
@@ -1933,6 +1943,13 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       console.log(`⏱️ [Video Probe] Detected video duration: ${finalDurationSecs}s (${(finalDurationSecs / 60).toFixed(1)} mins)`);
     }
 
+    logSystemEvent('info', 'video_proc', `Started AI pipeline for "${project.projectName}" (${projectId})`, {
+      projectId,
+      projectName: project.projectName,
+      ownerId: userId,
+      durationSecs: finalDurationSecs
+    });
+
     // --- Step 2: Backend Credit & Security Check ---
     if (userId !== 'usr_guest') {
       const users = readUsers();
@@ -2067,6 +2084,12 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     }
     console.log(`[Audio Splitter] Splitted into ${chunkFiles.length} chunks.`);
 
+    logSystemEvent('info', 'video_proc', `Audio extracted & segmented into ${chunkFiles.length} chunk(s) for "${project.projectName}" (${projectId})`, {
+      projectId,
+      chunksCount: chunkFiles.length,
+      durationSecs: finalDurationSecs
+    });
+
     let allParsedSubtitles = [];
     let globalId = 1;
 
@@ -2147,12 +2170,18 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
           response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
         } catch (err) {
           console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}.`);
+          logSystemEvent('warning', 'gemini_api', `Chunk ${i + 1}/${chunkFiles.length} ASR failed on ${targetModel}: ${err.message}. Switching to fallback.`, {
+            projectId,
+            chunk: i + 1,
+            model: targetModel,
+            error: err.message
+          });
           notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
 
-          // Retry with inline Base64 if fileData had a MIME or connection issue
-          if (audioPart.fileData && (err.message.includes('MIME') || err.message.includes('File') || err.message.includes('fileUri'))) {
+          // Retry with inline Base64 if not already inline
+          if (audioPart.fileData || !audioPart.inlineData) {
             try {
-              console.warn(`🔄 [Gemini AI] Retrying chunk with inline Base64 audio payload...`);
+              console.warn(`🔄 [Gemini AI] Retrying chunk ${i + 1} with inline Base64 audio payload...`);
               const b64 = fs.readFileSync(chunkPath).toString('base64');
               audioPart = { inlineData: { data: b64, mimeType: 'audio/mp3' } };
               stage1Config.contents[0].parts[0] = audioPart;
@@ -2167,9 +2196,28 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
               response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
             } catch (err2) {
               console.warn(`[Gemini AI] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-              response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+              try {
+                response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
+              } catch (err3) {
+                console.error(`[Gemini AI] All models failed for chunk ${i + 1}: ${err3.message}`);
+                logSystemEvent('error', 'gemini_api', `All Gemini models failed for chunk ${i + 1} of project ${projectId}: ${err3.message}`, {
+                  projectId,
+                  chunk: i + 1,
+                  error: err3.message
+                });
+              }
             }
           }
+        }
+
+        if (!response1 || !response1.text) {
+          console.error(`[Gemini AI Error] Stage 1 returned no response for chunk ${i + 1}`);
+          logSystemEvent('error', 'gemini_api', `Chunk ${i + 1}/${chunkFiles.length} ASR returned no response text`, {
+            projectId,
+            chunk: i + 1
+          });
+          if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, false);
+          continue;
         }
 
         let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -2183,10 +2231,21 @@ Output raw JSON array only, without markdown formatting. Ensure the JSON array i
               jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
             }
           } catch (e) {
-            console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i}.`);
+            console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i + 1}:`, rawText1.slice(0, 200));
+            logSystemEvent('warning', 'gemini_api', `JSON parse error in chunk ${i + 1} ASR response`, {
+              projectId,
+              chunk: i + 1,
+              sample: rawText1.slice(0, 300)
+            });
             if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, true);
             continue; // Skip chunk if ASR completely fails
           }
+        }
+
+        if (!Array.isArray(jpSubtitles) || jpSubtitles.length === 0) {
+          console.log(`[Gemini AI] Chunk ${i + 1}/${chunkFiles.length} produced 0 subtitles (silence or non-speech).`);
+          if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, true);
+          continue;
         }
 
         // --- STAGE 2: TRANSLATION (Text to Text) ---
@@ -2230,12 +2289,16 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
             response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
           } catch (err2) {
             console.warn(`[Gemini AI] Fallback 2 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-            response2 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage2Config });
+            try {
+              response2 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage2Config });
+            } catch (err3) {
+              console.warn(`[Gemini AI] All models failed for Stage 2 on chunk ${i + 1}: ${err3.message}`);
+            }
           }
         }
 
         // Chunk completed successfully
-        let rawText2 = (response2.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+        let rawText2 = (response2?.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
         let translatedSubtitles = [];
         try {
           translatedSubtitles = JSON.parse(rawText2);
@@ -2299,6 +2362,48 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
 
     project.subtitles = allParsedSubtitles;
 
+    // CRITICAL VALIDATION: Verify subtitles were actually recognized
+    if (!allParsedSubtitles || allParsedSubtitles.length === 0) {
+      const errMsg = 'لم يتم التعرف على أي حوارات صوتية في المقطع الصوتي (0 أسطر تم إنشاؤها). قد يكون المسار الصوتي صامتاً، أو به موسيقى فقط، أو حدث خطأ في استجابة الذكاء الاصطناعي.';
+      console.error(`⚠️ [Process AI] Project ${projectId} produced 0 subtitles. Marking as failed.`);
+      
+      logSystemEvent('error', 'video_proc', `AI Voice Recognition returned 0 subtitle lines for project "${project.projectName}" (${projectId}). Marked as failed.`, {
+        projectId,
+        projectName: project.projectName,
+        ownerId: project.ownerId,
+        durationSecs: finalDurationSecs,
+        chunksProcessed: chunkFiles.length
+      });
+
+      project.subtitles = [];
+      project.status = 'failed';
+      project.processingProgress = 0;
+      project.processingStatus = errMsg;
+      project.error = 'No subtitles detected from audio track (0 lines generated).';
+      project.updatedAt = new Date().toISOString();
+
+      const freshDb = readProjects();
+      freshDb[projectId] = { ...(freshDb[projectId] || {}), ...project };
+      writeProjects(freshDb);
+
+      socketService.emitProgress(projectId, {
+        progress: 0,
+        status: errMsg,
+        stage: 'process_failed',
+        error: errMsg,
+        projectId
+      });
+
+      const failPayload = {
+        success: false,
+        error: errMsg,
+        projectId,
+        project
+      };
+      if (optionalRes) return optionalRes.status(422).json(failPayload);
+      return failPayload;
+    }
+
     // Stage 4: Detect Anime Characters and generate Avatar Thumbnails
     emitAndSaveProgress(100, 100, 100, 'فحص شخصيات الأنمي وبطاقات التعريف والوجوه...', 85, 'characters');
     try {
@@ -2356,6 +2461,12 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
     writeProjects(freshDb);
     const finalProject = freshDb[projectId];
 
+    logSystemEvent('info', 'video_proc', `Completed AI processing for "${project.projectName}" (${projectId}): ${allParsedSubtitles.length} subtitle lines generated.`, {
+      projectId,
+      linesCount: allParsedSubtitles.length,
+      charactersCount: (finalProject.characters || []).length
+    });
+
     // Emit final process completion event so wizard transitions immediately!
     emitAndSaveProgress(100, 100, 100, 'اكتملت جميع مراحل المعالجة بنجاح!', 100, 'ready');
     socketService.emitProgress(projectId, {
@@ -2383,6 +2494,14 @@ Return ONLY the updated valid JSON array. Output raw JSON array only, without ma
 
   } catch (err) {
     console.error('[Process AI Error]', err);
+    logSystemEvent('error', 'video_proc', `AI pipeline failed for "${project?.projectName || projectId}": ${err.message}`, {
+      projectId,
+      projectName: project?.projectName,
+      ownerId: project?.ownerId,
+      stage: project?.processingStage || 'processing',
+      error: err.message,
+      stack: err.stack?.slice(0, 500)
+    });
     try {
       const errDb = readProjects();
       if (errDb[projectId]) {
@@ -3731,6 +3850,59 @@ app.post('/api/admin/system/recover-task', async (req, res) => {
     });
   }
 
+  if (action === 'retry_stalled') {
+    const projects = readProjects();
+    let restartedCount = 0;
+    for (const [pId, p] of Object.entries(projects)) {
+      const isFailedOrStuck = p.status === 'failed' || p.status === 'processing' || (p.status === 'ready' && (!p.subtitles || p.subtitles.length === 0));
+      if (isFailedOrStuck && p.videoUrl) {
+        activeProcessingSet.delete(pId);
+        p.status = 'processing';
+        p.processingProgress = 10;
+        p.processingStatus = 'Admin initiated task recovery & processing restart...';
+        restartedCount++;
+        // Kick off in background
+        executeVideoProcessing(pId, p.duration || 0, null).catch(err => {
+          logSystemEvent('error', 'video_proc', `Bulk recovery failed for ${pId}: ${err.message}`, { projectId: pId });
+        });
+      }
+    }
+    writeProjects(projects);
+    logSystemEvent('info', 'video_proc', `Admin triggered bulk task recovery for ${restartedCount} project(s)`);
+    return res.json({
+      success: true,
+      message: `Restarted processing for ${restartedCount} stalled/failed project(s).`
+    });
+  }
+
+  if (action === 'rechunk_stuck') {
+    const projects = readProjects();
+    let rechunkedCount = 0;
+    for (const [pId, p] of Object.entries(projects)) {
+      const isFailedOrStuck = p.status === 'failed' || p.status === 'processing' || (p.status === 'ready' && (!p.subtitles || p.subtitles.length === 0));
+      if (isFailedOrStuck && p.videoUrl) {
+        try {
+          const targetDir = getProjectTargetDir(p, pId);
+          await performAudioRechunk(targetDir, 120);
+          activeProcessingSet.delete(pId);
+          p.status = 'processing';
+          p.processingProgress = 15;
+          p.processingStatus = 'Audio re-chunked (120s segments). Restarting AI transcription...';
+          rechunkedCount++;
+          executeVideoProcessing(pId, p.duration || 0, null).catch(err => {
+            logSystemEvent('error', 'video_proc', `Bulk re-chunk processing failed for ${pId}: ${err.message}`, { projectId: pId });
+          });
+        } catch (_) {}
+      }
+    }
+    writeProjects(projects);
+    logSystemEvent('info', 'video_proc', `Admin triggered bulk re-chunk & salvage for ${rechunkedCount} project(s)`);
+    return res.json({
+      success: true,
+      message: `Re-chunked and restarted processing for ${rechunkedCount} project(s).`
+    });
+  }
+
   if (action === 'retry_project' && projectId) {
     const projects = readProjects();
     const p = projects[projectId];
@@ -3738,16 +3910,17 @@ app.post('/api/admin/system/recover-task', async (req, res) => {
 
     activeProcessingSet.delete(projectId);
     p.status = 'processing';
+    p.processingProgress = 10;
     p.processingStatus = 'Admin initiated task recovery & processing restart...';
     writeProjects(projects);
 
     // Fire processing in background
-    executeVideoProcessing(projectId, 0, null).catch(err => {
+    executeVideoProcessing(projectId, p.duration || 0, null).catch(err => {
       console.error(`[Task Recovery Failed] Project ${projectId}:`, err.message);
       logSystemEvent('error', 'video_proc', `Task recovery failed for project ${projectId}: ${err.message}`, { projectId });
     });
 
-    logSystemEvent('info', 'video_proc', `Admin triggered task recovery for project ${projectId}`);
+    logSystemEvent('info', 'video_proc', `Admin triggered task recovery for project ${projectId}`, { projectId });
     return res.json({
       success: true,
       message: `Project ${projectId} processing restarted successfully.`
@@ -3765,13 +3938,15 @@ app.post('/api/admin/system/recover-task', async (req, res) => {
 
       activeProcessingSet.delete(projectId);
       p.status = 'processing';
+      p.processingProgress = 15;
       p.processingStatus = `Audio re-chunked (${rechunkResult.chunkFiles.length} segments). Restarting AI transcription...`;
       writeProjects(projects);
 
-      executeVideoProcessing(projectId, 0, null).catch(err => {
-        logSystemEvent('error', 'video_proc', `Re-chunk processing failed for project ${projectId}: ${err.message}`);
+      executeVideoProcessing(projectId, p.duration || 0, null).catch(err => {
+        logSystemEvent('error', 'video_proc', `Re-chunk processing failed for project ${projectId}: ${err.message}`, { projectId });
       });
 
+      logSystemEvent('info', 'video_proc', `Admin re-chunked audio and restarted AI transcription for project ${projectId}`, { projectId, chunkCount: rechunkResult.chunkFiles.length });
       return res.json({
         success: true,
         message: `Successfully re-chunked audio into ${rechunkResult.chunkFiles.length} segments and restarted transcription.`
@@ -3782,6 +3957,40 @@ app.post('/api/admin/system/recover-task', async (req, res) => {
   }
 
   return res.status(400).json({ error: 'Invalid recovery action specified.' });
+});
+
+// Real-time project health & status monitor endpoint for Admin Console
+app.get('/api/admin/projects/status', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const userId = req.headers['x-user-id'];
+  const users = readUsers();
+  if (users[userId]?.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+  }
+
+  const projects = readProjects();
+  const list = Object.entries(projects).map(([id, p]) => {
+    const subCount = Array.isArray(p.subtitles) ? p.subtitles.length : 0;
+    return {
+      id,
+      projectName: p.projectName || 'Untitled',
+      ownerId: p.ownerId || 'usr_guest',
+      status: p.status,
+      processingStage: p.processingStage || '',
+      processingProgress: p.processingProgress !== undefined ? p.processingProgress : 0,
+      processingStatus: p.processingStatus || '',
+      duration: p.duration || 0,
+      subtitlesCount: subCount,
+      updatedAt: p.updatedAt || p.createdAt || new Date().toISOString(),
+      hasVideo: Boolean(p.videoUrl),
+      error: p.error || null
+    };
+  }).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+  return res.json({
+    success: true,
+    projects: list.slice(0, 30)
+  });
 });
 
 // ====================================================

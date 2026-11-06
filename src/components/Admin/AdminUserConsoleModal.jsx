@@ -47,6 +47,9 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
   const [logSearch, setLogSearch] = useState('');
   const [logStats, setLogStats] = useState({ total: 0, error: 0, warning: 0, stalled: 0, info: 0 });
   const [isRecovering, setIsRecovering] = useState(false);
+  const [monitoredProjects, setMonitoredProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [manualProjectId, setManualProjectId] = useState('');
 
   // -------------------------------------------------------------
   // TAB 4: AI SETTINGS STATE
@@ -268,9 +271,27 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
     }
   };
 
+  const fetchMonitoredProjects = async () => {
+    setIsLoadingProjects(true);
+    try {
+      const res = await fetch('/api/admin/projects/status', {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMonitoredProjects(data.projects || []);
+      }
+    } catch (err) {
+      console.error('fetchMonitoredProjects error:', err);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'logs') {
       fetchLogs();
+      fetchMonitoredProjects();
     }
   }, [activeTab, logSeverity]);
 
@@ -318,6 +339,7 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
       if (!res.ok) throw new Error(data.error || 'Recovery action failed');
       setMessage(data.message || (isAr ? 'تم تنفيذ عملية التعافي بنجاح' : 'Recovery action executed successfully'));
       fetchLogs();
+      fetchMonitoredProjects();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1026,6 +1048,131 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
                     <span>{isAr ? 'إعادة تقطيع الصوت واستدراكه' : 'Re-chunk & Salvage Audio'}</span>
                   </button>
                 </div>
+
+                {/* Specific Project ID Rescue Bar */}
+                <div className="w-full pt-3 border-t border-purple-500/20 flex flex-wrap items-center gap-2.5">
+                  <span className="text-xs font-bold text-pink-300 flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5 text-pink-400" />
+                    <span>{isAr ? 'استعادة مشروع محدد بالمعرّف ID:' : 'Specific Project Salvage:'}</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={manualProjectId}
+                    onChange={(e) => setManualProjectId(e.target.value.trim())}
+                    placeholder={isAr ? 'معرّف المشروع (مثال: subtie_179...)' : 'Project ID (e.g. subtie_179...)'}
+                    className="bg-slate-950 border border-purple-500/40 rounded-xl px-3 py-1 text-xs text-white placeholder-slate-500 outline-none focus:border-pink-500 flex-1 min-w-[200px] max-w-sm"
+                  />
+                  <button
+                    disabled={isRecovering || !manualProjectId}
+                    onClick={() => handleRecoverTask('retry_project', manualProjectId)}
+                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center gap-1 disabled:opacity-40"
+                  >
+                    <PlayCircle className="w-3 h-3" />
+                    <span>{isAr ? 'إعادة المعالجة الذكية' : 'Retry Processing'}</span>
+                  </button>
+                  <button
+                    disabled={isRecovering || !manualProjectId}
+                    onClick={() => handleRecoverTask('rechunk_project', manualProjectId)}
+                    className="px-3 py-1 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold transition flex items-center gap-1 disabled:opacity-40"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>{isAr ? 'إعادة تقطيع (2د) واستدراك' : 'Re-chunk (2m) & Retry'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* RECENT PROJECTS & TASKS HEALTH WATCHDOG */}
+              <div className="bg-slate-900/80 rounded-2xl border border-purple-500/30 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-pink-400" />
+                    <h4 className="text-xs font-black text-white">
+                      {isAr ? 'مراقب المشاريع وتشخيص المهام الأخيرة (Recent Projects & Tasks)' : 'Recent Projects & Task Diagnostics'}
+                    </h4>
+                  </div>
+                  <button
+                    onClick={fetchMonitoredProjects}
+                    disabled={isLoadingProjects}
+                    className="flex items-center gap-1 text-[11px] text-purple-300 hover:text-white"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingProjects ? 'animate-spin' : ''}`} />
+                    <span>{isAr ? 'تحديث المشاريع' : 'Refresh Projects'}</span>
+                  </button>
+                </div>
+
+                {monitoredProjects.length === 0 ? (
+                  <div className="text-center py-4 text-xs text-slate-500">
+                    {isLoadingProjects ? (isAr ? 'جاري فحص المشاريع...' : 'Checking projects...') : (isAr ? 'لا توجد مشاريع مسجلة حالياً' : 'No projects found')}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                    {monitoredProjects.slice(0, 10).map((p) => {
+                      const isFailed = p.status === 'failed' || (p.status === 'ready' && p.subtitlesCount === 0);
+                      const isProcessing = p.status === 'processing';
+
+                      return (
+                        <div
+                          key={p.id}
+                          className={`p-3 rounded-xl border flex flex-col justify-between gap-2 text-xs transition ${
+                            isFailed
+                              ? 'bg-rose-950/30 border-rose-500/40'
+                              : isProcessing
+                              ? 'bg-purple-950/40 border-purple-500/40 animate-pulse'
+                              : 'bg-slate-950/60 border-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-white truncate max-w-[180px]" title={p.projectName}>
+                                  {p.projectName}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                                  isFailed
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                    : isProcessing
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                }`}>
+                                  {isFailed ? (p.subtitlesCount === 0 && p.status === 'ready' ? (isAr ? '0 أسطر (فشل)' : '0 lines (failed)') : (isAr ? 'فشل' : 'Failed')) : isProcessing ? (isAr ? `معالجة ${p.processingProgress}%` : `Processing ${p.processingProgress}%`) : (isAr ? `جاهز (${p.subtitlesCount} سطر)` : `Ready (${p.subtitlesCount} lines)`)}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate" title={p.id}>
+                                ID: {p.id} {p.duration ? `• ${Math.round(p.duration / 60)}m` : ''}
+                              </p>
+                              {p.processingStatus && (
+                                <p className={`text-[10px] mt-1 line-clamp-1 ${isFailed ? 'text-rose-400 font-medium' : 'text-slate-400'}`}>
+                                  {p.processingStatus}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-purple-500/10 justify-end">
+                            <button
+                              disabled={isRecovering}
+                              onClick={() => handleRecoverTask('retry_project', p.id)}
+                              className="px-2 py-1 rounded-lg bg-purple-700/80 hover:bg-purple-600 text-white text-[11px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                              title={isAr ? 'إعادة المعالجة الذكية' : 'Retry Processing'}
+                            >
+                              <PlayCircle className="w-3 h-3" />
+                              <span>{isAr ? 'إعادة المعالجة' : 'Retry AI'}</span>
+                            </button>
+                            <button
+                              disabled={isRecovering}
+                              onClick={() => handleRecoverTask('rechunk_project', p.id)}
+                              className="px-2 py-1 rounded-lg bg-pink-700/80 hover:bg-pink-600 text-white text-[11px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                              title={isAr ? 'إعادة تقطيع الصوت إلى 2د والمحاولة' : 'Re-chunk audio to 2m and retry'}
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>{isAr ? 'تقطيع 2د' : 'Re-chunk (2m)'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Log Filters & Search Bar */}
@@ -1131,6 +1278,32 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
                               {lg.message}
                             </span>
                           </div>
+
+                          {(lg.details?.projectId || lg.meta?.projectId) && (
+                            <div className="mt-1 flex items-center justify-between gap-2 flex-wrap bg-purple-950/40 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[11px]">
+                              <span className="text-pink-300 font-mono font-bold">
+                                {isAr ? 'المشروع:' : 'Project:'} {lg.details?.projectId || lg.meta?.projectId}
+                              </span>
+                              <div className="flex items-center gap-1.5 rtl:mr-auto ltr:ml-auto">
+                                <button
+                                  disabled={isRecovering}
+                                  onClick={() => handleRecoverTask('retry_project', lg.details?.projectId || lg.meta?.projectId)}
+                                  className="px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  <PlayCircle className="w-3 h-3" />
+                                  <span>{isAr ? 'إعادة المحاولة' : 'Retry'}</span>
+                                </button>
+                                <button
+                                  disabled={isRecovering}
+                                  onClick={() => handleRecoverTask('rechunk_project', lg.details?.projectId || lg.meta?.projectId)}
+                                  className="px-2 py-0.5 rounded bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>{isAr ? 'تقطيع 2د' : 'Re-chunk (2m)'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           {lg.details && Object.keys(lg.details).length > 0 && (
                             <details className="text-[10px] text-slate-400 bg-slate-900/60 p-2 rounded-lg cursor-pointer">

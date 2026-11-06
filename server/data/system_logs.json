@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "log_1793996822979_mjj3f",
+    "timestamp": "2026-11-06T20:27:02.979Z",
+    "level": "warning",
+    "category": "system",
+    "message": "Admin unlocked 0 active lock(s) and reset 0 stuck project(s).",
+    "meta": {}
+  }
+]
