@@ -50,6 +50,74 @@ export default function App() {
   const [lastSelectedFolder, setLastSelectedFolder] = useState(null);
   const [paymentModalData, setPaymentModalData] = useState(null); // { status: 'verifying' | 'success' | 'canceled' | 'error', minutesAdded, newBalance, message }
 
+  // Sync fresh user profile (wallet balance, roles, permissions) from backend
+  const refreshUserProfile = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'x-user-id': user.id },
+        cache: 'no-store'
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && data?.user) {
+        setUser(prev => {
+          if (!prev) return data.user;
+          if (
+            prev.minuteBalance !== data.user.minuteBalance ||
+            prev.role !== data.user.role ||
+            prev.hasPurchased !== data.user.hasPurchased ||
+            prev.avatarUrl !== data.user.avatarUrl ||
+            prev.firstName !== data.user.firstName ||
+            prev.lastName !== data.user.lastName
+          ) {
+            const updated = { ...prev, ...data.user };
+            try {
+              localStorage.setItem('subtie_user', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+          }
+          return prev;
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refreshUserProfile();
+
+    const onFocus = () => refreshUserProfile();
+    const onCustomRefresh = (e) => {
+      if (e?.detail?.minuteBalance !== undefined) {
+        setUser(prev => {
+          if (!prev || prev.minuteBalance === e.detail.minuteBalance) return prev;
+          const updated = { ...prev, minuteBalance: e.detail.minuteBalance };
+          try {
+            localStorage.setItem('subtie_user', JSON.stringify(updated));
+          } catch (err) {}
+          return updated;
+        });
+      } else {
+        refreshUserProfile();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('subtie_refresh_user', onCustomRefresh);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshUserProfile();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('subtie_refresh_user', onCustomRefresh);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [refreshUserProfile]);
+
   const refreshActivitiesCount = useCallback(async () => {
     if (!user?.id) {
       setActiveActivitiesCount(0);
@@ -62,8 +130,20 @@ export default function App() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      if (data?.success && typeof data.activeCount === 'number') {
-        setActiveActivitiesCount(data.activeCount);
+      if (data?.success) {
+        if (typeof data.activeCount === 'number') {
+          setActiveActivitiesCount(data.activeCount);
+        }
+        if (typeof data.minuteBalance === 'number') {
+          setUser(prev => {
+            if (!prev || prev.minuteBalance === data.minuteBalance) return prev;
+            const updated = { ...prev, minuteBalance: data.minuteBalance };
+            try {
+              localStorage.setItem('subtie_user', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+          });
+        }
       }
     } catch (e) {
       // ignore

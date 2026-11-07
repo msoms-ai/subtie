@@ -100,6 +100,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         const headers = user?.id ? { 'x-user-id': user.id } : {};
         const res = await fetch('/api/projects', { cache: 'no-store', headers });
         const data = await res.json();
+
+      if (data && data.minuteBalance !== undefined) {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+      }
         let projectsArray = [];
         if (Array.isArray(data)) {
           projectsArray = data;
@@ -131,6 +135,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
     socket.emit('join_project', projectId);
 
     socket.on('processing_progress', (data) => {
+      if (data.minuteBalance !== undefined) {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+      }
       if (data.progress !== undefined) setProcessProgress(data.progress);
       if (data.status) setProcessStatusMsg(data.status);
       if (data.progressExtract !== undefined) setProgressExtract(data.progressExtract);
@@ -212,6 +219,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         const res = await fetch(`/api/torrent/${projectId}/status?t=${Date.now()}`);
         if (res.ok) {
           const data = await res.json();
+
+      if (data && data.minuteBalance !== undefined) {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+      }
           if (data?.success && data?.status) {
             const st = data.status;
             setTorrentTelemetry(prev => {
@@ -560,6 +571,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
           if (pData.progress > 0) {
             setProcessProgress(pData.progress);
           }
+          if (pData.minuteBalance !== undefined) {
+            window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: pData.minuteBalance } }));
+          }
           if (pData.status) {
             setProcessStatusMsg(pData.status);
           }
@@ -632,6 +646,10 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
       });
 
       const data = await res.json();
+
+      if (data && data.minuteBalance !== undefined) {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+      }
 
       if (res.status === 402 || res.status === 403) {
         isDoneOrFailed = true;

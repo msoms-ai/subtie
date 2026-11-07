@@ -966,7 +966,10 @@ app.post('/api/auth/reset-password', (req, res) => {
 
 // 7. Get Current Authenticated User Details
 app.get('/api/auth/me', (req, res) => {
-  const userId = req.headers['x-user-id'];
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  const userId = req.headers['x-user-id'] || req.query?.userId;
   if (!userId) {
     return res.status(401).json({ error: 'Unauthenticated' });
   }
@@ -979,7 +982,7 @@ app.get('/api/auth/me', (req, res) => {
   }
 
   const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
-  return res.json({ success: true, user: safeUser });
+  return res.json({ success: true, user: safeUser, minuteBalance: safeUser.minuteBalance !== undefined ? safeUser.minuteBalance : 0 });
 });
 
 // 8. Update User Profile Info (Name, Forum Username, Subscriptions, Preferences)
@@ -1951,6 +1954,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
     });
 
     // --- Step 2: Backend Credit & Security Check ---
+    let latestMinuteBalance = undefined;
     if (userId !== 'usr_guest') {
       const users = readUsers();
       const user = users[userId];
@@ -1978,6 +1982,7 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
         } else {
           console.log(`[Wallet] Admin ${userId} bypassed minute deduction. Video: ${videoMinutes} mins.`);
         }
+        latestMinuteBalance = user.minuteBalance;
       }
     }
 
@@ -2002,7 +2007,8 @@ async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes 
       stage,
       progressExtract: extract,
       progressTranscode: transcode,
-      progressTranslate: translate
+      progressTranslate: translate,
+      minuteBalance: latestMinuteBalance
     });
   };
 
@@ -2586,6 +2592,9 @@ app.post('/api/process', async (req, res) => {
     });
   }
 
+  const currentUsers = readUsers();
+  const currentUserObj = userId ? currentUsers[userId] : null;
+
   if (sync === true || req.query.sync === 'true') {
     await executeVideoProcessing(projectId, videoDurationSecs, res);
   } else {
@@ -2594,6 +2603,7 @@ app.post('/api/process', async (req, res) => {
       success: true,
       status: 'processing',
       projectId,
+      minuteBalance: currentUserObj ? currentUserObj.minuteBalance : undefined,
       message: 'AI audio processing pipeline started in background'
     });
 
@@ -2787,6 +2797,11 @@ app.get('/api/project/:id/progress', (req, res) => {
     return res.status(404).json({ progress: 0, status: 'Project not found in database', error: 'Project not found in database', isProcessing: false });
   }
   const isProc = activeProcessingSet.has(projectId) || project.status === 'processing';
+
+  const userId = req.headers['x-user-id'] || project.ownerId;
+  const users = readUsers();
+  const reqUser = userId ? users[userId] : null;
+
   return res.json({ 
     progress: project.processingProgress || 0, 
     status: project.processingStatus || '',
@@ -2795,7 +2810,8 @@ app.get('/api/project/:id/progress', (req, res) => {
     isProcessing: isProc,
     progressExtract: project.progressExtract || 0,
     progressTranscode: project.progressTranscode || 0,
-    progressTranslate: project.progressTranslate || 0
+    progressTranslate: project.progressTranslate || 0,
+    minuteBalance: reqUser ? reqUser.minuteBalance : undefined
   });
 });
 
@@ -3364,7 +3380,8 @@ app.get('/api/activities', (req, res) => {
   res.json({
     success: true,
     activities,
-    activeCount
+    activeCount,
+    minuteBalance: user.minuteBalance !== undefined ? user.minuteBalance : 0
   });
 });
 

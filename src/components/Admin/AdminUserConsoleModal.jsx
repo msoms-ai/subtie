@@ -188,6 +188,11 @@ export default function AdminUserConsoleModal({ isOpen, onClose, currentUser, la
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add minutes credits');
       setMessage(data.message);
+      if (creditModalUser.id === currentUser?.id && typeof data.minuteBalance === 'number') {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+      } else {
+        window.dispatchEvent(new CustomEvent('subtie_refresh_user'));
+      }
       setCreditModalUser(null);
       setCreditReasonInput('');
       fetchUsersList();
