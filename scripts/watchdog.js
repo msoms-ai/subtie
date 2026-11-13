@@ -188,9 +188,20 @@ function executeHealCommand() {
     // 2. Fallback to pm2 start server/index.js
     // 3. Fallback to nohup node server/index.js
     const cmd = `
-      export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
+      for p in /opt/plesk/node/22/bin /opt/plesk/node/20/bin /opt/plesk/node/18/bin /opt/plesk/node/*/bin ~/.nvm/versions/node/*/bin /usr/local/bin /usr/bin; do
+        if [ -x "$p/node" ]; then
+          V=$("$p/node" -v 2>/dev/null | tr -d 'v' | cut -d. -f1)
+          if [ "$V" -ge 18 ] 2>/dev/null; then
+            export PATH="$p:$PATH"
+            break
+          fi
+        fi
+      done
       cd "${ROOT_DIR}"
-      if command -v pm2 >/dev/null 2>&1; then
+      if [ -x "./node_modules/.bin/pm2" ]; then
+        ./node_modules/.bin/pm2 startOrReload ecosystem.config.cjs --only subtie --update-env || ./node_modules/.bin/pm2 start ecosystem.config.cjs --only subtie
+        ./node_modules/.bin/pm2 save || true
+      elif command -v pm2 >/dev/null 2>&1; then
         pm2 startOrReload ecosystem.config.cjs --only subtie --update-env || pm2 start ecosystem.config.cjs --only subtie
         pm2 save || true
       elif command -v npx >/dev/null 2>&1; then

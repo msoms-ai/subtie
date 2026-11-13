@@ -5,8 +5,23 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:~/.nvm/versions/node/$(ls ~/.nvm/versions/node 2>/dev/null | tail -n 1)/bin
-cd "$ROOT_DIR"
+for p in \
+  /opt/plesk/node/22/bin \
+  /opt/plesk/node/20/bin \
+  /opt/plesk/node/18/bin \
+  /opt/plesk/node/*/bin \
+  ~/.nvm/versions/node/*/bin \
+  /usr/local/bin \
+  /usr/bin
+do
+  if [ -x "$p/node" ]; then
+    NODE_MAJOR=$("$p/node" -v 2>/dev/null | tr -d 'v' | cut -d. -f1)
+    if [ "$NODE_MAJOR" -ge 18 ] 2>/dev/null; then
+      export PATH="$p:$PATH"
+      break
+    fi
+  fi
+done
 
-# Run single-probe watchdog check
+cd "$ROOT_DIR"
 node scripts/watchdog.js
