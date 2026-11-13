@@ -54,6 +54,12 @@ mkdir -p server/logs server/data server/uploads/torrents server/uploads/torrents
 echo "📥 Installing dependencies with modern npm..."
 npm install --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund
 
+# 3b. Ensure native WebTorrent binaries exist (node-datachannel)
+if [ -d "node_modules/node-datachannel" ] && [ ! -f "node_modules/node-datachannel/build/Release/node_datachannel.node" ]; then
+    echo "📦 Prebuilding node-datachannel native binaries..."
+    (cd node_modules/node-datachannel && npx prebuild-install -r napi || true)
+fi
+
 # 4. Build Vite frontend assets if vite is available (prebuilt dist already committed as fallback)
 if [ -f "./node_modules/.bin/vite" ]; then
     echo "🔨 Building frontend assets with Vite..."
