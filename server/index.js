@@ -85,6 +85,23 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 // Serve static uploaded videos, audio files, and user avatars
 app.use('/uploads', express.static(UPLOADS_DIR));
 
+// Lightweight Service Health Check Endpoint (Used by Watchdog, Plesk, and Apache)
+app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const mem = process.memoryUsage();
+  res.json({
+    status: 'ok',
+    pid: process.pid,
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+    memory: {
+      rssMb: Math.round(mem.rss / (1024 * 1024)),
+      heapUsedMb: Math.round(mem.heapUsed / (1024 * 1024)),
+      heapTotalMb: Math.round(mem.heapTotal / (1024 * 1024))
+    }
+  });
+});
+
 // Load .env file if present
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
@@ -142,6 +159,43 @@ async function sendMailNotification(toEmail, subject, htmlContent, customFrom = 
     return { success: false, error: err.message };
   }
 }
+
+// ----------------------------------------------------
+// Process-Level Fatal Crash Guard & Admin Notification
+// ----------------------------------------------------
+process.on('uncaughtException', (err) => {
+  console.error('💥 [FATAL CRASH uncaughtException]:', err);
+  try {
+    logSystemEvent('error', 'server_crash', `Fatal uncaughtException: ${err.message}`, {
+      stack: err.stack,
+      pid: process.pid
+    });
+    sendMailNotification(
+      'msoms1@gmail.com',
+      '🚨 [Subtie Critical Alert] Server Crash (uncaughtException)',
+      `<div style="font-family:sans-serif;background:#0d081f;color:#fff;padding:24px;border-radius:12px;">
+        <h2 style="color:#ef4444;margin-top:0;">Server Fatal Crash Detected</h2>
+        <p><strong>Error:</strong> ${err.message}</p>
+        <pre style="background:#1e1b4b;padding:12px;border-radius:8px;color:#cbd5e1;overflow:auto;font-size:12px;">${err.stack}</pre>
+        <p style="color:#a78bfa;">PM2 and Subtie Auto-Healing Watchdog will automatically recover the process.</p>
+      </div>`
+    ).catch(() => {});
+  } catch (_) {}
+
+  // Allow brief window for logs/alerts before exiting so PM2 re-spawns cleanly
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('⚠️ [Unhandled Rejection]:', reason);
+  try {
+    logSystemEvent('warn', 'server_rejection', `Unhandled Promise Rejection: ${reason?.message || reason}`, {
+      reason: String(reason?.stack || reason)
+    });
+  } catch (_) {}
+});
 
 // ----------------------------------------------------
 // Password Validation Rules Engine
