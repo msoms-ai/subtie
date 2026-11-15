@@ -1554,7 +1554,14 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
   const users = readUsers();
   const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
 
-  const safeFolderName = req.safeFolderName || 'Uncategorized';
+  // Resilient folder name resolution from body, custom header, query, or safeFolderName
+  const resolvedProjectName = (projectName && projectName.trim())
+    || (req.headers['x-project-name'] ? decodeURIComponent(req.headers['x-project-name']).trim() : null)
+    || (req.query?.projectName ? req.query.projectName.trim() : null)
+    || req.safeFolderName
+    || 'Untitled Project';
+
+  const safeFolderName = req.safeFolderName || resolvedProjectName.replace(/[\/\\?%*:|"<>]/g, '_').trim() || 'Uncategorized';
   const projectDir = path.join(UPLOADS_DIR, userId, safeFolderName, projectId);
   const videoFilename = req.file.filename;
   
@@ -1567,10 +1574,11 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
     id: projectId,
     ownerId: userId,
     ownerName: `${ownerUser.firstName} ${ownerUser.lastName}`.trim() || ownerUser.email,
+    ownerEmail: ownerUser.email || '',
     auditorId: '',
     auditorName: '',
     auditStatus: 'Pending',
-    projectName: projectName || 'Untitled Project',
+    projectName: resolvedProjectName,
     projectType: projectType || 'Clip',
     mediaTitle: mediaTitle || req.file.originalname,
     videoUrl: videoUrl,
@@ -2773,7 +2781,18 @@ app.get('/api/projects', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const projectList = Object.values(projects);
+  const projectList = Object.values(projects).map(p => {
+    const ownerId = p.ownerId || 'usr_admin_msoms1';
+    const owner = users[ownerId] || (ownerId === 'usr_guest' ? { firstName: 'Guest', lastName: 'User', email: 'guest@msoms.ai' } : null);
+    const resolvedOwnerName = p.ownerName || (owner ? `${owner.firstName || ''} ${owner.lastName || ''}`.trim() : (ownerId || 'Unknown'));
+    const resolvedOwnerEmail = owner ? owner.email : (p.ownerEmail || '');
+    return {
+      ...p,
+      ownerId,
+      ownerName: resolvedOwnerName,
+      ownerEmail: resolvedOwnerEmail
+    };
+  });
 
   if (user.role === 'Admin') {
     return res.json(projectList);
@@ -3146,8 +3165,13 @@ app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req,
     const users = readUsers();
     const ownerUser = users[userId] || { firstName: 'Subtie', lastName: 'User', email: 'guest@msoms.ai' };
 
+    const resolvedProjectName = (projectName && projectName.trim())
+      || (req.headers['x-project-name'] ? decodeURIComponent(req.headers['x-project-name']).trim() : null)
+      || (req.query?.projectName ? req.query.projectName.trim() : null)
+      || 'Torrent Project';
+
     const projectId = 'subtie_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    const safeFolderName = (projectName || 'Uncategorized').replace(/[/\\?%*:|"<>]/g, '_').trim();
+    const safeFolderName = resolvedProjectName.replace(/[/\\?%*:|"<>]/g, '_').trim();
 
     const torrentSource = req.file ? req.file.path : (magnetLink || '').trim();
     if (!torrentSource) {
@@ -3159,10 +3183,11 @@ app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req,
       id: projectId,
       ownerId: userId,
       ownerName: `${ownerUser.firstName} ${ownerUser.lastName}`.trim() || ownerUser.email,
+      ownerEmail: ownerUser.email || '',
       auditorId: '',
       auditorName: '',
       auditStatus: 'Pending',
-      projectName: projectName || 'Torrent Project',
+      projectName: resolvedProjectName,
       projectType: projectType || 'Episode',
       mediaTitle: mediaTitle || (req.file ? req.file.originalname : 'Torrent Media'),
       uploadDate: new Date().toISOString(),
@@ -3603,6 +3628,109 @@ app.delete('/api/project/:id', (req, res) => {
     success: true,
     message: 'Deletion completed successfully.'
   });
+});
+
+// 23. Move Project & All Associated Files to Another Folder
+app.post('/api/project/:id/move-folder', (req, res) => {
+  const { id } = req.params;
+  const { newFolderName } = req.body;
+  const userId = req.headers['x-user-id'];
+  const projects = readProjects();
+  const users = readUsers();
+  const user = users[userId];
+  const project = projects[id];
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user.role !== 'Admin' && project.ownerId !== userId) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to move this project' });
+  }
+
+  if (!newFolderName || !newFolderName.trim()) {
+    return res.status(400).json({ error: 'New folder name is required' });
+  }
+
+  const cleanNewFolderName = newFolderName.trim();
+  const safeNewFolderName = cleanNewFolderName.replace(/[\/\\?%*:|"<>]/g, '_').trim();
+  const oldFolderName = project.projectName || 'Uncategorized';
+  const safeOldFolderName = oldFolderName.replace(/[\/\\?%*:|"<>]/g, '_').trim();
+
+  if (oldFolderName === cleanNewFolderName) {
+    return res.json({ success: true, message: 'Project is already in this folder', project });
+  }
+
+  const ownerId = project.ownerId || userId || 'usr_guest';
+
+  // Locate the existing physical project directory
+  const { targetDir } = findProjectDirectories(ownerId, oldFolderName, id, project.videoUrl);
+  
+  const destParentDir = path.join(UPLOADS_DIR, ownerId, safeNewFolderName);
+  const destProjectDir = path.join(destParentDir, id);
+
+  try {
+    fs.mkdirSync(destParentDir, { recursive: true });
+
+    if (fs.existsSync(targetDir) && targetDir !== destProjectDir) {
+      try {
+        fs.renameSync(targetDir, destProjectDir);
+      } catch (renameErr) {
+        // Fallback: cross-device or permission copy & delete
+        fs.cpSync(targetDir, destProjectDir, { recursive: true });
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      }
+      console.log(`[Move Folder] Successfully relocated project ${id} files: ${targetDir} -> ${destProjectDir}`);
+    } else if (!fs.existsSync(destProjectDir)) {
+      fs.mkdirSync(destProjectDir, { recursive: true });
+    }
+
+    // Update URLs in project metadata
+    const updateUrlPath = (url) => {
+      if (!url || typeof url !== 'string') return url;
+      if (url.includes(`/${safeOldFolderName}/${id}/`)) {
+        return url.replace(`/${safeOldFolderName}/${id}/`, `/${safeNewFolderName}/${id}/`);
+      }
+      if (url.includes(`/${ownerId}/${id}/`)) {
+        return url.replace(`/${ownerId}/${id}/`, `/${ownerId}/${safeNewFolderName}/${id}/`);
+      }
+      return url;
+    };
+
+    project.videoUrl = updateUrlPath(project.videoUrl);
+    project.audioUrl = updateUrlPath(project.audioUrl);
+    project.srtUrl = updateUrlPath(project.srtUrl);
+    project.projectName = cleanNewFolderName;
+    project.updatedAt = new Date().toISOString();
+
+    projects[id] = project;
+    writeProjects(projects);
+
+    logSystemEvent('info', 'project_move', `Moved project "${project.mediaTitle}" (${id}) from "${oldFolderName}" to "${cleanNewFolderName}"`, {
+      userId,
+      projectId: id,
+      oldFolder: oldFolderName,
+      newFolder: cleanNewFolderName
+    });
+
+    return res.json({
+      success: true,
+      message: 'Project moved successfully',
+      project
+    });
+  } catch (err) {
+    console.error(`[Move Folder Error] Failed to move project ${id}:`, err);
+    logSystemEvent('error', 'project_move', `Failed to move project "${project.mediaTitle}" (${id}): ${err.message}`, {
+      userId,
+      projectId: id,
+      error: err.message
+    });
+    return res.status(500).json({ error: `Failed to move project files: ${err.message}` });
+  }
 });
 
 

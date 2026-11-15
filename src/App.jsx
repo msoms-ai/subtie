@@ -351,10 +351,13 @@ export default function App() {
     setView('landing');
   };
 
-  const handleStartWizard = () => {
+  const handleStartWizard = (folder = '') => {
     if (!user) {
       setIsAuthOpen(true);
       return;
+    }
+    if (typeof folder === 'string' && folder.trim()) {
+      setPreSelectedFolder(folder.trim());
     }
     setView('wizard');
     try {

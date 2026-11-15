@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield } from 'lucide-react';
+import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield, FolderInput, Folder } from 'lucide-react';
 
 export default function ProjectsGallery({
   onEditProject,
@@ -66,6 +66,75 @@ export default function ProjectsGallery({
   const [deletingProjectId, setDeletingProjectId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
+
+  // Move to Folder Modal state
+  const [movingProject, setMovingProject] = useState(null);
+  const [targetFolderName, setTargetFolderName] = useState('');
+  const [moveFolderMode, setMoveFolderMode] = useState('existing'); // 'existing' | 'new'
+  const [isMoving, setIsMoving] = useState(false);
+  const [moveError, setMoveError] = useState(null);
+
+  const handleOpenMoveModal = (project) => {
+    setMovingProject(project);
+    setMoveError(null);
+    setIsMoving(false);
+    
+    // Available folders (unique list of all existing folders excluding current)
+    const allFolders = [...new Set(projects.map(p => p.projectName).filter(Boolean))];
+    const otherFolders = allFolders.filter(f => f !== project.projectName);
+    
+    if (otherFolders.length > 0) {
+      setMoveFolderMode('existing');
+      setTargetFolderName(otherFolders[0]);
+    } else {
+      setMoveFolderMode('new');
+      setTargetFolderName('');
+    }
+  };
+
+  const handleConfirmMove = async () => {
+    if (!movingProject) return;
+    const dest = targetFolderName.trim();
+    if (!dest) {
+      setMoveError(isAr ? 'يرجى تحديد أو إدخال اسم المجلد الهدف' : 'Please specify a target folder name');
+      return;
+    }
+    if (dest === movingProject.projectName) {
+      setMoveError(isAr ? 'الفيديو موجود بالفعل داخل هذا المجلد' : 'Video is already in this folder');
+      return;
+    }
+
+    setIsMoving(true);
+    setMoveError(null);
+
+    try {
+      const res = await fetch(`/api/project/${movingProject.id}/move-folder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user?.id ? { 'x-user-id': user.id } : {})
+        },
+        body: JSON.stringify({ newFolderName: dest })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to move project');
+      }
+
+      setProjects(prev => prev.map(p => p.id === movingProject.id ? { ...p, ...data.project } : p));
+      
+      setToastMsg(isAr ? `تم نقل الفيديو بنجاح إلى مجلد "${dest}"` : `Successfully moved video to "${dest}"`);
+      setTimeout(() => setToastMsg(null), 4000);
+
+      setMovingProject(null);
+      fetchFolderCovers();
+    } catch (err) {
+      setMoveError(err.message || 'Error moving project');
+    } finally {
+      setIsMoving(false);
+    }
+  };
 
   const fetchFolderCovers = async () => {
     try {
@@ -237,7 +306,7 @@ export default function ProjectsGallery({
           {/* Create New Project Button (Translators & Admins) */}
           {(!user || user.role !== 'Auditor') && (
             <button
-              onClick={onStartWizard}
+              onClick={() => onStartWizard(selectedFolder || '')}
               className="flex items-center space-x-2 rtl:space-x-reverse px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/25 shrink-0 transition wizard-white-text border border-purple-400/40"
             >
               <PlusCircle className="w-4.5 h-4.5 text-pink-200" />
@@ -302,16 +371,31 @@ export default function ProjectsGallery({
         </div>
       </div>
 
-      {/* FOLDER NAVIGATION BACK BUTTON */}
-      {viewMode === 'folders' && selectedFolder && (
-        <div className="mb-4 flex items-center" dir={isAr ? 'rtl' : 'ltr'}>
-           <button onClick={handleBackToFolders} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
-             <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
-             <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
-           </button>
-           <h3 className="text-xl font-black text-white theme-light:text-slate-900 mx-4">{selectedFolder}</h3>
-        </div>
-      )}
+      {/* FOLDER NAVIGATION BACK BUTTON & FOLDER OWNER FOR ADMIN */}
+      {viewMode === 'folders' && selectedFolder && (() => {
+        const currentFolderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === selectedFolder);
+        const folderOwners = [...new Set(currentFolderProjects.map(p => p.ownerName || p.ownerEmail || p.ownerId).filter(Boolean))];
+        const folderOwnerDisplay = folderOwners.length > 0 ? folderOwners.join(', ') : (isAr ? 'غير محدد' : 'Unknown');
+
+        return (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-2xl border border-purple-500/20" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="flex items-center space-x-2 rtl:space-x-reverse">
+              <button onClick={handleBackToFolders} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
+                <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
+                <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
+              </button>
+              <h3 className="text-xl font-black text-white theme-light:text-slate-900 mx-2">{selectedFolder}</h3>
+            </div>
+
+            {user?.role === 'Admin' && (
+              <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-xs font-bold text-amber-300 shadow-md">
+                <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{isAr ? `مالك المجلد: ${folderOwnerDisplay}` : `Folder Owner: ${folderOwnerDisplay}`}</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div className="text-center py-20 text-purple-300">
@@ -337,6 +421,8 @@ export default function ProjectsGallery({
                  const folderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === folder);
                  const coverUrl = folderCovers[folder];
                  const isGenerating = generatingCovers[folder];
+                 const folderOwners = [...new Set(folderProjects.map(p => p.ownerName || p.ownerEmail || p.ownerId).filter(Boolean))];
+                 const folderOwnerDisplay = folderOwners.length > 0 ? folderOwners.join(', ') : (isAr ? 'غير محدد' : 'Unknown');
 
                  return (
                    <div
@@ -378,8 +464,14 @@ export default function ProjectsGallery({
                        </button>
                      </div>
 
-                     {/* Bottom: Folder Title & Item Counter */}
+                     {/* Bottom: Folder Title, Owner (Admin only) & Item Counter */}
                      <div className="relative z-10 space-y-2 text-right" dir={isAr ? 'rtl' : 'ltr'}>
+                       {user?.role === 'Admin' && (
+                         <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1 rounded-xl bg-amber-950/85 border border-amber-500/40 text-[11px] font-bold text-amber-300 backdrop-blur-md shadow-md max-w-full" title={folderOwnerDisplay}>
+                           <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                           <span className="truncate">{isAr ? `المالك: ${folderOwnerDisplay}` : `Owner: ${folderOwnerDisplay}`}</span>
+                         </div>
+                       )}
                        <h3 className="text-lg font-black text-white drop-shadow-lg line-clamp-1 group-hover:text-pink-300 transition">
                          {folder}
                        </h3>
@@ -431,15 +523,24 @@ export default function ProjectsGallery({
                     {/* Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
-                        <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-100 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-300 mb-2">
-                          {getCategoryIcon(p.projectType)}
-                          <span className="text-[10px] font-black text-purple-200 theme-light:text-purple-800 tracking-wider uppercase">
-                            {getCategoryLabel(p.projectType)}
-                          </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-100 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-300">
+                            {getCategoryIcon(p.projectType)}
+                            <span className="text-[10px] font-black text-purple-200 theme-light:text-purple-800 tracking-wider uppercase">
+                              {getCategoryLabel(p.projectType)}
+                            </span>
+                          </div>
+
+                          {user?.role === 'Admin' && p.ownerName && (
+                            <div className="inline-flex items-center space-x-1 rtl:space-x-reverse bg-amber-950/70 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-amber-300">
+                              <UserCheck className="w-3 h-3 text-amber-400" />
+                              <span>{isAr ? `المالك: ${p.ownerName}` : `Owner: ${p.ownerName}`}</span>
+                            </div>
+                          )}
                         </div>
 
                         {(p.status === 'downloading_torrent' || p.status === 'processing') && (
-                          <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-pink-950/80 theme-light:bg-pink-100 text-pink-300 theme-light:text-pink-900 px-2.5 py-0.5 rounded-full border border-pink-400/40 text-[10px] font-black mb-2 ml-2 rtl:mr-2 rtl:ml-0 animate-pulse">
+                          <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-pink-950/80 theme-light:bg-pink-100 text-pink-300 theme-light:text-pink-900 px-2.5 py-0.5 rounded-full border border-pink-400/40 text-[10px] font-black mb-2 animate-pulse">
                             <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
                             <span>{p.status === 'downloading_torrent' ? (isAr ? 'تحميل التورنت...' : 'Torrent Ingest...') : (isAr ? 'معالجة ذكية...' : 'AI Processing...')} ({p.processingProgress || 10}%)</span>
                           </div>
@@ -452,14 +553,36 @@ export default function ProjectsGallery({
                         </p>
                       </div>
 
-                      {/* Action Dropdown Menu Placeholder */}
-                      <button 
-                        onClick={() => setDeletingProjectId(p.id)}
-                        className="p-2 rounded-xl bg-slate-900/50 theme-light:bg-rose-100 border border-slate-700 theme-light:border-rose-200 text-slate-400 theme-light:text-rose-600 hover:text-rose-400 hover:border-rose-500/50 transition group-hover:opacity-100 opacity-0"
-                        title={isAr ? 'حذف المشروع' : 'Delete Project'}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Action buttons (Move & Delete) */}
+                      <div className="flex items-center space-x-1.5 rtl:space-x-reverse group-hover:opacity-100 opacity-90 sm:opacity-0 transition">
+                        {/* Move Video to Another Folder Button */}
+                        {(!user || user.role === 'Admin' || p.ownerId === user?.id) && (
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenMoveModal(p);
+                            }}
+                            className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-purple-100 border border-slate-700 theme-light:border-purple-300 text-purple-300 theme-light:text-purple-700 hover:text-white hover:bg-purple-600 hover:border-purple-500 transition shadow-sm"
+                            title={isAr ? 'نقل هذا الفيديو ومحتواه إلى مجلد آخر' : 'Move video and all contents to another folder'}
+                          >
+                            <FolderInput className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {/* Delete Project Button */}
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingProjectId(p.id);
+                          }}
+                          className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-rose-100 border border-slate-700 theme-light:border-rose-200 text-slate-400 theme-light:text-rose-600 hover:text-rose-400 hover:border-rose-500/50 transition shadow-sm"
+                          title={isAr ? 'حذف المشروع' : 'Delete Project'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Meta Info */}
@@ -555,6 +678,128 @@ export default function ProjectsGallery({
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white font-black shadow-lg hover:shadow-rose-500/25 transition disabled:opacity-50"
               >
                 {isDeleting ? (lang === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (lang === 'ar' ? 'نعم، احذف نهائياً' : 'Yes, Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move Project to Another Folder Modal */}
+      {movingProject && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-slate-900 theme-light:bg-white p-6 sm:p-7 rounded-3xl border border-purple-500/30 max-w-md w-full shadow-2xl relative overflow-hidden space-y-5">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500" />
+
+            <div className="flex items-center space-x-3 rtl:space-x-reverse">
+              <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md shrink-0">
+                <FolderInput className="w-6 h-6 text-pink-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-black text-white theme-light:text-slate-950 truncate">
+                  {isAr ? 'نقل الفيديو إلى مجلد آخر' : 'Move Video to Another Folder'}
+                </h3>
+                <p className="text-xs text-slate-400 theme-light:text-slate-600 truncate">
+                  {movingProject.mediaTitle}
+                </p>
+              </div>
+            </div>
+
+            {/* Current Folder Info */}
+            <div className="p-3 rounded-2xl bg-slate-950/60 theme-light:bg-purple-50/70 border border-purple-500/20 text-xs">
+              <span className="text-slate-400 theme-light:text-slate-600 font-bold">
+                {isAr ? 'المجلد الحالي:' : 'Current Folder:'}{' '}
+              </span>
+              <span className="text-purple-300 theme-light:text-purple-900 font-extrabold mr-1 rtl:ml-1">
+                {movingProject.projectName || (isAr ? 'غير مصنف' : 'Uncategorized')}
+              </span>
+            </div>
+
+            {/* Mode Selector */}
+            <div>
+              <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-2">
+                {isAr ? 'اختر وجهة النقل:' : 'Select Destination Folder:'}
+              </label>
+              
+              <div className="flex space-x-2 rtl:space-x-reverse mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoveFolderMode('existing');
+                    const allFolders = [...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName);
+                    if (allFolders.length > 0) setTargetFolderName(allFolders[0]);
+                  }}
+                  disabled={[...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${moveFolderMode === 'existing' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'} ${[...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isAr ? 'مجلد موجود' : 'Existing Folder'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoveFolderMode('new');
+                    setTargetFolderName('');
+                  }}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${moveFolderMode === 'new' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'}`}
+                >
+                  {isAr ? 'إنشاء مجلد جديد' : 'New Folder'}
+                </button>
+              </div>
+
+              {moveFolderMode === 'existing' ? (
+                <select
+                  dir={isAr ? 'rtl' : 'ltr'}
+                  value={targetFolderName}
+                  onChange={(e) => setTargetFolderName(e.target.value)}
+                  className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+                >
+                  {[...new Set(projects.map(p => p.projectName).filter(Boolean))]
+                    .filter(f => f !== movingProject.projectName)
+                    .map(folder => (
+                      <option key={folder} value={folder}>{folder}</option>
+                    ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  dir={isAr ? 'rtl' : 'ltr'}
+                  value={targetFolderName}
+                  onChange={(e) => setTargetFolderName(e.target.value)}
+                  placeholder={isAr ? 'اكتب اسم المجلد الجديد...' : 'Type new folder name...'}
+                  className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+                />
+              )}
+            </div>
+
+            {moveError && (
+              <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-rose-400 bg-rose-950/50 border border-rose-500/30 p-3 rounded-xl font-bold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{moveError}</span>
+              </div>
+            )}
+
+            <div className="flex space-x-3 rtl:space-x-reverse pt-2">
+              <button
+                type="button"
+                onClick={() => setMovingProject(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 font-black hover:bg-slate-800 theme-light:hover:bg-slate-100 transition"
+                disabled={isMoving}
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmMove}
+                disabled={isMoving || !targetFolderName.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-black shadow-lg hover:shadow-purple-500/25 transition disabled:opacity-50 flex items-center justify-center space-x-2 rtl:space-x-reverse"
+              >
+                {isMoving ? (
+                  <span>{isAr ? 'جاري النقل...' : 'Moving...'}</span>
+                ) : (
+                  <>
+                    <FolderInput className="w-4 h-4" />
+                    <span>{isAr ? 'نقل الآن' : 'Move Now'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

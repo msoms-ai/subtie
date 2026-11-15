@@ -92,7 +92,8 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
   const [uploadStatusText, setUploadStatusText] = useState('');
 
   const [existingFolders, setExistingFolders] = useState([]);
-  const [folderSelectionMode, setFolderSelectionMode] = useState('new'); // 'new' or 'existing'
+  const [folderSelectionMode, setFolderSelectionMode] = useState(initialProjectName ? 'existing' : 'new'); // 'new' or 'existing'
+  const hasInitializedFolderRef = useRef(false);
 
   useEffect(() => {
     const fetchFolders = async () => {
@@ -101,9 +102,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         const res = await fetch('/api/projects', { cache: 'no-store', headers });
         const data = await res.json();
 
-      if (data && data.minuteBalance !== undefined) {
-        window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
-      }
+        if (data && data.minuteBalance !== undefined) {
+          window.dispatchEvent(new CustomEvent('subtie_refresh_user', { detail: { minuteBalance: data.minuteBalance } }));
+        }
         let projectsArray = [];
         if (Array.isArray(data)) {
           projectsArray = data;
@@ -112,16 +113,31 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         }
         const folders = [...new Set(projectsArray.map(p => p.projectName).filter(Boolean))];
         setExistingFolders(folders);
-        if (folders.length > 0) {
-          setFolderSelectionMode('existing');
-          setProjectName(folders[0]);
+
+        // Resilient folder initialization: NEVER override if user already set or passed an initial folder
+        if (!hasInitializedFolderRef.current) {
+          hasInitializedFolderRef.current = true;
+          if (initialProjectName && initialProjectName.trim()) {
+            const cleanInit = initialProjectName.trim();
+            setProjectName(cleanInit);
+            if (folders.includes(cleanInit)) {
+              setFolderSelectionMode('existing');
+            } else {
+              setFolderSelectionMode('new');
+            }
+          } else if (folders.length > 0) {
+            setFolderSelectionMode('existing');
+            setProjectName(folders[0]);
+          } else {
+            setFolderSelectionMode('new');
+          }
         }
       } catch (err) {
         console.error('Failed to fetch folders:', err);
       }
     };
     fetchFolders();
-  }, [user]);
+  }, [user?.id]);
 
   // Real-Time Socket.io Telemetry Listener
   useEffect(() => {
@@ -756,14 +772,24 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
             
             <div className="flex space-x-2 rtl:space-x-reverse mb-3" dir={isAr ? 'rtl' : 'ltr'}>
               <button
-                onClick={() => setFolderSelectionMode('existing')}
+                onClick={() => {
+                  setFolderSelectionMode('existing');
+                  if (existingFolders.length > 0 && !existingFolders.includes(projectName)) {
+                    setProjectName(existingFolders[0]);
+                  }
+                }}
                 disabled={existingFolders.length === 0}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${folderSelectionMode === 'existing' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'} ${existingFolders.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isAr ? 'اختيار مجلد حالي' : 'Select Existing Folder'}
               </button>
               <button
-                onClick={() => { setFolderSelectionMode('new'); setProjectName(''); }}
+                onClick={() => {
+                  setFolderSelectionMode('new');
+                  if (existingFolders.includes(projectName)) {
+                    setProjectName('');
+                  }
+                }}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${folderSelectionMode === 'new' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'}`}
               >
                 {isAr ? 'إنشاء مجلد جديد' : 'Create New Folder'}
@@ -854,15 +880,12 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
 
           <div>
             <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-1.5">
-              {isAr ? 'اسم المشروع' : 'Project Name'}
+              {isAr ? 'مجلد المشروع المختار' : 'Selected Project Folder'}
             </label>
-            <input
-              type="text"
-              dir={isAr ? 'rtl' : 'ltr'}
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              className="w-full bg-slate-900/70 theme-light:bg-slate-100 border border-slate-800 theme-light:border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-300 theme-light:text-slate-950 font-bold outline-none"
-            />
+            <div className="flex items-center space-x-2.5 rtl:space-x-reverse bg-slate-900/70 theme-light:bg-purple-50/80 border border-purple-500/30 rounded-xl px-4 py-3 text-sm text-purple-300 theme-light:text-purple-900 font-bold shadow-inner">
+              <Layers className="w-4 h-4 text-pink-400 shrink-0" />
+              <span className="truncate">{projectName || (isAr ? 'غير مصنف' : 'Uncategorized')}</span>
+            </div>
           </div>
 
           <div>
