@@ -47,8 +47,9 @@ fi
 echo "📦 Active Node version: $(node -v 2>/dev/null || echo 'not found')"
 echo "📦 Active NPM version:  $(npm -v 2>/dev/null || echo 'not found')"
 
-# 2. Create required directories
+# 2. Create required directories and ensure write permissions
 mkdir -p server/logs server/data server/uploads/torrents server/uploads/torrents_incoming
+chmod -R 775 server/logs server/data server/uploads 2>/dev/null || true
 
 # 3. Install production dependencies
 echo "📥 Installing dependencies with modern npm..."

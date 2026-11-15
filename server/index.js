@@ -3704,6 +3704,20 @@ app.post('/api/project/:id/move-folder', (req, res) => {
     project.videoUrl = updateUrlPath(project.videoUrl);
     project.audioUrl = updateUrlPath(project.audioUrl);
     project.srtUrl = updateUrlPath(project.srtUrl);
+    
+    if (Array.isArray(project.characters)) {
+      project.characters = project.characters.map(c => ({
+        ...c,
+        avatarUrl: updateUrlPath(c.avatarUrl)
+      }));
+    }
+    if (Array.isArray(project.visualSigns)) {
+      project.visualSigns = project.visualSigns.map(s => ({
+        ...s,
+        imageUrl: updateUrlPath(s.imageUrl)
+      }));
+    }
+
     project.projectName = cleanNewFolderName;
     project.updatedAt = new Date().toISOString();
 
