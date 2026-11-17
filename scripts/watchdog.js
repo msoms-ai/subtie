@@ -153,7 +153,7 @@ async function sendDowntimeAlertEmail({ reason, actionTaken, success }) {
   }
 }
 
-function probeHealth(timeoutMs = 5000) {
+function probeHealth(timeoutMs = 12000) {
   return new Promise((resolve) => {
     const req = http.get(HEALTH_URL, { timeout: timeoutMs }, (res) => {
       let body = '';
@@ -242,9 +242,8 @@ async function checkAndAutoHeal() {
   consecutiveFailures++;
   console.warn(`⚠️ [Watchdog] Health probe failed (${consecutiveFailures}/2): ${probe.error}`);
 
-  // Trigger healing on first failure if connection refused, or after 2 consecutive failures
-  const isConnRefused = probe.error?.includes('ECONNREFUSED');
-  if (isConnRefused || consecutiveFailures >= 2) {
+  // Trigger healing only after 3 consecutive failures to avoid flapping during transient spikes
+  if (consecutiveFailures >= 3) {
     isHealingInProgress = true;
     console.log('🚨 [Watchdog] Activating Auto-Heal: Restarting Subtie service via PM2...');
     logSystemLog('warn', 'watchdog', `Triggering Auto-Heal restart. Reason: ${probe.error}`);

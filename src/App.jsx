@@ -185,17 +185,18 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch('/api/projects', {
+      const viewedParam = encodeURIComponent(JSON.stringify(viewedProjectIds));
+      const res = await fetch(`/api/projects/unread-count?viewed=${viewedParam}`, {
         headers: { 'x-user-id': user.id },
         cache: 'no-store'
       });
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.projects || []);
-      const unread = list.filter(p => {
-        const isDone = p.processingProgress === 100 || p.status === 'Completed';
-        return isDone && !viewedProjectIds.includes(p.id);
-      }).length;
-      setUnreadProjectsCount(unread);
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.unreadCount === 'number') {
+          setUnreadProjectsCount(data.unreadCount);
+          return;
+        }
+      }
     } catch (e) {
       console.warn('Failed to refresh unread projects count:', e);
     }
@@ -203,7 +204,7 @@ export default function App() {
 
   useEffect(() => {
     refreshUnreadProjects();
-    const timer = setInterval(refreshUnreadProjects, 10000);
+    const timer = setInterval(refreshUnreadProjects, 20000);
     return () => clearInterval(timer);
   }, [refreshUnreadProjects]);
 
