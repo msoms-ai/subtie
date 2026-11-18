@@ -168,8 +168,8 @@ export default function ProjectsGallery({
     }
   };
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = async (silent = false) => {
+    if (!silent && projects.length === 0) setLoading(true);
     try {
       const headers = user?.id ? { 'x-user-id': user.id } : {};
       const res = await fetch('/api/projects', { cache: 'no-store', headers });
@@ -187,9 +187,9 @@ export default function ProjectsGallery({
   };
 
   useEffect(() => {
-    fetchProjects();
+    fetchProjects(false);
     fetchFolderCovers();
-  }, [user]);
+  }, [user?.id]);
 
   const handleDeleteConfirm = async () => {
     if (!deletingProjectId) return;

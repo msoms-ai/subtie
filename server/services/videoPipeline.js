@@ -198,8 +198,7 @@ export async function processVideoJob(jobData, progressCallback = null) {
     throw new Error('Valid projectId string is required');
   }
 
-  const projects = db.readProjects();
-  const project = projects[projectId];
+  const project = db.getProject ? db.getProject(projectId) : db.readProjects(true)[projectId];
   if (!project) throw new Error(`Project not found: ${projectId}`);
 
   // Return cached result if already completed

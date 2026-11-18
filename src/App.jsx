@@ -63,15 +63,17 @@ export default function App() {
       if (data?.success && data?.user) {
         setUser(prev => {
           if (!prev) return data.user;
+          const prevBal = Number(prev.minuteBalance !== undefined ? prev.minuteBalance : 0);
+          const newBal = Number(data.user.minuteBalance !== undefined ? data.user.minuteBalance : 0);
           if (
-            prev.minuteBalance !== data.user.minuteBalance ||
+            prevBal !== newBal ||
             prev.role !== data.user.role ||
             prev.hasPurchased !== data.user.hasPurchased ||
             prev.avatarUrl !== data.user.avatarUrl ||
             prev.firstName !== data.user.firstName ||
             prev.lastName !== data.user.lastName
           ) {
-            const updated = { ...prev, ...data.user };
+            const updated = { ...prev, ...data.user, minuteBalance: newBal };
             try {
               localStorage.setItem('subtie_user', JSON.stringify(updated));
             } catch (e) {}
@@ -136,8 +138,11 @@ export default function App() {
         }
         if (typeof data.minuteBalance === 'number') {
           setUser(prev => {
-            if (!prev || prev.minuteBalance === data.minuteBalance) return prev;
-            const updated = { ...prev, minuteBalance: data.minuteBalance };
+            if (!prev) return prev;
+            const currentBal = Number(prev.minuteBalance !== undefined ? prev.minuteBalance : 0);
+            const incomingBal = Number(data.minuteBalance);
+            if (currentBal === incomingBal) return prev;
+            const updated = { ...prev, minuteBalance: incomingBal };
             try {
               localStorage.setItem('subtie_user', JSON.stringify(updated));
             } catch (e) {}

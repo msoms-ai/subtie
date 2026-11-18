@@ -1025,7 +1025,11 @@ app.get('/api/auth/me', (req, res) => {
   }
 
   const { passwordHash, verificationCode, passwordResetCode, ...safeUser } = user;
-  return res.json({ success: true, user: safeUser, minuteBalance: safeUser.minuteBalance !== undefined ? safeUser.minuteBalance : 0 });
+  const effectiveMinuteBalance = (typeof safeUser.minuteBalance === 'number')
+    ? safeUser.minuteBalance
+    : (safeUser.role === 'Admin' ? 99999 : 0);
+  safeUser.minuteBalance = effectiveMinuteBalance;
+  return res.json({ success: true, user: safeUser, minuteBalance: effectiveMinuteBalance });
 });
 
 // 8. Update User Profile Info (Name, Forum Username, Subscriptions, Preferences)
@@ -2567,16 +2571,26 @@ app.post('/api/torrent/ingest', torrentUpload.single('torrentFile'), async (req,
         const db = readProjects();
         if (db[projectId]) {
           db[projectId].videoUrl = `/uploads/${userId}/${safeFolderName}/${projectId}/${videoFileName}`;
-          db[projectId].status = 'processing';
-          db[projectId].processingStatus = 'Torrent downloaded. Starting Japanese audio and visual OCR analysis...';
+          db[projectId].status = 'queued';
+          db[projectId].processingStatus = 'Torrent downloaded. Queued in processing pool...';
+          db[projectId].processingProgress = 5;
           writeProjects(db);
         }
 
-        // Auto trigger full processing pipeline
+        // Enqueue into BullMQ worker pool to prevent freezing Express
         try {
-          await executeVideoProcessing(projectId, 0, null);
+          const queueRes = await queueService.addJob({
+            projectId,
+            videoDurationSecs: 0,
+            userId,
+            projectName: projectName || 'Untitled Project'
+          });
+          console.log(`📋 [Torrent Auto-Process] Enqueued ${projectId} into BullMQ (Job ID: ${queueRes.jobId})`);
         } catch (procErr) {
-          console.error(`⚠️ [Torrent Auto-Process Error] ${projectId}:`, procErr.message);
+          console.warn(`⚠️ [Torrent Queue Fallback] Redis enqueue failed (${procErr.message}). Running in-process...`);
+          executeVideoProcessing(projectId, 0, null).catch(err => {
+            console.error(`[In-process fallback error for ${projectId}]:`, err.message);
+          });
         }
       },
       onFail: async (err, reasonCode) => {

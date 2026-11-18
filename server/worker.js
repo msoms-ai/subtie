@@ -38,6 +38,9 @@ export const worker = new Worker(
     try {
       emitProgress(5, 0, 0, 'Worker claimed job. Preparing media pipeline...', 5, 'queued');
 
+      // Guarantee fresh project state from disk across processes
+      db.readProjects(true);
+
       const result = await processVideoJob(job.data, emitProgress);
 
       console.log(`✅ [Worker] Successfully completed job #${job.id} for project ${projectId} (${result.subtitlesCount} lines)`);

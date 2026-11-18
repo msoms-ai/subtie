@@ -97,6 +97,16 @@ class QueueService {
    * Enqueues a project for audio extraction & translation
    */
   async addJob(jobData) {
+    try {
+      const existing = await subtitleQueue.getJob(jobData.projectId);
+      if (existing) {
+        const state = await existing.getState();
+        if (state === 'failed' || state === 'completed') {
+          await existing.remove();
+        }
+      }
+    } catch (_) {}
+
     const job = await subtitleQueue.add('process-video', jobData, {
       jobId: jobData.projectId, // Guarantee idempotency: 1 job per project ID
     });
