@@ -119,6 +119,20 @@ class QueueService {
   }
 
   /**
+   * Retrieves 1-based queue waiting position for a given project
+   */
+  async getQueuePosition(projectId) {
+    if (!this.isAvailable()) return null;
+    try {
+      const waitingJobs = await subtitleQueue.getWaiting();
+      const index = waitingJobs.findIndex(j => j.id === projectId || j.data?.projectId === projectId);
+      return index !== -1 ? index + 1 : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
    * Retrieves live metrics for the Admin Dashboard with strict timeout protection
    */
   async getMetrics() {

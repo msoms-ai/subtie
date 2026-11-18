@@ -2190,7 +2190,7 @@ app.get('/api/project/:id', (req, res) => {
 });
 
 // 19. Save Live Subtitle Edits (With optional Audit Status & Notes)
-app.get('/api/project/:id/progress', (req, res) => {
+app.get('/api/project/:id/progress', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -2205,13 +2205,28 @@ app.get('/api/project/:id/progress', (req, res) => {
   }
   const isProc = activeProcessingSet.has(projectId) || project.status === 'processing';
 
+  let queuePosition = null;
+  if (project.status === 'queued') {
+    queuePosition = await queueService.getQueuePosition(projectId);
+  }
+
+  let effectiveStatus = project.processingStatus || '';
+  if (project.status === 'queued') {
+    if (queuePosition) {
+      effectiveStatus = `قيد الانتظار في طابور المعالجة (أنت رقم ${queuePosition} في الانتظار)...`;
+    } else {
+      effectiveStatus = 'قيد الانتظار في طابور المعالجة...';
+    }
+  }
+
   const userId = req.headers['x-user-id'] || project.ownerId;
   const users = readUsers();
   const reqUser = userId ? users[userId] : null;
 
   return res.json({ 
     progress: project.processingProgress || 0, 
-    status: project.processingStatus || '',
+    status: effectiveStatus,
+    queuePosition: queuePosition || undefined,
     stage: project.processingStage || '',
     error: project.error || null,
     isProcessing: isProc,

@@ -275,6 +275,29 @@ export async function processVideoJob(jobData, progressCallback = null) {
 
   project.audioUrl = `${urlPrefix}/audio.mp3`;
 
+  // Asynchronous Cloudflare R2 Archival (runs in background without slowing down AI pipeline)
+  let r2UploadPromise = null;
+  if (cloudStorage.isConfigured() && !project.videoUrl?.startsWith('http')) {
+    const r2Key = `uploads/${userId}/${safeFolderName}/${projectId}/${path.basename(videoPath)}`;
+    r2UploadPromise = cloudStorage.uploadFile(videoPath, r2Key, 'video/mp4')
+      .then(uploadRes => {
+        if (uploadRes && uploadRes.publicUrl) {
+          console.log(`☁️ [Cloudflare R2] Video synced to CDN: ${uploadRes.publicUrl}`);
+          project.videoUrl = uploadRes.publicUrl;
+          project.r2Uploaded = true;
+          const freshDb = db.readProjects();
+          if (freshDb[projectId]) {
+            freshDb[projectId].videoUrl = uploadRes.publicUrl;
+            freshDb[projectId].r2Uploaded = true;
+            db.writeProjects(freshDb);
+          }
+        }
+      })
+      .catch(r2Err => {
+        console.warn(`⚠️ [Cloudflare R2] Background video sync warning:`, r2Err.message);
+      });
+  }
+
   // Step 2: Split Audio into 120-second Chunks
   const settings = db.readSettings();
   const chunkDuration = Number(settings.audioChunkDurationSec) || 120;
@@ -477,6 +500,16 @@ Return ONLY the updated valid JSON array with keys: "id", "startTime", "endTime"
 
   // Save individual subtitle file & metadata
   db.saveProjectSubtitles(projectId, allParsedSubtitles);
+
+  if (r2UploadPromise) {
+    try {
+      // Allow up to 8s for background R2 sync before finishing project
+      await Promise.race([
+        r2UploadPromise,
+        new Promise(resolve => setTimeout(resolve, 8000))
+      ]);
+    } catch (_) {}
+  }
 
   const freshDb = db.readProjects();
   freshDb[projectId] = {
