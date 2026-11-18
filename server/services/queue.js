@@ -5,7 +5,7 @@ const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
 const REDIS_PORT = Number(process.env.REDIS_PORT) || 6380;
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
 
-export const redisConnection = new Redis({
+const redisConfig = {
   host: REDIS_HOST,
   port: REDIS_PORT,
   password: REDIS_PASSWORD,
@@ -13,13 +13,14 @@ export const redisConnection = new Redis({
   enableReadyCheck: false,
   lazyConnect: true,
   retryStrategy(times) {
-    if (times > 5) {
-      // Don't flood console if Redis isn't up locally
-      return null;
-    }
+    if (times > 5) return null;
     return Math.min(times * 1000, 3000);
   },
-});
+};
+
+export const redisConnection = new Redis(redisConfig);
+const redisSubscriber = new Redis(redisConfig);
+const redisPublisher = new Redis(redisConfig);
 
 let isRedisConnected = false;
 
@@ -30,9 +31,9 @@ redisConnection.connect().then(() => {
   console.warn(`⚠️ Redis is currently offline at ${REDIS_HOST}:${REDIS_PORT} (${err.message}). Queue jobs will wait or run in-process.`);
 });
 
-redisConnection.on('error', (err) => {
-  // Suppress unhandled event crashes when Redis is offline
-});
+redisConnection.on('error', () => {});
+redisSubscriber.on('error', () => {});
+redisPublisher.on('error', () => {});
 
 export const subtitleQueue = new Queue('subtie-processing', {
   connection: redisConnection,
@@ -55,6 +56,38 @@ export const subtitleQueueEvents = new QueueEvents('subtie-processing', {
 
 subtitleQueueEvents.on('error', () => {});
 
+// Inter-process Pub/Sub Event Bus for Real-Time Socket.io Bridge
+export function publishProgress(projectId, data) {
+  try {
+    if (redisPublisher.status === 'ready' || redisPublisher.status === 'connect') {
+      redisPublisher.publish('subtie:progress', JSON.stringify({ projectId, data }));
+    }
+  } catch (err) {
+    console.warn('[Queue Event Bus] Failed to publish progress:', err.message);
+  }
+}
+
+export function subscribeProgress(handler) {
+  try {
+    if (!redisSubscriber.status || redisSubscriber.status === 'wait') {
+      redisSubscriber.connect().catch(() => {});
+    }
+    redisSubscriber.subscribe('subtie:progress', (err) => {
+      if (err) console.error('[Queue Event Bus] Failed to subscribe to progress channel:', err.message);
+    });
+    redisSubscriber.on('message', (channel, message) => {
+      if (channel === 'subtie:progress') {
+        try {
+          const { projectId, data } = JSON.parse(message);
+          handler(projectId, data);
+        } catch (_) {}
+      }
+    });
+  } catch (err) {
+    console.warn('[Queue Event Bus] Subscribe error:', err.message);
+  }
+}
+
 class QueueService {
   isAvailable() {
     return isRedisConnected && redisConnection.status === 'ready';
@@ -71,6 +104,18 @@ class QueueService {
       jobId: job.id,
       status: 'queued',
     };
+  }
+
+  async getJobStatus(projectId) {
+    try {
+      const job = await subtitleQueue.getJob(projectId);
+      if (!job) return null;
+      const state = await job.getState();
+      const progress = job.progress || 0;
+      return { id: job.id, state, progress, data: job.data };
+    } catch (_) {
+      return null;
+    }
   }
 
   /**

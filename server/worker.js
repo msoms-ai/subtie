@@ -1,162 +1,116 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
-import { redisConnection } from './services/queue.js';
-import storage from './services/storage.js';
-import geminiPool from './services/geminiPool.js';
-import socketService from './services/socket.js';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import fs from 'fs';
-import path from 'path';
-
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+import { redisConnection, publishProgress } from './services/queue.js';
+import { processVideoJob } from './services/videoPipeline.js';
+import { logSystemEvent } from './services/logService.js';
+import db from './services/db.js';
 
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 2;
 
-console.log(`🚀 Starting Subtie Background Worker [Concurrency: ${CONCURRENCY}]...`);
+console.log(`========================================================`);
+console.log(`🚀 [Subtie Microservice Worker] Starting BullMQ Worker...`);
+console.log(`⚙️ Concurrency: ${CONCURRENCY} parallel video pipelines`);
+console.log(`📦 Node Version: ${process.version}`);
+console.log(`========================================================`);
 
 export const worker = new Worker(
   'subtie-processing',
   async (job) => {
-    const { projectId, videoPath, targetLang, projectTitle } = job.data;
-    console.log(`[Worker] Claimed job for project ${projectId} (${projectTitle})`);
+    const { projectId, videoDurationSecs, userId } = job.data;
+    console.log(`\n📥 [Worker] Claimed job #${job.id} for project: ${projectId}`);
 
-    // 1. Notify UI: Job claimed, starting audio extraction
-    job.updateProgress(10);
-    socketService.emitProgress(projectId, {
-      stage: 'extracting',
-      progress: 10,
-      message: 'Worker claimed job. Extracting high-fidelity audio...',
-    });
+    // Progress reporter bridging BullMQ and Redis Pub/Sub
+    const emitProgress = (extract, transcode, translate, status, overall, stage) => {
+      try {
+        job.updateProgress(overall || 0);
+      } catch (_) {}
 
-    const tempDir = path.resolve('temp', `job_${projectId}`);
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-    const localVideo = path.resolve(videoPath);
-    const extractedAudioPath = path.join(tempDir, 'audio.mp3');
+      publishProgress(projectId, {
+        progress: overall || 0,
+        status: status || '',
+        stage: stage || 'processing',
+        progressExtract: extract || 0,
+        progressTranscode: transcode || 0,
+        progressTranslate: translate || 0
+      });
+    };
 
     try {
-      // 2. FFmpeg Extraction
-      await new Promise((resolve, reject) => {
-        ffmpeg(localVideo)
-          .noVideo()
-          .audioCodec('libmp3lame')
-          .audioBitrate('128k')
-          .audioChannels(1)
-          .audioFrequency(16000)
-          .on('progress', (p) => {
-            const pct = Math.min(40, 10 + Math.round((p.percent || 0) * 0.3));
-            job.updateProgress(pct);
-            socketService.emitProgress(projectId, {
-              stage: 'extracting',
-              progress: pct,
-              message: `Extracting Japanese audio track (${Math.round(p.percent || 0)}%)...`,
-            });
-          })
-          .on('end', resolve)
-          .on('error', reject)
-          .save(extractedAudioPath);
-      });
+      emitProgress(5, 0, 0, 'Worker claimed job. Preparing media pipeline...', 5, 'queued');
 
-      console.log(`[Worker] Audio extraction completed for project ${projectId}`);
-      job.updateProgress(45);
-      socketService.emitProgress(projectId, {
-        stage: 'translating',
-        progress: 45,
-        message: 'Audio extracted successfully. Submitting to Gemini AI Pool...',
-      });
+      const result = await processVideoJob(job.data, emitProgress);
 
-      // 3. Acquire Gemini Key from Pool
-      const { keyId, rawKey, client } = geminiPool.acquireKey();
-
-      try {
-        // Read audio for Gemini upload / processing
-        const audioBuffer = fs.readFileSync(extractedAudioPath);
-        const base64Audio = audioBuffer.toString('base64');
-
-        const prompt = `You are an expert anime subtitle translator.
-Transcribe the spoken Japanese dialogue and translate it accurately into Arabic subtitles.
-Target Language: Arabic (${targetLang || 'ar'}).
-Output valid SRT formatted subtitle blocks only.`;
-
-        // Request Gemini translation with modern active model
-        let response;
-        try {
-          response = await client.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { inlineData: { mimeType: 'audio/mpeg', data: base64Audio } },
-                  { text: prompt },
-                ],
-              },
-            ],
-          });
-        } catch (mErr) {
-          console.warn(`[Worker] gemini-3.8-flash failed: ${mErr.message}. Trying gemini-flash-latest...`);
-          response = await client.models.generateContent({
-            model: 'gemini-flash-latest',
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { inlineData: { mimeType: 'audio/mpeg', data: base64Audio } },
-                  { text: prompt },
-                ],
-              },
-            ],
-          });
-        }
-
-        const srtContent = response.text || '';
-        geminiPool.releaseKey(keyId, true);
-
-        // 4. Save Final SRT Result to Project
-        const outputSrtPath = path.resolve('uploads', `${projectId}.srt`);
-        fs.writeFileSync(outputSrtPath, srtContent, 'utf-8');
-
-        // Cleanup temporary files
-        if (fs.existsSync(tempDir)) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-        }
-
-        job.updateProgress(100);
-        socketService.emitProgress(projectId, {
-          stage: 'completed',
-          progress: 100,
-          srtPath: `/uploads/${projectId}.srt`,
-          message: 'Subtitle generation and translation completed successfully!',
-        });
-
-        console.log(`[Worker] Job ${job.id} completed successfully!`);
-        return { success: true, projectId, srtPath: outputSrtPath };
-      } catch (geminiError) {
-        geminiPool.releaseKey(keyId, false, geminiError);
-        throw geminiError;
-      }
+      console.log(`✅ [Worker] Successfully completed job #${job.id} for project ${projectId} (${result.subtitlesCount} lines)`);
+      return result;
     } catch (err) {
-      console.error(`[Worker] Job ${job.id} failed:`, err);
-      socketService.emitProgress(projectId, {
-        stage: 'failed',
-        progress: 0,
+      console.error(`❌ [Worker Error] Job #${job.id} for project ${projectId} failed:`, err.message);
+
+      logSystemEvent('error', 'video_proc', `Worker job failed for ${projectId}: ${err.message}`, {
+        jobId: job.id,
+        projectId,
         error: err.message,
-        message: 'Processing encountered an error. Queuing automatic retry...',
+        stack: err.stack?.slice(0, 500)
       });
+
+      // Update project error state in DB
+      try {
+        const freshDb = db.readProjects();
+        if (freshDb[projectId]) {
+          freshDb[projectId].status = 'failed';
+          freshDb[projectId].processingStatus = `فشل في معالجة الفيديو: ${err.message}`;
+          freshDb[projectId].error = err.message;
+          freshDb[projectId].updatedAt = new Date().toISOString();
+          db.writeProjects(freshDb);
+        }
+      } catch (_) {}
+
+      publishProgress(projectId, {
+        progress: 0,
+        status: `فشل في معالجة الفيديو: ${err.message}`,
+        stage: 'process_failed',
+        error: err.message
+      });
+
       throw err;
     }
   },
   {
     connection: redisConnection,
     concurrency: CONCURRENCY,
+    lockDuration: 300000, // 5 minutes lock duration for large 1GB video processing
+    stalledInterval: 30000,
+    maxStalledCount: 2
   }
 );
 
+worker.on('ready', () => {
+  console.log('⚡ [Worker Ready] Connected to Redis and waiting for video processing jobs...');
+});
+
 worker.on('completed', (job) => {
-  console.log(`✅ [Worker] Finished job ${job.id}`);
+  console.log(`🎉 [Worker Event] Job ${job.id} marked COMPLETED.`);
 });
 
 worker.on('failed', (job, err) => {
-  console.error(`❌ [Worker] Job ${job?.id} failed with: ${err.message}`);
+  console.error(`💥 [Worker Event] Job ${job?.id} failed with error: ${err?.message}`);
 });
+
+worker.on('error', (err) => {
+  console.error('⚠️ [Worker System Error]:', err.message);
+});
+
+// Graceful shutdown
+async function gracefulShutdown(signal) {
+  console.log(`\n🛑 [Worker] Received ${signal}. Closing worker gracefully...`);
+  try {
+    await worker.close();
+    console.log('✅ [Worker] Closed cleanly.');
+    process.exit(0);
+  } catch (err) {
+    console.error('Error during worker shutdown:', err);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

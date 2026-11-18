@@ -3,7 +3,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import socketService from './services/socket.js';
-import queueService, { redisConnection } from './services/queue.js';
+import queueService, { redisConnection, subscribeProgress } from './services/queue.js';
+import { processVideoJob } from './services/videoPipeline.js';
 import geminiPool from './services/geminiPool.js';
 import cloudStorage from './services/storage.js';
 import cors from 'cors';
@@ -1906,709 +1907,19 @@ async function mapConcurrent(items, concurrency, fn) {
 
 
 async function executeVideoProcessing(projectId, videoDurationSecs, optionalRes = null) {
-  if (!projectId || typeof projectId !== 'string' || projectId === '[object Object]') {
-    if (optionalRes) return optionalRes.status(400).json({ error: 'Valid projectId string is required' });
-    throw new Error('Valid projectId string is required');
-  }
-
-  // Prevent duplicate concurrent runs for the exact same project
-  if (activeProcessingSet.has(projectId)) {
-    console.log(`⏳ [Process] Project ${projectId} is already processing in background.`);
-    const curProject = readProjects()[projectId];
-    if (optionalRes) {
-      return optionalRes.json({ success: true, message: 'Processing already in progress', projectId, project: curProject });
-    }
-    return { success: true, message: 'Processing already in progress', project: curProject };
-  }
-
-  activeProcessingSet.add(projectId);
-
   try {
-    const projects = readProjects();
-    const project = projects[projectId];
-
-    if (!project) {
-      if (optionalRes) return optionalRes.status(404).json({ error: 'Project not found' });
-      throw new Error('Project not found');
-    }
-
-    // If already fully transcribed, return existing project data immediately
-    if (project.processingProgress === 100 && Array.isArray(project.subtitles) && project.subtitles.length > 0) {
-      console.log(`⚡ [Process] Project ${projectId} already completed. Returning existing subtitles.`);
-      const cachedPayload = {
-        success: true,
-        projectId,
-        audioUrl: project.audioUrl,
-        srtUrl: project.srtUrl,
-        subtitles: project.subtitles,
-        visualSigns: project.visualSigns || [],
-        characters: project.characters || [],
-        project
-      };
-      if (optionalRes) return optionalRes.json(cachedPayload);
-      return cachedPayload;
-    }
-
-    const userId = project.ownerId || 'usr_guest';
-    const { targetDir, urlPrefix, safeFolderName, videoFiles } = findProjectDirectories(userId, project.projectName, projectId, project.videoUrl);
-
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-
-    // Search for video file (video.* or any standard video container in targetDir)
-    let foundVideoFile = videoFiles.length > 0 ? videoFiles[0] : null;
-    if (!foundVideoFile && fs.existsSync(targetDir)) {
-      const allFiles = fs.readdirSync(targetDir);
-      foundVideoFile = allFiles.find(f => /\.(mp4|mkv|avi|mov|webm|flv|ts|wmv|m4v)$/i.test(f) || f.startsWith('video.'));
-    }
-
-    // Fallback: If still not found, check if project.videoUrl is remote HTTP (e.g. Cloudflare R2 / CDN)
-    if (!foundVideoFile && project.videoUrl && project.videoUrl.startsWith('http')) {
-      try {
-        console.log(`☁️ [Process] Local video missing on disk, downloading from cloud: ${project.videoUrl}`);
-        const downloadTarget = path.join(targetDir, 'video.mp4');
-        const dlRes = await fetch(project.videoUrl);
-        if (dlRes.ok) {
-          const buf = await dlRes.arrayBuffer();
-          fs.writeFileSync(downloadTarget, Buffer.from(buf));
-          foundVideoFile = 'video.mp4';
-          console.log(`✅ [Process] Downloaded video from cloud: ${downloadTarget}`);
-        }
-      } catch (dlErr) {
-        console.warn('⚠️ [Process] Cloud video download warning:', dlErr.message);
-      }
-    }
-
-    if (!foundVideoFile) {
-      const errMsg = `Video file not found for project ${projectId} in ${targetDir}`;
-      if (optionalRes) return optionalRes.status(404).json({ error: errMsg });
-      throw new Error(errMsg);
-    }
-
-    let videoPath = path.join(targetDir, foundVideoFile);
-    const audioPath = path.join(targetDir, 'audio.mp3');
-    const srtPath = path.join(targetDir, 'subtitle.srt');
-
-    // Auto-remux MKV or non-MP4 formats to web-friendly MP4 for smooth browser playback
-    if (path.extname(foundVideoFile).toLowerCase() !== '.mp4') {
-      try {
-        console.log(`🎬 [Process] Ensuring web-compatible MP4 for "${foundVideoFile}"...`);
-        const webRes = await ensureWebCompatibleVideo(videoPath, targetDir);
-        if (webRes && webRes.converted) {
-          videoPath = webRes.mp4Path;
-          project.videoUrl = `${urlPrefix}/${webRes.fileName}`;
-          console.log(`✅ [Process] Project video converted to web MP4: ${project.videoUrl}`);
-        }
-      } catch (convErr) {
-        console.warn('⚠️ [Process] Web conversion warning:', convErr.message);
-      }
-    }
-
-    // Probe duration from video file if not passed from client
-    let finalDurationSecs = Number(videoDurationSecs) || 0;
-    if (finalDurationSecs <= 0) {
-      finalDurationSecs = await probeVideoDuration(videoPath);
-      console.log(`⏱️ [Video Probe] Detected video duration: ${finalDurationSecs}s (${(finalDurationSecs / 60).toFixed(1)} mins)`);
-    }
-
-    logSystemEvent('info', 'video_proc', `Started AI pipeline for "${project.projectName}" (${projectId})`, {
-      projectId,
-      projectName: project.projectName,
-      ownerId: userId,
-      durationSecs: finalDurationSecs
+    const result = await processVideoJob({ projectId, videoDurationSecs }, (ext, tr, tl, st, ov, sg) => {
+      socketService.emitProgress(projectId, { progress: ov, status: st, stage: sg });
     });
-
-    // --- Step 2: Backend Credit & Security Check ---
-    let latestMinuteBalance = undefined;
-    if (userId !== 'usr_guest') {
-      const users = readUsers();
-      const user = users[userId];
-      if (user) {
-        const videoMinutes = Math.ceil(finalDurationSecs / 60) || 24;
-        const isAdmin = user.role === 'Admin';
-        
-        if (!isAdmin && videoMinutes > 40 && !user.hasPurchased) {
-          const errMsg = 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.';
-          if (optionalRes) return optionalRes.status(403).json({ error: errMsg });
-          throw new Error(errMsg);
-        }
-        
-        if (!isAdmin && user.minuteBalance < videoMinutes) {
-          const errMsg = `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.`;
-          if (optionalRes) return optionalRes.status(402).json({ error: errMsg });
-          throw new Error(errMsg);
-        }
-        
-        // Deduct minutes (skip for admins)
-        if (!isAdmin) {
-          user.minuteBalance -= videoMinutes;
-          writeUsers(users);
-          console.log(`[Wallet] Deducted ${videoMinutes} mins from user ${userId}. Remaining: ${user.minuteBalance} mins.`);
-        } else {
-          console.log(`[Wallet] Admin ${userId} bypassed minute deduction. Video: ${videoMinutes} mins.`);
-        }
-        latestMinuteBalance = user.minuteBalance;
-      }
-    }
-
-  const emitAndSaveProgress = (extract, transcode, translate, status, overall, stage = 'processing') => {
-    (function() {
-      const db = readProjects();
-      if (db[projectId]) {
-        if (extract !== undefined) db[projectId].progressExtract = extract;
-        if (transcode !== undefined) db[projectId].progressTranscode = transcode;
-        if (translate !== undefined) db[projectId].progressTranslate = translate;
-        if (status !== undefined) db[projectId].processingStatus = status;
-        if (overall !== undefined) db[projectId].processingProgress = overall;
-        db[projectId].processingStage = stage;
-        db[projectId].status = overall === 100 ? 'ready' : 'processing';
-        db[projectId].updatedAt = new Date().toISOString();
-        writeProjects(db);
-      }
-    })();
-    socketService.emitProgress(projectId, {
-      progress: overall,
-      status,
-      stage,
-      progressExtract: extract,
-      progressTranscode: transcode,
-      progressTranslate: translate,
-      minuteBalance: latestMinuteBalance
-    });
-  };
-
-  // Parallel Cloudflare R2 Archival
-  let r2UploadPromise = null;
-  if (cloudStorage.isConfigured() && videoFiles.length > 0) {
-    const vFile = videoFiles[0];
-    const r2Key = `videos/${userId}/${projectId}/${vFile}`;
-    console.log(`☁️ [Cloudflare R2] Initiating parallel upload: ${r2Key}...`);
-    r2UploadPromise = cloudStorage.uploadFile(videoPath, r2Key, 'video/mp4')
-      .then(r2Res => {
-        console.log(`☁️ [Cloudflare R2] Successfully uploaded to R2: ${r2Res.publicUrl}`);
-        return r2Res;
-      })
-      .catch(err => {
-        console.error(`⚠️ [Cloudflare R2] Upload error:`, err.message);
-        return null;
-      });
-  } else {
-    const r2Status = cloudStorage.getStatus();
-    console.log(`📁 [StorageService] Cloudflare R2 not active (${r2Status.mode}). Missing credentials: [${(r2Status.missingKeys || []).join(', ')}]`);
-  }
-
-  // Step 1: Extract Audio
-  emitAndSaveProgress(25, 0, 0, 'Extracting Japanese audio track...', 10, 'audio_extraction');
-  await extractAudioTrack(videoPath, audioPath);
-  emitAndSaveProgress(100, 0, 0, 'Audio extraction complete.', 25, 'audio_extraction');
-    
-
-    project.audioUrl = `${urlPrefix}/audio.mp3`;
-
-    // Step 2: Verify Gemini Pool has at least one key available
-    if (geminiPool.getPoolStatus().totalKeys === 0 && !process.env.GEMINI_API_KEY) {
-      throw new Error('No Gemini API keys configured. Please add keys in Admin Console or environment variables.');
-    }
-
-    // Initialize detailed progress
-    (function() {
-      const db = readProjects();
-      if(db[projectId]) {
-        db[projectId].progressExtract = 100;
-        db[projectId].progressTranscode = 0;
-        db[projectId].progressTranslate = 0;
-        writeProjects(db);
-      }
-    })();
-
-    // Step 3: Chunk Audio for Long Videos (Support up to multi-hour)
-    const settings = readSettings();
-    const chunkDuration = Number(settings.audioChunkDurationSec) || 120;
-    const chunksDir = path.join(targetDir, 'chunks');
-    if (fs.existsSync(chunksDir)) {
-      try { fs.rmSync(chunksDir, { recursive: true, force: true }); } catch (_) {}
-    }
-    fs.mkdirSync(chunksDir, { recursive: true });
-    
-    (function() {
-      const db = readProjects();
-      if (db[projectId]) {
-        db[projectId].processingProgress = 15;
-        db[projectId].processingStatus = "Splitting audio into chunks...";
-        writeProjects(db);
-      }
-    })();
-    console.log(`[Audio Splitter] Segmenting audio into ${chunkDuration}-second chunks...`);
-    await new Promise((resolve, reject) => {
-      ffmpeg(audioPath)
-        .outputOptions(['-y', '-f segment', `-segment_time ${chunkDuration}`, '-c copy'])
-        .output(path.join(chunksDir, 'chunk_%03d.mp3'))
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
-
-    let chunkFiles = fs.readdirSync(chunksDir).filter(f => f.endsWith('.mp3')).sort();
-    if (chunkFiles.length === 0 && fs.existsSync(audioPath)) {
-      fs.copyFileSync(audioPath, path.join(chunksDir, 'chunk_000.mp3'));
-      chunkFiles = ['chunk_000.mp3'];
-    }
-    console.log(`[Audio Splitter] Splitted into ${chunkFiles.length} chunks.`);
-
-    logSystemEvent('info', 'video_proc', `Audio extracted & segmented into ${chunkFiles.length} chunk(s) for "${project.projectName}" (${projectId})`, {
-      projectId,
-      chunksCount: chunkFiles.length,
-      durationSecs: finalDurationSecs
-    });
-
-    let allParsedSubtitles = [];
-    let globalId = 1;
-
-    for (let i = 0; i < chunkFiles.length; i++) {
-      const chunkPath = path.join(chunksDir, chunkFiles[i]);
-
-      // Acquire next available key from pool for this chunk (round-robin load balancing)
-      let chunkKeyInfo = null;
-      try {
-        chunkKeyInfo = geminiPool.acquireKey();
-      } catch (e) {
-        const fallbackKey = process.env.GEMINI_API_KEY || (geminiPool.keys && geminiPool.keys[0]?.rawKey);
-        if (fallbackKey) {
-          chunkKeyInfo = {
-            keyId: 'fallback',
-            maskedKey: 'fallback',
-            rawKey: fallbackKey,
-            client: new GoogleGenAI({ apiKey: fallbackKey })
-          };
-        } else {
-          throw e;
-        }
-      }
-
-      const ai = chunkKeyInfo.client;
-      console.log(`[Gemini AI] Processing chunk ${i + 1}/${chunkFiles.length} using ${chunkKeyInfo.keyId} (${chunkKeyInfo.maskedKey})...`);
-
-      try {
-        const strategy = settings.apiIngestionStrategy || 'file_api';
-        let audioPart = await prepareAudioPartForGemini(ai, chunkPath, strategy);
-
-        // --- STAGE 1: JAPANESE ASR ---
-        
-        const aPct = Math.round(((i + 0.5) / chunkFiles.length) * 100);
-        const overall1 = Math.round(25 + ((i + 0.5) / chunkFiles.length) * 70);
-        emitAndSaveProgress(100, aPct, Math.round((i / chunkFiles.length) * 100), `AI Stage 1: Transcribing Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall1, 'transcribing');
-        console.log(`[Gemini AI] Stage 1 (ASR) for chunk ${i + 1}...`);
-        const promptStage1 = `You are an expert anime Japanese ASR engine.
-Analyze the provided Japanese audio track carefully and TRANSCRIBE EVERY SINGLE SPOKEN DIALOGUE LINE and AUDIBLE SONG VOCAL from the very first second to the absolute end of the audio file. DO NOT stop early!
-
-CRITICAL RULES:
-1. COMPLETE COVERAGE: Transcribe every spoken word and audible song vocal up to the final second. Never truncate, never summarize, never stop early.
-2. DUAL-TRACK SIMULTANEOUS AUDIO RULE:
-   - When a character speaks while an insert song or background song has audible singing/lyrics:
-     You MUST transcribe BOTH events as separate objects! NEVER choose one over the other!
-     - Set "track": "dialogue" for the character's speech.
-     - Set "track": "song" for song lyrics, and prefix/suffix the Japanese text with musical notes (e.g. '♪ [Lyrics] ♪').
-   - Overlapping timestamps between dialogue and song tracks are expected and encouraged.
-3. MAXIMUM DURATION: A single subtitle block must NOT exceed 5 seconds of screen time.
-4. ZERO-BASED TIMESTAMPS: Start timestamps from 00:00:00,000 for this chunk.
-5. SPLIT LONG SPEECHES into separate consecutive objects.
-6. PRECISE TIMING: Timings must match the actual audio exactly.
-
-For each subtitle block, provide:
-1. "startTime": Timestamp formatted as HH:MM:SS,mmm
-2. "endTime": Timestamp formatted as HH:MM:SS,mmm
-3. "japaneseText": Exact Japanese transcript (Kanji/Kana)
-4. "track": "dialogue" or "song"
-
-Return ONLY a valid JSON array of objects with keys: "id" (1, 2, 3...), "startTime", "endTime", "japaneseText", "track".
-Output raw JSON array only, without markdown formatting. Ensure the JSON array is closed properly at the very end.`;
-
-        const targetModel = sanitizeGeminiModel(process.env.GEMINI_MODEL || settings.geminiModel || 'gemini-3.8-flash');
-        const fallbackModel = sanitizeGeminiModel(settings.fallbackModel1 || 'gemini-flash-latest');
-        const secondaryFallbackModel = sanitizeGeminiModel(settings.fallbackModel2 || 'gemini-pro-latest');
-        const stage1Config = {
-          contents: [
-            { role: 'user', parts: [audioPart, { text: promptStage1 }] }
-          ],
-          config: { 
-            responseMimeType: 'application/json', 
-            maxOutputTokens: 8192,
-          }
-        };
-        
-        let response1;
-        try {
-          response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
-        } catch (err) {
-          console.warn(`[Gemini AI] Stage 1 failed with ${targetModel}: ${err.message}.`);
-          logSystemEvent('warning', 'gemini_api', `Chunk ${i + 1}/${chunkFiles.length} ASR failed on ${targetModel}: ${err.message}. Switching to fallback.`, {
-            projectId,
-            chunk: i + 1,
-            model: targetModel,
-            error: err.message
-          });
-          notifyAdminModelDeprecation(targetModel, fallbackModel, err.message);
-
-          // Retry with inline Base64 if not already inline
-          if (audioPart.fileData || !audioPart.inlineData) {
-            try {
-              console.warn(`🔄 [Gemini AI] Retrying chunk ${i + 1} with inline Base64 audio payload...`);
-              const b64 = fs.readFileSync(chunkPath).toString('base64');
-              audioPart = { inlineData: { data: b64, mimeType: 'audio/mp3' } };
-              stage1Config.contents[0].parts[0] = audioPart;
-              response1 = await ai.models.generateContent({ model: targetModel, ...stage1Config });
-            } catch (inlineErr) {
-              console.warn(`[Gemini AI] Inline retry failed: ${inlineErr.message}. Trying ${fallbackModel}...`);
-            }
-          }
-
-          if (!response1) {
-            try {
-              response1 = await ai.models.generateContent({ model: fallbackModel, ...stage1Config });
-            } catch (err2) {
-              console.warn(`[Gemini AI] Fallback 1 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-              try {
-                response1 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage1Config });
-              } catch (err3) {
-                console.error(`[Gemini AI] All models failed for chunk ${i + 1}: ${err3.message}`);
-                logSystemEvent('error', 'gemini_api', `All Gemini models failed for chunk ${i + 1} of project ${projectId}: ${err3.message}`, {
-                  projectId,
-                  chunk: i + 1,
-                  error: err3.message
-                });
-              }
-            }
-          }
-        }
-
-        if (!response1 || !response1.text) {
-          console.error(`[Gemini AI Error] Stage 1 returned no response for chunk ${i + 1}`);
-          logSystemEvent('error', 'gemini_api', `Chunk ${i + 1}/${chunkFiles.length} ASR returned no response text`, {
-            projectId,
-            chunk: i + 1
-          });
-          if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, false);
-          continue;
-        }
-
-        let rawText1 = (response1.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-        let jpSubtitles = [];
-        try {
-          jpSubtitles = JSON.parse(rawText1);
-        } catch (parseErr) {
-          try {
-            const lastValidIndex = rawText1.lastIndexOf('}');
-            if (lastValidIndex !== -1) {
-              jpSubtitles = JSON.parse(rawText1.substring(0, lastValidIndex + 1) + ']');
-            }
-          } catch (e) {
-            console.error(`[Gemini JSON Error] Stage 1 failed for chunk ${i + 1}:`, rawText1.slice(0, 200));
-            logSystemEvent('warning', 'gemini_api', `JSON parse error in chunk ${i + 1} ASR response`, {
-              projectId,
-              chunk: i + 1,
-              sample: rawText1.slice(0, 300)
-            });
-            if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, true);
-            continue; // Skip chunk if ASR completely fails
-          }
-        }
-
-        if (!Array.isArray(jpSubtitles) || jpSubtitles.length === 0) {
-          console.log(`[Gemini AI] Chunk ${i + 1}/${chunkFiles.length} produced 0 subtitles (silence or non-speech).`);
-          if (chunkKeyInfo.keyId !== 'fallback') geminiPool.releaseKey(chunkKeyInfo.keyId, true);
-          continue;
-        }
-
-        // --- STAGE 2: TRANSLATION (Text to Text) ---
-        
-        const tPct = Math.round(((i + 1) / chunkFiles.length) * 100);
-        const overall2 = Math.round(25 + ((i + 1) / chunkFiles.length) * 70);
-        emitAndSaveProgress(100, tPct, tPct, `AI Stage 2: Translating Chunk ${i + 1}/${chunkFiles.length} [${chunkKeyInfo.keyId}]`, overall2, 'translating');
-        console.log(`[Gemini AI] Stage 2 (Translation) for chunk ${i + 1}...`);
-        const promptStage2 = `You are an expert anime subtitle translator for MSOMS-Anime.
-I am providing you with a JSON array of Japanese subtitles. Your job is to translate each line into English and Arabic.
-
-CRITICAL RULES:
-1. Maintain the exact same JSON structure, array length, track, and timestamps.
-2. For each object, add "englishText" (natural English for fansubbing) and "arabicText" (high quality, fluent Arabic translation - فصحى احترافية).
-3. If "track" is "song" or text contains musical notes (♪), translate the song lyrics poetically and maintain the musical notes.
-4. Do NOT merge or delete any objects. Keep the exact same "id", "startTime", "endTime", "japaneseText", and "track".
-5. COMPLETE COVERAGE: You MUST translate every single object in the array up to the very last one. Do not stop early, do not truncate.
-
-Input JSON:
-${JSON.stringify(jpSubtitles)}
-
-Return ONLY the updated valid JSON array. Output raw JSON array only, without markdown formatting.`;
-
-        const stage2Config = {
-          contents: [
-            { role: 'user', parts: [{ text: promptStage2 }] }
-          ],
-          config: { 
-            responseMimeType: 'application/json', 
-            maxOutputTokens: 8192,
-
-          }
-        };
-
-        let response2;
-        try {
-          response2 = await ai.models.generateContent({ model: targetModel, ...stage2Config });
-        } catch (err) {
-          console.warn(`[Gemini AI] Stage 2 failed with ${targetModel}: ${err.message}. Trying ${fallbackModel}...`);
-          try {
-            response2 = await ai.models.generateContent({ model: fallbackModel, ...stage2Config });
-          } catch (err2) {
-            console.warn(`[Gemini AI] Fallback 2 failed: ${err2.message}. Trying ${secondaryFallbackModel}...`);
-            try {
-              response2 = await ai.models.generateContent({ model: secondaryFallbackModel, ...stage2Config });
-            } catch (err3) {
-              console.warn(`[Gemini AI] All models failed for Stage 2 on chunk ${i + 1}: ${err3.message}`);
-            }
-          }
-        }
-
-        // Chunk completed successfully
-        let rawText2 = (response2?.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-        let translatedSubtitles = [];
-        try {
-          translatedSubtitles = JSON.parse(rawText2);
-        } catch (parseErr) {
-          try {
-            const lastValidIndex = rawText2.lastIndexOf('}');
-            if (lastValidIndex !== -1) {
-              translatedSubtitles = JSON.parse(rawText2.substring(0, lastValidIndex + 1) + ']');
-            }
-          } catch (e) {
-            console.error(`[Gemini JSON Error] Stage 2 failed for chunk ${i}. Using Japanese only.`);
-            translatedSubtitles = jpSubtitles; // Fallback to un-translated
-          }
-        }
-
-        // Add offset to timestamps
-        const offsetSeconds = i * chunkDuration;
-        translatedSubtitles.forEach(sub => {
-          let sSec = parseTimestampToSeconds(sub.startTime || '00:00:00,000') + offsetSeconds;
-          let eSec = parseTimestampToSeconds(sub.endTime || '00:00:02,000') + offsetSeconds;
-          
-          allParsedSubtitles.push({
-            id: globalId++,
-            startTime: formatSecondsToTimestamp(sSec),
-            endTime: formatSecondsToTimestamp(eSec),
-            startSeconds: sSec,
-            endSeconds: eSec,
-            track: sub.track || 'dialogue',
-            japaneseText: sub.japaneseText || '',
-            englishText: sub.englishText || '',
-            arabicText: sub.arabicText || '',
-            approved: false,
-            auditNotes: ''
-          });
-        });
-
-        if (chunkKeyInfo.keyId !== 'fallback') {
-          geminiPool.releaseKey(chunkKeyInfo.keyId, true);
-        }
-      } catch (chunkErr) {
-        if (chunkKeyInfo && chunkKeyInfo.keyId !== 'fallback') {
-          geminiPool.releaseKey(chunkKeyInfo.keyId, false, chunkErr);
-        }
-        throw chunkErr;
-      }
-    }
-
-    // Await R2 upload completion if in progress
-    if (r2UploadPromise) {
-      try {
-        const r2Res = await r2UploadPromise;
-        if (r2Res && r2Res.publicUrl) {
-          project.videoUrl = r2Res.publicUrl;
-          project.r2Key = r2Res.key;
-          console.log(`🎬 [Process] Attached Cloudflare R2 videoUrl to project: ${project.videoUrl}`);
-        }
-      } catch (uploadErr) {
-        console.warn('⚠️ [Process] R2 upload wait failed:', uploadErr.message);
-      }
-    }
-
-    project.subtitles = allParsedSubtitles;
-
-    // CRITICAL VALIDATION: Verify subtitles were actually recognized
-    if (!allParsedSubtitles || allParsedSubtitles.length === 0) {
-      const errMsg = 'لم يتم التعرف على أي حوارات صوتية في المقطع الصوتي (0 أسطر تم إنشاؤها). قد يكون المسار الصوتي صامتاً، أو به موسيقى فقط، أو حدث خطأ في استجابة الذكاء الاصطناعي.';
-      console.error(`⚠️ [Process AI] Project ${projectId} produced 0 subtitles. Marking as failed.`);
-      
-      logSystemEvent('error', 'video_proc', `AI Voice Recognition returned 0 subtitle lines for project "${project.projectName}" (${projectId}). Marked as failed.`, {
-        projectId,
-        projectName: project.projectName,
-        ownerId: project.ownerId,
-        durationSecs: finalDurationSecs,
-        chunksProcessed: chunkFiles.length
-      });
-
-      project.subtitles = [];
-      project.status = 'failed';
-      project.processingProgress = 0;
-      project.processingStatus = errMsg;
-      project.error = 'No subtitles detected from audio track (0 lines generated).';
-      project.updatedAt = new Date().toISOString();
-
-      const freshDb = readProjects();
-      freshDb[projectId] = { ...(freshDb[projectId] || {}), ...project };
-      writeProjects(freshDb);
-
-      socketService.emitProgress(projectId, {
-        progress: 0,
-        status: errMsg,
-        stage: 'process_failed',
-        error: errMsg,
-        projectId
-      });
-
-      const failPayload = {
-        success: false,
-        error: errMsg,
-        projectId,
-        project
-      };
-      if (optionalRes) return optionalRes.status(422).json(failPayload);
-      return failPayload;
-    }
-
-    // Stage 4: Detect Anime Characters and generate Avatar Thumbnails
-    emitAndSaveProgress(100, 100, 100, 'فحص شخصيات الأنمي وبطاقات التعريف والوجوه...', 85, 'characters');
-    try {
-      const charactersDir = path.join(targetDir, 'characters');
-      console.log(`[CharacterService] Extracting character entities & avatars for ${projectId}...`);
-      const detectedCharacters = await detectCharactersFromSubtitles(allParsedSubtitles, geminiPool, {
-        videoPath,
-        charactersDir,
-        urlPrefix
-      });
-      project.characters = detectedCharacters;
-      console.log(`[CharacterService] Identified ${detectedCharacters.length} character(s).`);
-    } catch (charErr) {
-      console.warn('[CharacterService] Character extraction warning:', charErr.message);
-      project.characters = [];
-    }
-
-    // Stage 5: Detect On-Screen Visual Signs & Titles (Full-Video OCR)
-    emitAndSaveProgress(100, 100, 100, 'فحص اللوحات والنصوص والعناوين في الفيديو (Vision OCR)...', 93, 'vision_ocr');
-    try {
-      const signsDir = path.join(targetDir, 'visual_signs');
-      console.log(`[VisionOCR] Extracting on-screen signs, titles & notes for ${projectId}...`);
-      const currentSettings = readSettings();
-      const detectedSigns = await detectVisualSignsFromVideo(videoPath, geminiPool, {
-        signsDir,
-        urlPrefix,
-        modelName: currentSettings.visionOcrModel || 'gemini-3.8-flash'
-      });
-      project.visualSigns = detectedSigns;
-      console.log(`[VisionOCR] Identified ${detectedSigns.length} on-screen sign(s).`);
-    } catch (visErr) {
-      console.warn('[VisionOCR] Visual OCR warning:', visErr.message);
-      project.visualSigns = [];
-    }
-
-    // Write SRT file to project folder
-    let srtContent = '';
-    allParsedSubtitles.forEach((sub, idx) => {
-      srtContent += `${idx + 1}\n${sub.startTime} --> ${sub.endTime}\n${sub.arabicText || sub.englishText}\n\n`;
-    });
-    fs.writeFileSync(srtPath, srtContent, 'utf8');
-    project.srtUrl = `${urlPrefix}/subtitle.srt`;
-    project.updatedAt = new Date().toISOString();
-    project.processingProgress = 100;
-    project.processingStatus = "Completed";
-    project.status = "ready";
-    project.isUnread = true;
-    project.subtitlesCount = allParsedSubtitles.length;
-
-    // Save individual subtitle file
-    db.saveProjectSubtitles(projectId, allParsedSubtitles);
-
-    // Read fresh DB to avoid overwriting R2 URL or concurrent updates
-    const freshDb = readProjects();
-    freshDb[projectId] = {
-      ...(freshDb[projectId] || {}),
-      ...project,
-      subtitles: [] // Keep metadata file lightweight!
-    };
-    writeProjects(freshDb);
-    const finalProject = db.getFullProject(projectId) || freshDb[projectId];
-
-    logSystemEvent('info', 'video_proc', `Completed AI processing for "${project.projectName}" (${projectId}): ${allParsedSubtitles.length} subtitle lines generated.`, {
-      projectId,
-      linesCount: allParsedSubtitles.length,
-      charactersCount: (finalProject.characters || []).length
-    });
-
-    // Emit final process completion event so wizard transitions immediately!
-    emitAndSaveProgress(100, 100, 100, 'اكتملت جميع مراحل المعالجة بنجاح!', 100, 'ready');
-    socketService.emitProgress(projectId, {
-      stage: 'process_completed',
-      progress: 100,
-      status: 'Completed',
-      projectId
-    });
-
-    const resultPayload = {
-      success: true,
-      projectId,
-      audioUrl: finalProject.audioUrl,
-      srtUrl: finalProject.srtUrl,
-      subtitles: allParsedSubtitles,
-      visualSigns: finalProject.visualSigns || [],
-      characters: finalProject.characters || [],
-      project: finalProject
-    };
-
-    if (optionalRes) {
-      return optionalRes.json(resultPayload);
-    }
-    return resultPayload;
-
+    if (optionalRes) return optionalRes.json(result);
+    return result;
   } catch (err) {
-    console.error('[Process AI Error]', err);
-    logSystemEvent('error', 'video_proc', `AI pipeline failed for "${project?.projectName || projectId}": ${err.message}`, {
-      projectId,
-      projectName: project?.projectName,
-      ownerId: project?.ownerId,
-      stage: project?.processingStage || 'processing',
-      error: err.message,
-      stack: err.stack?.slice(0, 500)
-    });
-    try {
-      const errDb = readProjects();
-      if (errDb[projectId]) {
-        errDb[projectId].status = 'failed';
-        errDb[projectId].processingStatus = `فشل في معالجة الصوت: ${err.message}`;
-        errDb[projectId].error = err.message;
-        writeProjects(errDb);
-      }
-      socketService.emitProgress(projectId, {
-        progress: 0,
-        status: `فشل في معالجة الصوت: ${err.message}`,
-        stage: 'process_failed',
-        error: err.message
-      });
-    } catch (_) {}
-
-    if (optionalRes) {
-      return optionalRes.status(500).json({
-        error: 'AI Transcription Error: ' + err.message
-      });
-    }
+    if (optionalRes) return optionalRes.status(500).json({ error: err.message });
     throw err;
-  } finally {
-    activeProcessingSet.delete(projectId);
   }
 }
 
 app.post('/api/process', async (req, res) => {
-  req.setTimeout(0);
-  res.setTimeout(0);
   const { projectId, videoDurationSecs, sync } = req.body;
 
   if (!projectId || typeof projectId !== 'string' || projectId === '[object Object]') {
@@ -2621,21 +1932,22 @@ app.post('/api/process', async (req, res) => {
     return res.status(404).json({ error: `Project not found: ${projectId}` });
   }
 
-  // If already completed, return cached result immediately
-  if (project.processingProgress === 100 && Array.isArray(project.subtitles) && project.subtitles.length > 0) {
+  // If already completed, return full cached project immediately
+  if (project.processingProgress === 100 && project.status === 'ready') {
+    const fullProj = db.getFullProject(projectId);
     return res.json({
       success: true,
       projectId,
-      audioUrl: project.audioUrl,
-      srtUrl: project.srtUrl,
-      subtitles: project.subtitles,
-      visualSigns: project.visualSigns || [],
-      characters: project.characters || [],
-      project
+      audioUrl: fullProj.audioUrl,
+      srtUrl: fullProj.srtUrl,
+      subtitles: fullProj.subtitles,
+      visualSigns: fullProj.visualSigns || [],
+      characters: fullProj.characters || [],
+      project: fullProj
     });
   }
 
-  // Pre-validate user minute balance before starting to fail early with 402/403
+  // Credit and limit check
   const userId = project.ownerId || 'usr_guest';
   if (userId !== 'usr_guest') {
     const users = readUsers();
@@ -2644,43 +1956,57 @@ app.post('/api/process', async (req, res) => {
       const approxDuration = Number(videoDurationSecs) || project.duration || 60;
       const videoMinutes = Math.ceil(approxDuration / 60);
       if (videoMinutes > 40 && !user.hasPurchased) {
-        return res.status(403).json({ error: 'Free tier is limited to episodes and clips (under 40 mins). Please purchase a package to process movies.' });
+        return res.status(403).json({ error: 'Free tier is limited to episodes and clips (under 40 mins).' });
       }
       if (user.minuteBalance < videoMinutes) {
-        return res.status(402).json({ error: `Insufficient credits. You have ${user.minuteBalance} minutes left, but this video requires ${videoMinutes} minutes.` });
+        return res.status(402).json({ error: `Insufficient credits. You have ${user.minuteBalance} minutes left.` });
       }
+      user.minuteBalance -= videoMinutes;
+      writeUsers(users);
     }
   }
 
-  // If already processing in background, return progress state
-  if (activeProcessingSet.has(projectId)) {
-    return res.json({
-      success: true,
-      status: 'processing',
-      message: 'Processing already in progress',
-      projectId,
-      project
-    });
+  // Mark project state as queued in database
+  project.status = 'queued';
+  project.processingStatus = 'Queued in processing pool...';
+  project.processingProgress = 5;
+  project.updatedAt = new Date().toISOString();
+  writeProjects(projects);
+
+  // If client explicitly requested synchronous processing
+  if (sync === true || req.query.sync === 'true') {
+    return executeVideoProcessing(projectId, videoDurationSecs, res);
   }
 
-  const currentUsers = readUsers();
-  const currentUserObj = userId ? currentUsers[userId] : null;
+  // Enqueue job into BullMQ Microservice Queue
+  try {
+    const queueRes = await queueService.addJob({
+      projectId,
+      videoDurationSecs,
+      userId,
+      projectName: project.projectName
+    });
 
-  if (sync === true || req.query.sync === 'true') {
-    await executeVideoProcessing(projectId, videoDurationSecs, res);
-  } else {
-    // Asynchronous non-blocking start: Prevents HTTP proxy timeouts and socket dropouts
-    res.json({
+    console.log(`📋 [Queue] Enqueued project ${projectId} into BullMQ (Job ID: ${queueRes.jobId})`);
+
+    return res.status(202).json({
+      success: true,
+      status: 'queued',
+      projectId,
+      jobId: queueRes.jobId,
+      message: 'Video enqueued successfully in background processing pool'
+    });
+  } catch (queueErr) {
+    console.warn(`⚠️ [Queue Fallback] Redis enqueue failed (${queueErr.message}). Running in-process fallback...`);
+    executeVideoProcessing(projectId, videoDurationSecs, null).catch(err => {
+      console.error(`[In-process fallback error for ${projectId}]:`, err.message);
+    });
+
+    return res.status(202).json({
       success: true,
       status: 'processing',
       projectId,
-      minuteBalance: currentUserObj ? currentUserObj.minuteBalance : undefined,
       message: 'AI audio processing pipeline started in background'
-    });
-
-    // Run in background safely
-    executeVideoProcessing(projectId, videoDurationSecs, null).catch(err => {
-      console.error(`[Background Process Error for ${projectId}]:`, err.message);
     });
   }
 });
@@ -4503,6 +3829,11 @@ if (fs.existsSync(distPath)) {
 
 const server = http.createServer(app);
 socketService.init(server);
+
+// Inter-Process Redis Pub/Sub Bridge: Receives progress from subtie-worker microservice and emits to WebSocket clients
+subscribeProgress((projectId, data) => {
+  socketService.emitProgress(projectId, data);
+});
 
 function reconcileStartupWorkloads() {
   try {
