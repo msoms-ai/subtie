@@ -53,6 +53,8 @@ class TorrentService {
       maxConns: 200, // High-concurrency support for multiple simultaneous torrents
       dht: true,
       tracker: true,
+      natUpnp: false, // Disable SSDP / UPnP multicast probing to prevent EventEmitter memory leak
+      natPmp: false   // Disable NAT-PMP router probing to prevent memory leak
     });
 
     this.activeJobs = new Map(); // projectId -> jobData
