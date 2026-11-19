@@ -23,6 +23,7 @@ import { GoogleGenAI } from '@google/genai';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import bcrypt from 'bcryptjs';
+import adminRouter from './routes/adminRoutes.js';
 import nodemailer from 'nodemailer';
 import { detectCharactersFromSubtitles, replaceCharacterNamesInSubtitles } from './services/characterService.js';
 import { torrentService } from './services/torrentService.js';
@@ -84,6 +85,18 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // Serve static uploaded videos, audio files, and user avatars
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Dedicated Admin API Router (Protected by strict Admin RBAC guard)
+app.use('/api/admin', (req, res, next) => {
+  const userId = req.headers['x-user-id'] || req.query.userId;
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const users = readUsers();
+  const user = users[userId];
+  if (!user || user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Access forbidden: Administrator privileges required' });
+  }
+  next();
+}, adminRouter);
 
 // Lightweight Service Health Check Endpoint (Used by Watchdog, Plesk, and Apache)
 app.get('/api/health', (req, res) => {

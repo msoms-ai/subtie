@@ -13,6 +13,7 @@ import RulesModal from './components/Modals/RulesModal.jsx';
 import AuthModal from './components/Auth/AuthModal.jsx';
 import UserProfileModal from './components/Profile/UserProfileModal.jsx';
 import AdminUserConsoleModal from './components/Admin/AdminUserConsoleModal.jsx';
+import AdminLayout from './components/Admin/AdminLayout.jsx';
 import AssignAuditorModal from './components/Projects/AssignAuditorModal.jsx';
 import ActivitiesModal from './components/Activities/ActivitiesModal.jsx';
 import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, X } from 'lucide-react';
@@ -338,6 +339,8 @@ export default function App() {
         setView('wizard');
       } else if (state.view === 'pricing') {
         setView('pricing');
+      } else if (state.view === 'admin') {
+        setView('admin');
       }
     };
     window.addEventListener('popstate', onPopState);
@@ -437,6 +440,22 @@ export default function App() {
   };
 
   const isAr = lang === 'ar';
+  if (view === 'admin' && user?.role === 'Admin') {
+    return (
+      <AdminLayout
+        user={user}
+        onExit={() => {
+          window.history.pushState({ view: 'landing' }, '', window.location.pathname);
+          setView('landing');
+        }}
+        lang={lang}
+        theme={theme}
+        onToggleLang={toggleLang}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
   const isLight = theme === 'light';
 
   return (
@@ -466,7 +485,10 @@ export default function App() {
         unreadProjectsCount={unreadProjectsCount}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
-        onOpenAdminConsole={() => setIsAdminConsoleOpen(true)}
+        onOpenAdminConsole={() => {
+          window.history.pushState({ view: 'admin' }, '', window.location.pathname);
+          setView('admin');
+        }}
         onLogout={handleLogout}
       />
 

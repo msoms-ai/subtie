@@ -146,6 +146,18 @@ export default function Header({
             </button>
           )}
 
+          {/* Admin Operations Center Button (Only for Admin) */}
+          {user && user.role === 'Admin' && (
+            <button
+              onClick={onOpenAdminConsole}
+              className="flex items-center space-x-1.5 sm:space-x-2 rtl:space-x-reverse text-[10px] sm:text-xs font-black text-white bg-gradient-to-r from-rose-600 to-purple-600 hover:opacity-95 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-md shadow-rose-600/30 hover:scale-[1.02] cursor-pointer"
+              title={isAr ? 'لوحة تحكم المدير ومراقبة النظام' : 'Admin Operations Center'}
+            >
+              <ShieldCheck className="w-4 h-4 text-rose-300 shrink-0" />
+              <span className="hidden md:inline">{isAr ? 'لوحة المدير' : 'Admin Center'}</span>
+            </button>
+          )}
+
           {/* User Profile Avatar & Dropdown Menu */}
           {user ? (
             <div className="relative" ref={dropdownRef}>

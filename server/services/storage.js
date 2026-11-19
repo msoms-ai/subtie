@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import fs from 'fs';
 import path from 'path';
@@ -191,6 +191,50 @@ class StorageService {
       return `${cleanDomain}/${key}`;
     }
     return `https://${creds.accountId}.r2.cloudflarestorage.com/${creds.bucketName}/${key}`;
+  }
+
+  /**
+   * List objects in the R2 bucket with public URLs
+   */
+  async listObjects(prefix = '', maxKeys = 100) {
+    if (!this.isConfigured()) return { configured: false, objects: [], total: 0 };
+    const creds = this.getCredentials();
+    const client = this.getClient();
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: creds.bucketName,
+        Prefix: prefix || undefined,
+        MaxKeys: maxKeys
+      });
+      const res = await client.send(command);
+      const objects = (res.Contents || []).map(obj => ({
+        key: obj.Key,
+        size: obj.Size,
+        lastModified: obj.LastModified,
+        publicUrl: this.getPublicUrl(obj.Key)
+      }));
+      return {
+        configured: true,
+        bucket: creds.bucketName,
+        objects,
+        total: objects.length,
+        isTruncated: res.IsTruncated || false
+      };
+    } catch (err) {
+      console.error('[StorageService] listObjects error:', err.message);
+      return { configured: true, bucket: creds.bucketName, objects: [], total: 0, error: err.message };
+    }
+  }
+
+  async deleteObject(key) {
+    if (!this.isConfigured()) throw new Error('R2 not configured');
+    const creds = this.getCredentials();
+    const client = this.getClient();
+    const command = new DeleteObjectCommand({
+      Bucket: creds.bucketName,
+      Key: key
+    });
+    return await client.send(command);
   }
 
   getStatus() {

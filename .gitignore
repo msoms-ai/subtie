@@ -21,3 +21,14 @@ server/data/gemini_keys_stats.json
 server/logs/*.log
 !server/logs/.gitkeep
 
+
+# Subtie V2.1 Runtime Exclusions
+server/data/*.sqlite*
+server/data/subtitles/*
+server/data/backups/*
+server/data/*.v1_backup
+server/data/newsletters.json
+server/data/system_logs.json
+server/data/transactions.json
+tmp/
+.node-version
