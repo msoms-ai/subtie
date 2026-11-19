@@ -1334,8 +1334,9 @@ app.post('/api/admin/users/:id/credit', (req, res) => {
     return res.status(404).json({ error: 'Target user account not found.' });
   }
 
-  const { minutes, reason } = req.body;
-  const creditMins = Number(minutes) || 0;
+  const rawMins = req.body.minutes ?? req.body.minutesDelta ?? req.body.amountMinutes ?? req.body.amount;
+  const creditMins = Number(rawMins) || 0;
+  const { reason } = req.body;
   if (creditMins === 0) {
     return res.status(400).json({ error: 'Invalid minutes amount specified.' });
   }

@@ -103,7 +103,9 @@ export default function UsersCrudModule({ user, lang = 'en' }) {
           'x-user-id': user?.id || ''
         },
         body: JSON.stringify({
+          minutes: Number(creditDelta),
           minutesDelta: Number(creditDelta),
+          amountMinutes: Number(creditDelta),
           reason: creditReason
         })
       });

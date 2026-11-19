@@ -555,11 +555,13 @@ router.put('/users/:id', (req, res) => {
   }
 });
 
-router.post('/users/:id/credits', (req, res) => {
+router.post(['/users/:id/credit', '/users/:id/credits'], (req, res) => {
   const { id } = req.params;
-  const { amountMinutes, reason } = req.body;
-  const num = Number(amountMinutes);
-  if (isNaN(num)) return res.status(400).json({ error: 'Valid minutes amount required' });
+  const raw = req.body.minutes ?? req.body.minutesDelta ?? req.body.amountMinutes ?? req.body.amount;
+  const num = Number(raw);
+  if (isNaN(num) || num === 0) {
+    return res.status(400).json({ error: 'Valid minutes amount required (cannot be zero or empty)' });
+  }
 
   try {
     const users = readUsers();
@@ -570,7 +572,7 @@ router.post('/users/:id/credits', (req, res) => {
     users[id].updatedAt = new Date().toISOString();
     writeUsers(users);
 
-    res.json({ success: true, minuteBalance: users[id].minuteBalance, adjustedBy: num, reason });
+    res.json({ success: true, minuteBalance: users[id].minuteBalance, adjustedBy: num, reason: req.body.reason });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
