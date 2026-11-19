@@ -111,7 +111,9 @@ export default function LoadVideoWizard({ user, onCompleteProcess, onCancel, lan
         } else if (data.success) {
           projectsArray = data.projects || [];
         }
-        const folders = [...new Set(projectsArray.map(p => p.projectName).filter(Boolean))];
+        const currentUserId = user?.id || 'usr_guest';
+        const userProjects = projectsArray.filter(p => (p.ownerId || 'usr_guest') === currentUserId);
+        const folders = [...new Set(userProjects.map(p => p.projectName).filter(Boolean))];
         setExistingFolders(folders);
 
         // Resilient folder initialization: NEVER override if user already set or passed an initial folder

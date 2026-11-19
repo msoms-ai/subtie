@@ -3154,6 +3154,34 @@ app.get('/api/folders/covers', (req, res) => {
   return res.json({ success: true, covers });
 });
 
+
+app.post('/api/folders/reorder', (req, res) => {
+  try {
+    const { folderName, projectIds } = req.body;
+    if (!Array.isArray(projectIds)) {
+      return res.status(400).json({ error: 'projectIds must be an array of project IDs' });
+    }
+
+    const projects = readProjects();
+    let updatedCount = 0;
+    projectIds.forEach((pid, index) => {
+      if (projects[pid]) {
+        projects[pid].order = index;
+        projects[pid].sortIndex = index;
+        updatedCount++;
+      }
+    });
+
+    if (updatedCount > 0) {
+      writeProjects(projects);
+    }
+    return res.json({ success: true, count: updatedCount });
+  } catch (err) {
+    console.error('[FolderReorder Error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/folders/generate-cover', async (req, res) => {
   try {
     const { folderName, force } = req.body;

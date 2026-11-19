@@ -1,5 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2, PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield, FolderInput, Folder } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2,
+  PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield, FolderInput, Folder,
+  LayoutGrid, List, GripVertical, Clock, Calendar, ChevronRight, FolderPlus
+} from 'lucide-react';
+
+// ====================================================
+// ARABIC GRAMMAR PLURALIZATION FOR ITEMS (عنصر / عناصر)
+// ====================================================
+export const formatArabicItemCount = (count) => {
+  if (count === 0) return 'لا توجد عناصر';
+  if (count === 1) return 'عنصر واحد';
+  if (count === 2) return 'عنصران';
+  
+  const lastTwo = count % 100;
+  
+  if (count >= 3 && count <= 10) {
+    return `${count} عناصر`;
+  }
+  
+  if (count > 10 && lastTwo >= 3 && lastTwo <= 10) {
+    return `${count} عناصر`;
+  }
+  
+  if (lastTwo >= 11 && lastTwo <= 99) {
+    return `${count} عنصراً`;
+  }
+  
+  return `${count} عنصر`;
+};
+
+export const formatItemCount = (count, isAr = false) => {
+  if (isAr) return formatArabicItemCount(count);
+  if (count === 0) return 'No items';
+  if (count === 1) return '1 item';
+  return `${count} items`;
+};
+
+// ====================================================
+// EPISODE BACKGROUND IMAGE RESOLVER
+// Extracts title sign, first visual sign, titleFrame, or thumbnail
+// ====================================================
+export const getEpisodeBackground = (p) => {
+  if (!p) return null;
+  // 1. Title sign from visualSigns
+  const titleSign = p.visualSigns?.find(s => s.category === 'title');
+  if (titleSign?.thumbnailUrl) return titleSign.thumbnailUrl;
+  if (titleSign?.imageUrl) return titleSign.imageUrl;
+  if (titleSign?.cropUrl) return titleSign.cropUrl;
+
+  // 2. First visual sign
+  const firstSign = p.visualSigns?.[0];
+  if (firstSign?.thumbnailUrl) return firstSign.thumbnailUrl;
+  if (firstSign?.imageUrl) return firstSign.imageUrl;
+  if (firstSign?.cropUrl) return firstSign.cropUrl;
+
+  // 3. titleFrame or thumbnailUrl or coverImage
+  if (p.titleFrame) return p.titleFrame;
+  if (p.thumbnailUrl) return p.thumbnailUrl;
+  if (p.coverImage) return p.coverImage;
+
+  // 4. Character image if available
+  if (p.characters?.[0]?.imageUrl) return p.characters[0].imageUrl;
+
+  return null;
+};
 
 export default function ProjectsGallery({
   onEditProject,
@@ -16,10 +81,24 @@ export default function ProjectsGallery({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
   const [sortOption, setSortOption] = useState('newest');
-  const [viewMode, setViewMode] = useState('folders');
-  const [selectedFolder, setSelectedFolder] = useState(initialFolder || null); // 'all', 'episode', 'movie', 'trailer', 'clip'
 
-  // Push / Pop browser history sync for folder navigation
+  // View modes:
+  // folderViewMode: 'cards' | 'list' (root view)
+  // episodeViewMode: 'cards' | 'list' (inside folder)
+  const [folderViewMode, setFolderViewMode] = useState('cards');
+  const [episodeViewMode, setEpisodeViewMode] = useState('cards');
+
+  // Folder navigation & isolation
+  const [selectedFolderKey, setSelectedFolderKey] = useState(null);
+  const [selectedFolder, setSelectedFolder] = useState(initialFolder || null);
+
+  // Episodes inside active folder (with custom drag-and-drop order)
+  const [orderedEpisodes, setOrderedEpisodes] = useState([]);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+
+  // Browser history sync
   useEffect(() => {
     if (initialFolder) {
       try {
@@ -31,23 +110,27 @@ export default function ProjectsGallery({
   useEffect(() => {
     const handlePopState = (event) => {
       if (event.state && event.state.view === 'projects') {
-        setSelectedFolder(event.state.subtieFolder || null);
+        const folder = event.state.subtieFolder || null;
+        setSelectedFolder(folder);
+        if (!folder) setSelectedFolderKey(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const handleSelectFolder = (folder) => {
-    setSelectedFolder(folder);
-    if (onFolderChange) onFolderChange(folder);
+  const handleSelectFolder = (folderObj) => {
+    setSelectedFolderKey(folderObj.key);
+    setSelectedFolder(folderObj.name);
+    if (onFolderChange) onFolderChange(folderObj.name);
     try {
-      window.history.pushState({ view: 'projects', subtieFolder: folder }, '', window.location.pathname);
+      window.history.pushState({ view: 'projects', subtieFolder: folderObj.name, folderKey: folderObj.key }, '', window.location.pathname);
     } catch (e) {}
   };
 
   const handleBackToFolders = () => {
     setSelectedFolder(null);
+    setSelectedFolderKey(null);
     if (onFolderChange) onFolderChange(null);
     if (window.history.state?.subtieFolder) {
       window.history.back();
@@ -70,7 +153,7 @@ export default function ProjectsGallery({
   // Move to Folder Modal state
   const [movingProject, setMovingProject] = useState(null);
   const [targetFolderName, setTargetFolderName] = useState('');
-  const [moveFolderMode, setMoveFolderMode] = useState('existing'); // 'existing' | 'new'
+  const [moveFolderMode, setMoveFolderMode] = useState('existing');
   const [isMoving, setIsMoving] = useState(false);
   const [moveError, setMoveError] = useState(null);
 
@@ -79,8 +162,10 @@ export default function ProjectsGallery({
     setMoveError(null);
     setIsMoving(false);
     
-    // Available folders (unique list of all existing folders excluding current)
-    const allFolders = [...new Set(projects.map(p => p.projectName).filter(Boolean))];
+    // Only suggest folders owned by this user
+    const currentUserId = user?.id || 'usr_guest';
+    const userProjects = projects.filter(p => (p.ownerId || 'usr_guest') === currentUserId);
+    const allFolders = [...new Set(userProjects.map(p => p.projectName).filter(Boolean))];
     const otherFolders = allFolders.filter(f => f !== project.projectName);
     
     if (otherFolders.length > 0) {
@@ -218,7 +303,7 @@ export default function ProjectsGallery({
     }
   };
 
-  // Arabic category translation helper
+  // Category translation and icon helpers
   const getCategoryLabel = (type) => {
     const t = String(type || 'Episode').toLowerCase();
     if (t.includes('movie') || t.includes('فيلم')) return isAr ? 'فيلم سينمائي' : 'Feature Movie';
@@ -227,7 +312,6 @@ export default function ProjectsGallery({
     return isAr ? 'حلقة أنمي' : 'Anime Episode';
   };
 
-  // Category Icon helper
   const getCategoryIcon = (type) => {
     const t = String(type || 'Episode').toLowerCase();
     if (t.includes('movie') || t.includes('فيلم')) return <Video className="w-4 h-4 text-pink-300" />;
@@ -237,31 +321,174 @@ export default function ProjectsGallery({
   };
 
   // Sort and filter projects
-  const sortedProjects = [...projects].sort((a, b) => {
-    const dateA = new Date(a.updatedAt || a.createdAt || a.id || 0).getTime();
-    const dateB = new Date(b.updatedAt || b.createdAt || b.id || 0).getTime();
-    if (sortOption === 'newest') return dateB - dateA;
-    if (sortOption === 'oldest') return dateA - dateB;
-    if (sortOption === 'nameAsc') return (a.projectName || '').localeCompare(b.projectName || '');
-    if (sortOption === 'nameDesc') return (b.projectName || '').localeCompare(a.projectName || '');
-    return 0;
-  });
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || a.id || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || b.id || 0).getTime();
+      if (sortOption === 'newest') return dateB - dateA;
+      if (sortOption === 'oldest') return dateA - dateB;
+      if (sortOption === 'nameAsc') return (a.projectName || '').localeCompare(b.projectName || '');
+      if (sortOption === 'nameDesc') return (b.projectName || '').localeCompare(a.projectName || '');
+      return 0;
+    });
+  }, [projects, sortOption]);
 
-  const filteredProjects = sortedProjects.filter(p => {
-    const matchesSearch =
-      (p.projectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.mediaTitle || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (!matchesSearch) return false;
-    if (activeCategoryFilter === 'all') return true;
+  const filteredProjects = useMemo(() => {
+    return sortedProjects.filter(p => {
+      const matchesSearch =
+        (p.projectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.mediaTitle || '').toLowerCase().includes(searchQuery.toLowerCase());
+      
+      if (!matchesSearch) return false;
+      if (activeCategoryFilter === 'all') return true;
 
-    const pType = String(p.projectType || 'Episode').toLowerCase();
-    if (activeCategoryFilter === 'episode') return pType.includes('episode') || pType.includes('حلقة');
-    if (activeCategoryFilter === 'movie') return pType.includes('movie') || pType.includes('فيلم');
-    if (activeCategoryFilter === 'trailer') return pType.includes('trailer') || pType.includes('تريلر') || pType.includes('عرض');
-    if (activeCategoryFilter === 'clip') return pType.includes('clip') || pType.includes('مقطع');
-    return true;
-  });
+      const pType = String(p.projectType || 'Episode').toLowerCase();
+      if (activeCategoryFilter === 'episode') return pType.includes('episode') || pType.includes('حلقة');
+      if (activeCategoryFilter === 'movie') return pType.includes('movie') || pType.includes('فيلم');
+      if (activeCategoryFilter === 'trailer') return pType.includes('trailer') || pType.includes('تريلر') || pType.includes('عرض');
+      if (activeCategoryFilter === 'clip') return pType.includes('clip') || pType.includes('مقطع');
+      return true;
+    });
+  }, [sortedProjects, searchQuery, activeCategoryFilter]);
+
+  // ====================================================
+  // FOLDERS GROUPING & USER ISOLATION (Requirement 4)
+  // Isolates folders even if different users use the same folder name
+  // ====================================================
+  const foldersList = useMemo(() => {
+    const map = new Map();
+    filteredProjects.forEach(p => {
+      const rawName = p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized');
+      const ownerId = p.ownerId || 'usr_guest';
+      // For Admin, separate folders per owner to prevent collision
+      const key = user?.role === 'Admin' ? `${ownerId}:::${rawName}` : rawName;
+      
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: rawName,
+          ownerId,
+          ownerName: p.ownerName || '',
+          ownerEmail: p.ownerEmail || '',
+          projects: [],
+          latestDate: new Date(p.updatedAt || p.createdAt || p.id || 0).getTime()
+        });
+      }
+      const entry = map.get(key);
+      entry.projects.push(p);
+      const pDate = new Date(p.updatedAt || p.createdAt || p.id || 0).getTime();
+      if (pDate > entry.latestDate) {
+        entry.latestDate = pDate;
+      }
+    });
+
+    return Array.from(map.values());
+  }, [filteredProjects, isAr, user?.role]);
+
+  // Active folder resolver
+  const activeFolder = useMemo(() => {
+    if (!selectedFolder) return null;
+    if (selectedFolderKey) {
+      const found = foldersList.find(f => f.key === selectedFolderKey);
+      if (found) return found;
+    }
+    return foldersList.find(f => f.name === selectedFolder) || {
+      key: selectedFolder,
+      name: selectedFolder,
+      ownerId: user?.id,
+      projects: filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === selectedFolder)
+    };
+  }, [selectedFolder, selectedFolderKey, foldersList, filteredProjects, isAr, user?.id]);
+
+  // Keep episodes sorted and synchronized
+  useEffect(() => {
+    if (!activeFolder) {
+      setOrderedEpisodes([]);
+      return;
+    }
+    const sorted = [...activeFolder.projects].sort((a, b) => {
+      if (typeof a.order === 'number' && typeof b.order === 'number') {
+        return a.order - b.order;
+      }
+      if (typeof a.order === 'number') return -1;
+      if (typeof b.order === 'number') return 1;
+
+      if (sortOption === 'newest') return new Date(b.createdAt || b.id) - new Date(a.createdAt || a.id);
+      if (sortOption === 'oldest') return new Date(a.createdAt || a.id) - new Date(b.createdAt || b.id);
+      if (sortOption === 'nameAsc') return (a.mediaTitle || '').localeCompare(b.mediaTitle || '');
+      if (sortOption === 'nameDesc') return (b.mediaTitle || '').localeCompare(a.mediaTitle || '');
+      return 0;
+    });
+    setOrderedEpisodes(sorted);
+  }, [activeFolder, sortOption]);
+
+  // ====================================================
+  // HTML5 DRAG-AND-DROP REORDER HANDLERS (Requirement 1)
+  // ====================================================
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', index.toString());
+    } catch (err) {}
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (e, index) => {
+    if (dragOverIndex === index) {
+      setDragOverIndex(null);
+    }
+  };
+
+  const handleDrop = async (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const updated = [...orderedEpisodes];
+    const [movedItem] = updated.splice(draggedIndex, 1);
+    updated.splice(targetIndex, 0, movedItem);
+
+    const reindexed = updated.map((item, idx) => ({ ...item, order: idx }));
+    setOrderedEpisodes(reindexed);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+
+    // Save reorder to server
+    try {
+      setIsSavingOrder(true);
+      const headers = { 'Content-Type': 'application/json' };
+      if (user?.id) headers['x-user-id'] = user.id;
+
+      await fetch('/api/folders/reorder', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          folderName: selectedFolder,
+          projectIds: reindexed.map(p => p.id)
+        })
+      });
+    } catch (err) {
+      console.error('Failed to save episode order:', err);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -319,30 +546,30 @@ export default function ProjectsGallery({
       {/* SORTING & FILTER TABS BAR */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center space-x-2 rtl:space-x-reverse overflow-x-auto pb-2">
-        <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 flex items-center space-x-1 rtl:space-x-reverse shrink-0 px-2">
-          <Filter className="w-3.5 h-3.5 text-pink-400 theme-light:text-purple-700" />
-          <span>{isAr ? 'التصفية حسب الفئة:' : 'Filter by Category:'}</span>
-        </span>
+          <span className="text-xs font-black text-purple-300 theme-light:text-purple-950 flex items-center space-x-1 rtl:space-x-reverse shrink-0 px-2">
+            <Filter className="w-3.5 h-3.5 text-pink-400 theme-light:text-purple-700" />
+            <span>{isAr ? 'التصفية حسب الفئة:' : 'Filter by Category:'}</span>
+          </span>
 
-        {[
-          { id: 'all', labelAr: 'جميع المشاريع', labelEn: 'All Projects' },
-          { id: 'episode', labelAr: 'حلقات الأنمي', labelEn: 'Anime Episodes' },
-          { id: 'movie', labelAr: 'الأفلام السينمائية', labelEn: 'Feature Movies' },
-          { id: 'trailer', labelAr: 'العروض الترويجية', labelEn: 'Teasers & Trailers' },
-          { id: 'clip', labelAr: 'مقاطع الفيديو', labelEn: 'Short Clips' }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveCategoryFilter(tab.id)}
-            className={`px-4 py-2 rounded-2xl text-xs font-black transition shrink-0 border ${
-              activeCategoryFilter === tab.id
-                ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 shadow-md wizard-white-text'
-                : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 hover:bg-purple-800 wizard-white-text'
-            }`}
-          >
-            {isAr ? tab.labelAr : tab.labelEn}
-          </button>
-        ))}
+          {[
+            { id: 'all', labelAr: 'جميع المشاريع', labelEn: 'All Projects' },
+            { id: 'episode', labelAr: 'حلقات الأنمي', labelEn: 'Anime Episodes' },
+            { id: 'movie', labelAr: 'الأفلام السينمائية', labelEn: 'Feature Movies' },
+            { id: 'trailer', labelAr: 'العروض الترويجية', labelEn: 'Teasers & Trailers' },
+            { id: 'clip', labelAr: 'مقاطع الفيديو', labelEn: 'Short Clips' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveCategoryFilter(tab.id)}
+              className={`px-4 py-2 rounded-2xl text-xs font-black transition shrink-0 border ${
+                activeCategoryFilter === tab.id
+                  ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white border-purple-400 shadow-md wizard-white-text'
+                  : 'bg-purple-950 theme-light:bg-purple-800 text-white border-purple-500/40 theme-light:border-purple-600 hover:bg-purple-800 wizard-white-text'
+              }`}
+            >
+              {isAr ? tab.labelAr : tab.labelEn}
+            </button>
+          ))}
         </div>
 
         {/* SORT DROPDOWN */}
@@ -358,44 +585,130 @@ export default function ProjectsGallery({
         </select>
       </div>
 
-      {/* Projects Grid Layout */}
-      {/* VIEW MODE TOGGLE */}
-      <div className="flex justify-end mb-4" dir={isAr ? 'rtl' : 'ltr'}>
-        <div className="flex bg-slate-900 theme-light:bg-white rounded-xl p-1 border border-slate-700 theme-light:border-purple-300 shadow-md">
-          <button onClick={() => { setViewMode('folders'); setSelectedFolder(null); if (onFolderChange) onFolderChange(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'folders' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
-            {isAr ? 'عرض المجلدات' : 'Folders'}
-          </button>
-          <button onClick={() => setViewMode('flat')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === 'flat' ? 'bg-purple-600 text-white' : 'text-slate-400 theme-light:text-slate-500'}`}>
-            {isAr ? 'عرض القائمة' : 'List'}
-          </button>
+      {/* ==================================================== */}
+      {/* ROOT LEVEL: FOLDERS VIEW CONTROLS (Requirement 6)    */}
+      {/* ==================================================== */}
+      {!selectedFolder && (
+        <div className="flex items-center justify-between mb-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-slate-400 font-bold">
+            <Folder className="w-4 h-4 text-purple-400" />
+            <span>
+              {isAr ? `إجمالي المجلدات: ${foldersList.length}` : `Total Folders: ${foldersList.length}`}
+            </span>
+          </div>
+
+          <div className="flex items-center bg-slate-900 theme-light:bg-white rounded-xl p-1 border border-slate-700 theme-light:border-purple-300 shadow-md">
+            <button
+              type="button"
+              onClick={() => setFolderViewMode('cards')}
+              className={`flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                folderViewMode === 'cards'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-slate-400 theme-light:text-slate-600 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>{isAr ? 'عرض المجلدات كبطاقات' : 'Folder Card View'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFolderViewMode('list')}
+              className={`flex items-center space-x-1.5 rtl:space-x-reverse px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                folderViewMode === 'list'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-slate-400 theme-light:text-slate-600 hover:text-white'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>{isAr ? 'عرض المجلدات كقائمة' : 'Folder List View'}</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* FOLDER NAVIGATION BACK BUTTON & FOLDER OWNER FOR ADMIN */}
-      {viewMode === 'folders' && selectedFolder && (() => {
-        const currentFolderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === selectedFolder);
-        const folderOwners = [...new Set(currentFolderProjects.map(p => p.ownerName || p.ownerEmail || p.ownerId).filter(Boolean))];
-        const folderOwnerDisplay = folderOwners.length > 0 ? folderOwners.join(', ') : (isAr ? 'غير محدد' : 'Unknown');
+      {/* ==================================================== */}
+      {/* INSIDE FOLDER: HEADER & ACTION CONTROLS (Req 2 & 6)  */}
+      {/* ==================================================== */}
+      {selectedFolder && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 bg-slate-900/60 p-4 rounded-3xl border border-purple-500/30 backdrop-blur-md shadow-xl" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="flex items-center space-x-3 rtl:space-x-reverse flex-wrap gap-2">
+            <button
+              onClick={handleBackToFolders}
+              className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md border border-slate-700/60"
+            >
+              <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
+              <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
+            </button>
 
-        return (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-2xl border border-purple-500/20" dir={isAr ? 'rtl' : 'ltr'}>
             <div className="flex items-center space-x-2 rtl:space-x-reverse">
-              <button onClick={handleBackToFolders} className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 bg-slate-800 theme-light:bg-slate-200 text-white theme-light:text-slate-800 rounded-xl hover:bg-slate-700 transition font-bold text-xs shadow-md">
-                <ArrowLeft className={`w-4 h-4 ${isAr ? 'rotate-180' : ''}`} />
-                <span>{isAr ? 'العودة للمجلدات' : 'Back to Folders'}</span>
-              </button>
-              <h3 className="text-xl font-black text-white theme-light:text-slate-900 mx-2">{selectedFolder}</h3>
+              <Folder className="w-5 h-5 text-pink-400" />
+              <h3 className="text-xl font-black text-white theme-light:text-slate-900">{selectedFolder}</h3>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/40 text-purple-200 font-extrabold">
+                {formatItemCount(orderedEpisodes.length, isAr)}
+              </span>
             </div>
 
-            {user?.role === 'Admin' && (
-              <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-xs font-bold text-amber-300 shadow-md">
+            {user?.role === 'Admin' && activeFolder?.ownerName && (
+              <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1 rounded-xl bg-amber-950/80 border border-amber-500/40 text-xs font-bold text-amber-300 shadow-md">
                 <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>{isAr ? `مالك المجلد: ${folderOwnerDisplay}` : `Folder Owner: ${folderOwnerDisplay}`}</span>
+                <span>{isAr ? `المالك: ${activeFolder.ownerName}` : `Owner: ${activeFolder.ownerName}`}</span>
               </div>
             )}
+
+            {isSavingOrder && (
+              <span className="inline-flex items-center space-x-1.5 rtl:space-x-reverse text-xs text-pink-300 animate-pulse font-bold bg-pink-950/50 px-2.5 py-1 rounded-lg border border-pink-500/30">
+                <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                <span>{isAr ? 'جاري حفظ الترتيب...' : 'Saving order...'}</span>
+              </span>
+            )}
           </div>
-        );
-      })()}
+
+          <div className="flex items-center space-x-3 rtl:space-x-reverse">
+            {/* Requirement 2: Add Episode Button directly inside folder view */}
+            {(!user || user.role !== 'Auditor') && (
+              <button
+                type="button"
+                onClick={() => onStartWizard(selectedFolder)}
+                className="flex items-center space-x-2 rtl:space-x-reverse px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:scale-105 text-white font-black text-xs shadow-lg shadow-purple-500/25 transition wizard-white-text border border-purple-400/40 shrink-0"
+                title={isAr ? 'إضافة حلقة جديدة لهذا المجلد' : 'Add another episode to this folder'}
+              >
+                <PlusCircle className="w-4 h-4 text-pink-200" />
+                <span>{isAr ? '+ حلقة جديدة' : '+ Add Episode'}</span>
+              </button>
+            )}
+
+            {/* Requirement 6: Episode View Mode Toggle inside folder */}
+            <div className="flex items-center bg-slate-900 theme-light:bg-white rounded-xl p-1 border border-slate-700 theme-light:border-purple-300 shadow-md">
+              <button
+                type="button"
+                onClick={() => setEpisodeViewMode('cards')}
+                className={`flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  episodeViewMode === 'cards'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-slate-400 theme-light:text-slate-600 hover:text-white'
+                }`}
+                title={isAr ? 'عرض الحلقات كبطاقات' : 'Episode Card View'}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>{isAr ? 'عرض كبطاقات' : 'Card View'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEpisodeViewMode('list')}
+                className={`flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  episodeViewMode === 'list'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-slate-400 theme-light:text-slate-600 hover:text-white'
+                }`}
+                title={isAr ? 'عرض الحلقات كقائمة' : 'Episode List View'}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>{isAr ? 'عرض كقائمة' : 'List View'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-20 text-purple-300">
@@ -403,267 +716,584 @@ export default function ProjectsGallery({
           <p className="text-sm font-black text-white theme-light:text-slate-950">{isAr ? 'جاري تحميل قائمة مشاريعك...' : 'Loading project gallery...'}</p>
         </div>
       ) : (() => {
-        
-        // Handle Folder View Root
-        if (viewMode === 'folders' && !selectedFolder) {
-           const folderNames = [...new Set(filteredProjects.map(p => p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')))];
-           
-           if (folderNames.length === 0) return (
-             <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 max-w-lg mx-auto shadow-2xl">
+        // ====================================================
+        // SCENARIO 1: ROOT FOLDER VIEW (Cards or List)
+        // ====================================================
+        if (!selectedFolder) {
+          if (foldersList.length === 0) {
+            return (
+              <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 max-w-lg mx-auto shadow-2xl">
                 <Layers className="w-16 h-16 text-slate-500 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white theme-light:text-slate-950 mb-2">{isAr ? 'لا توجد مجلدات' : 'No Folders Found'}</h3>
-             </div>
-           );
+              </div>
+            );
+          }
 
-           return (
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-               {folderNames.map(folder => {
-                 const folderProjects = filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === folder);
-                 const coverUrl = folderCovers[folder];
-                 const isGenerating = generatingCovers[folder];
-                 const folderOwners = [...new Set(folderProjects.map(p => p.ownerName || p.ownerEmail || p.ownerId).filter(Boolean))];
-                 const folderOwnerDisplay = folderOwners.length > 0 ? folderOwners.join(', ') : (isAr ? 'غير محدد' : 'Unknown');
+          // 1A. ROOT: FOLDER CARD VIEW
+          if (folderViewMode === 'cards') {
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {foldersList.map(folder => {
+                  const coverUrl = folderCovers[folder.name];
+                  const isGenerating = generatingCovers[folder.name];
 
-                 return (
-                   <div
-                     key={folder}
-                     onClick={() => handleSelectFolder(folder)}
-                     className="group relative rounded-3xl overflow-hidden border border-purple-500/30 hover:border-pink-500/80 cursor-pointer hover:scale-[1.03] transition-all duration-300 shadow-xl h-60 flex flex-col justify-between p-5 bg-slate-950"
-                     style={
-                       coverUrl
-                         ? {
-                             backgroundImage: `url(${coverUrl})`,
-                             backgroundSize: 'cover',
-                             backgroundPosition: 'center',
-                           }
-                         : {
-                             background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
-                           }
-                     }
-                   >
-                     {/* Cinematic Dark Gradient Film Overlay */}
-                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-purple-950/30 group-hover:via-slate-950/45 transition-all duration-300 pointer-events-none" />
+                  return (
+                    <div
+                      key={folder.key}
+                      onClick={() => handleSelectFolder(folder)}
+                      className="group relative rounded-3xl overflow-hidden border border-purple-500/30 hover:border-pink-500/80 cursor-pointer hover:scale-[1.03] transition-all duration-300 shadow-xl h-60 flex flex-col justify-between p-5 bg-slate-950"
+                      style={
+                        coverUrl
+                          ? {
+                              backgroundImage: `url(${coverUrl})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                            }
+                          : {
+                              background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
+                            }
+                      }
+                    >
+                      {/* Dark Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-purple-950/30 group-hover:via-slate-950/45 transition-all duration-300 pointer-events-none" />
 
-                     {/* Top Bar: Folder Icon Badge & AI Regenerate Action */}
-                     <div className="relative z-10 flex items-center justify-between" dir={isAr ? 'rtl' : 'ltr'}>
-                       <div className="w-12 h-12 rounded-2xl bg-purple-950/85 backdrop-blur-md border border-purple-400/40 flex items-center justify-center shadow-lg group-hover:scale-110 transition">
-                         <Layers className="w-6 h-6 text-pink-300" />
-                       </div>
-
-                       <button
-                         type="button"
-                         title={isAr ? 'إعادة توليد غلاف أنمي بالذكاء الاصطناعي' : 'Regenerate AI Anime Background Art'}
-                         onClick={(e) => handleGenerateCover(e, folder)}
-                         disabled={isGenerating}
-                         className="flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1.5 rounded-xl bg-slate-950/75 hover:bg-purple-900/90 text-purple-200 hover:text-white border border-purple-400/40 backdrop-blur-md text-[11px] font-black transition shadow-md"
-                       >
-                         <Sparkles className={`w-3.5 h-3.5 text-yellow-300 ${isGenerating ? 'animate-spin' : ''}`} />
-                         <span>
-                           {isGenerating ? (isAr ? 'جاري التوليد...' : 'Generating...') : (isAr ? 'توليد غلاف' : 'AI Cover')}
-                         </span>
-                       </button>
-                     </div>
-
-                     {/* Bottom: Folder Title, Owner (Admin only) & Item Counter */}
-                     <div className="relative z-10 space-y-2 text-right" dir={isAr ? 'rtl' : 'ltr'}>
-                       {user?.role === 'Admin' && (
-                         <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1 rounded-xl bg-amber-950/85 border border-amber-500/40 text-[11px] font-bold text-amber-300 backdrop-blur-md shadow-md max-w-full" title={folderOwnerDisplay}>
-                           <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                           <span className="truncate">{isAr ? `المالك: ${folderOwnerDisplay}` : `Owner: ${folderOwnerDisplay}`}</span>
-                         </div>
-                       )}
-                       <h3 className="text-lg font-black text-white drop-shadow-lg line-clamp-1 group-hover:text-pink-300 transition">
-                         {folder}
-                       </h3>
-                       <div className="flex items-center justify-between">
-                         <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-950/85 backdrop-blur-md border border-purple-400/30 text-xs font-black text-purple-200 shadow-sm">
-                           {folderProjects.length} {isAr ? 'عنصر' : 'items'}
-                         </span>
-                         <span className="text-[11px] font-extrabold text-pink-300 opacity-0 group-hover:opacity-100 transition duration-200">
-                           {isAr ? 'فتح المجلد ←' : 'Open Folder →'}
-                         </span>
-                       </div>
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
-           );
-        }
-
-        // Handle Project List (Flat or Inside Folder)
-        const displayProjects = viewMode === 'folders' 
-          ? filteredProjects.filter(p => (p.projectName || (isAr ? 'مشاريع غير مصنفة' : 'Uncategorized')) === selectedFolder) 
-          : filteredProjects;
-
-        if (displayProjects.length === 0) return (
-          <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 space-y-5 max-w-lg mx-auto shadow-2xl">
-            <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 flex items-center justify-center text-pink-300">
-              <Film className="w-8 h-8" />
-            </div>
-            <h3 className="text-xl font-black text-white theme-light:text-slate-950">
-              {isAr ? 'لا توجد مشاريع' : 'No Projects Found'}
-            </h3>
-          </div>
-        );
-
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayProjects.map((p) => {
-              const lineCount = p.subtitles?.length || 0;
-              const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
-              const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
-              
-              return (
-                <div key={p.id} className="group relative glass-panel-glow rounded-3xl overflow-hidden border border-purple-500/30 shadow-2xl hover:shadow-purple-500/40 transition-all hover:-translate-y-1 flex flex-col h-full bg-slate-900/60 theme-light:bg-white" dir={isAr ? 'rtl' : 'ltr'}>
-                  {/* Status Banner */}
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500 opacity-80" />
-
-                  <div className="p-5 flex-1 flex flex-col">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                          <div className="inline-flex items-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-100 px-3 py-1 rounded-full border border-purple-500/30 theme-light:border-purple-300">
-                            {getCategoryIcon(p.projectType)}
-                            <span className="text-[10px] font-black text-purple-200 theme-light:text-purple-800 tracking-wider uppercase">
-                              {getCategoryLabel(p.projectType)}
-                            </span>
-                          </div>
-
-                          {user?.role === 'Admin' && p.ownerName && (
-                            <div className="inline-flex items-center space-x-1 rtl:space-x-reverse bg-amber-950/70 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-amber-300">
-                              <UserCheck className="w-3 h-3 text-amber-400" />
-                              <span>{isAr ? `المالك: ${p.ownerName}` : `Owner: ${p.ownerName}`}</span>
-                            </div>
-                          )}
+                      {/* Top Bar: Folder Icon Badge & AI Regenerate Action */}
+                      <div className="relative z-10 flex items-center justify-between" dir={isAr ? 'rtl' : 'ltr'}>
+                        <div className="w-12 h-12 rounded-2xl bg-purple-950/85 backdrop-blur-md border border-purple-400/40 flex items-center justify-center shadow-lg group-hover:scale-110 transition">
+                          <Layers className="w-6 h-6 text-pink-300" />
                         </div>
 
-                        {(p.status === 'downloading_torrent' || p.status === 'processing') && (
-                          <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-pink-950/80 theme-light:bg-pink-100 text-pink-300 theme-light:text-pink-900 px-2.5 py-0.5 rounded-full border border-pink-400/40 text-[10px] font-black mb-2 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
-                            <span>{p.status === 'downloading_torrent' ? (isAr ? 'تحميل التورنت...' : 'Torrent Ingest...') : (isAr ? 'معالجة ذكية...' : 'AI Processing...')} ({p.processingProgress || 10}%)</span>
-                          </div>
-                        )}
-                        <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight mb-1 line-clamp-2">
-                          {p.mediaTitle}
-                        </h3>
-                        <p className="text-xs font-bold text-slate-400 theme-light:text-slate-600 line-clamp-1">
-                          {p.projectName}
-                        </p>
+                        <button
+                          type="button"
+                          title={isAr ? 'إعادة توليد غلاف أنمي بالذكاء الاصطناعي' : 'Regenerate AI Anime Background Art'}
+                          onClick={(e) => handleGenerateCover(e, folder.name)}
+                          disabled={isGenerating}
+                          className="flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1.5 rounded-xl bg-slate-950/75 hover:bg-purple-900/90 text-purple-200 hover:text-white border border-purple-400/40 backdrop-blur-md text-[11px] font-black transition shadow-md"
+                        >
+                          <Sparkles className={`w-3.5 h-3.5 text-yellow-300 ${isGenerating ? 'animate-spin' : ''}`} />
+                          <span>
+                            {isGenerating ? (isAr ? 'جاري التوليد...' : 'Generating...') : (isAr ? 'توليد غلاف' : 'AI Cover')}
+                          </span>
+                        </button>
                       </div>
 
-                      {/* Action buttons (Move & Delete) */}
-                      <div className="flex items-center space-x-1.5 rtl:space-x-reverse group-hover:opacity-100 opacity-90 sm:opacity-0 transition">
-                        {/* Move Video to Another Folder Button */}
-                        {(!user || user.role === 'Admin' || p.ownerId === user?.id) && (
+                      {/* Bottom: Title, Owner (Admin only) & Item Counter with Arabic Grammar (Req 5) */}
+                      <div className="relative z-10 space-y-2 text-right" dir={isAr ? 'rtl' : 'ltr'}>
+                        {user?.role === 'Admin' && folder.ownerName && (
+                          <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse px-2.5 py-1 rounded-xl bg-amber-950/85 border border-amber-500/40 text-[11px] font-bold text-amber-300 backdrop-blur-md shadow-md max-w-full" title={folder.ownerName}>
+                            <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span className="truncate">{isAr ? `المالك: ${folder.ownerName}` : `Owner: ${folder.ownerName}`}</span>
+                          </div>
+                        )}
+                        <h3 className="text-lg font-black text-white drop-shadow-lg line-clamp-1 group-hover:text-pink-300 transition">
+                          {folder.name}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          {/* Proper Arabic Grammar format (Req 5) */}
+                          <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-950/85 backdrop-blur-md border border-purple-400/30 text-xs font-black text-purple-200 shadow-sm">
+                            {formatItemCount(folder.projects.length, isAr)}
+                          </span>
+                          <span className="text-[11px] font-extrabold text-pink-300 opacity-0 group-hover:opacity-100 transition duration-200">
+                            {isAr ? 'فتح المجلد ←' : 'Open Folder →'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          // 1B. ROOT: FOLDER LIST VIEW (Requirement 6)
+          return (
+            <div className="glass-panel rounded-3xl border border-purple-500/30 overflow-hidden shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-right" dir={isAr ? 'rtl' : 'ltr'}>
+                  <thead>
+                    <tr className="bg-purple-950/60 border-b border-purple-500/20 text-xs font-black text-purple-200 uppercase tracking-wider">
+                      <th className="py-4 px-6">{isAr ? 'المجلد والغلاف' : 'Folder & Cover'}</th>
+                      {user?.role === 'Admin' && <th className="py-4 px-6">{isAr ? 'المالك' : 'Owner'}</th>}
+                      <th className="py-4 px-6">{isAr ? 'عدد العناصر' : 'Items'}</th>
+                      <th className="py-4 px-6">{isAr ? 'آخر نشاط' : 'Last Activity'}</th>
+                      <th className="py-4 px-6 text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-purple-500/10 text-xs font-bold text-white">
+                    {foldersList.map(folder => {
+                      const coverUrl = folderCovers[folder.name];
+                      const isGenerating = generatingCovers[folder.name];
+
+                      return (
+                        <tr
+                          key={folder.key}
+                          onClick={() => handleSelectFolder(folder)}
+                          className="hover:bg-purple-950/30 cursor-pointer transition duration-150 group"
+                        >
+                          {/* Folder Name & AI Cover Thumbnail */}
+                          <td className="py-4 px-6 flex items-center space-x-3 rtl:space-x-reverse">
+                            <div className="w-12 h-12 rounded-xl bg-purple-950/80 border border-purple-400/40 overflow-hidden shrink-0 flex items-center justify-center relative shadow-md">
+                              {coverUrl ? (
+                                <img src={coverUrl} alt={folder.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-300" />
+                              ) : (
+                                <Folder className="w-6 h-6 text-pink-300" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-black text-white group-hover:text-pink-300 transition truncate">
+                                {folder.name}
+                              </h4>
+                              <span className="text-[11px] text-slate-400 font-normal">
+                                {folder.projects[0]?.projectType || 'Anime Series'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Owner badge (Admin only) */}
+                          {user?.role === 'Admin' && (
+                            <td className="py-4 px-6">
+                              {folder.ownerName ? (
+                                <span className="inline-flex items-center space-x-1 rtl:space-x-reverse px-2.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-500/40 text-amber-300 text-[11px]">
+                                  <UserCheck className="w-3 h-3 text-amber-400" />
+                                  <span>{folder.ownerName}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                            </td>
+                          )}
+
+                          {/* Items count with Arabic grammar (Req 5) */}
+                          <td className="py-4 px-6">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-950/70 border border-purple-400/30 text-purple-200 text-xs font-black">
+                              {formatItemCount(folder.projects.length, isAr)}
+                            </span>
+                          </td>
+
+                          {/* Last Activity */}
+                          <td className="py-4 px-6 text-slate-400">
+                            {new Date(folder.latestDate).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', {
+                              year: 'numeric', month: 'short', day: 'numeric'
+                            })}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center space-x-2 rtl:space-x-reverse">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectFolder(folder)}
+                                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition flex items-center space-x-1 rtl:space-x-reverse"
+                              >
+                                <span>{isAr ? 'فتح المجلد' : 'Open'}</span>
+                                <ChevronRight className={`w-3.5 h-3.5 ${isAr ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => handleGenerateCover(e, folder.name)}
+                                disabled={isGenerating}
+                                className="p-2 rounded-xl bg-slate-900 border border-purple-500/30 hover:bg-purple-900 text-purple-200 transition"
+                                title={isAr ? 'توليد غلاف بالذكاء الاصطناعي' : 'Generate AI Cover'}
+                              >
+                                <Sparkles className={`w-3.5 h-3.5 text-yellow-300 ${isGenerating ? 'animate-spin' : ''}`} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        }
+
+        // ====================================================
+        // SCENARIO 2: INSIDE FOLDER VIEW (Cards or List)
+        // ====================================================
+        if (orderedEpisodes.length === 0) {
+          return (
+            <div className="glass-panel p-12 rounded-3xl text-center border border-purple-500/30 space-y-5 max-w-lg mx-auto shadow-2xl">
+              <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-950 theme-light:bg-purple-800 border-2 border-purple-400 flex items-center justify-center text-pink-300">
+                <Film className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-white theme-light:text-slate-950">
+                {isAr ? 'لا توجد حلقات داخل هذا المجلد' : 'No Episodes in this Folder'}
+              </h3>
+              {(!user || user.role !== 'Auditor') && (
+                <button
+                  type="button"
+                  onClick={() => onStartWizard(selectedFolder)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs shadow-lg hover:scale-105 transition"
+                >
+                  {isAr ? '+ إضافة أول حلقة' : '+ Add First Episode'}
+                </button>
+              )}
+            </div>
+          );
+        }
+
+        // 2A. INSIDE FOLDER: DRAGGABLE EPISODE CARD VIEW (Req 1)
+        if (episodeViewMode === 'cards') {
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {orderedEpisodes.map((p, index) => {
+                const lineCount = p.subtitles?.length || 0;
+                const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
+                const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
+                const bgImage = getEpisodeBackground(p);
+
+                return (
+                  <div
+                    key={p.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={(e) => handleDragLeave(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={`group relative glass-panel-glow rounded-3xl overflow-hidden border border-purple-500/30 hover:border-pink-500/70 shadow-2xl hover:shadow-purple-500/40 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full cursor-pointer ${
+                      draggedIndex === index ? 'opacity-40 scale-[0.98]' : ''
+                    } ${
+                      dragOverIndex === index ? 'ring-2 ring-pink-500 border-pink-500' : ''
+                    }`}
+                    style={
+                      bgImage
+                        ? {
+                            backgroundImage: `linear-gradient(to top, rgba(10, 15, 30, 0.95) 0%, rgba(15, 23, 42, 0.82) 45%, rgba(30, 27, 75, 0.65) 100%), url(${bgImage})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          }
+                        : {
+                            background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                          }
+                    }
+                    dir={isAr ? 'rtl' : 'ltr'}
+                  >
+                    {/* Top status gradient bar */}
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500 opacity-80" />
+
+                    <div className="p-5 flex-1 flex flex-col relative z-10">
+                      {/* Header with Drag Handle & Actions */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1 min-w-0 pr-2 rtl:pr-0 rtl:pl-2">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                            {/* Drag handle */}
+                            <div
+                              className="cursor-grab active:cursor-grabbing p-1 rounded-lg bg-slate-900/80 hover:bg-purple-900 text-slate-400 hover:text-white transition shadow-sm border border-slate-700/60"
+                              title={isAr ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'}
+                            >
+                              <GripVertical className="w-3.5 h-3.5 text-pink-300" />
+                            </div>
+
+                            <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-purple-950/80 theme-light:bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-500/30">
+                              {getCategoryIcon(p.projectType)}
+                              <span className="text-[10px] font-black text-purple-200 theme-light:text-purple-800 tracking-wider uppercase">
+                                {getCategoryLabel(p.projectType)}
+                              </span>
+                            </div>
+
+                            {bgImage && (
+                              <span className="text-[9px] bg-purple-950/80 border border-purple-400/40 text-purple-200 px-2 py-0.5 rounded-full flex items-center space-x-1 rtl:space-x-reverse">
+                                <Sparkles className="w-2.5 h-2.5 text-yellow-300" />
+                                <span>{isAr ? 'لوحة العنوان' : 'Title Frame'}</span>
+                              </span>
+                            )}
+
+                            {user?.role === 'Admin' && p.ownerName && (
+                              <div className="inline-flex items-center space-x-1 rtl:space-x-reverse bg-amber-950/70 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-amber-300">
+                                <UserCheck className="w-3 h-3 text-amber-400" />
+                                <span>{isAr ? `المالك: ${p.ownerName}` : `Owner: ${p.ownerName}`}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {(p.status === 'downloading_torrent' || p.status === 'processing') && (
+                            <div className="inline-flex items-center space-x-1.5 rtl:space-x-reverse bg-pink-950/80 theme-light:bg-pink-100 text-pink-300 theme-light:text-pink-900 px-2.5 py-0.5 rounded-full border border-pink-400/40 text-[10px] font-black mb-2 animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+                              <span>{p.status === 'downloading_torrent' ? (isAr ? 'تحميل التورنت...' : 'Torrent Ingest...') : (isAr ? 'معالجة ذكية...' : 'AI Processing...')} ({p.processingProgress || 10}%)</span>
+                            </div>
+                          )}
+
+                          <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight mb-1 line-clamp-2 drop-shadow-md">
+                            {p.mediaTitle}
+                          </h3>
+                          <p className="text-xs font-bold text-slate-300 theme-light:text-slate-600 line-clamp-1">
+                            {p.projectName}
+                          </p>
+                        </div>
+
+                        {/* Action buttons (Move & Delete) */}
+                        <div className="flex items-center space-x-1.5 rtl:space-x-reverse group-hover:opacity-100 opacity-90 sm:opacity-0 transition" onClick={(e) => e.stopPropagation()}>
+                          {(!user || user.role === 'Admin' || p.ownerId === user?.id) && (
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenMoveModal(p);
+                              }}
+                              className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-purple-100 border border-slate-700 theme-light:border-purple-300 text-purple-300 theme-light:text-purple-700 hover:text-white hover:bg-purple-600 hover:border-purple-500 transition shadow-sm"
+                              title={isAr ? 'نقل هذا الفيديو ومحتواه إلى مجلد آخر' : 'Move video and all contents to another folder'}
+                            >
+                              <FolderInput className="w-4 h-4" />
+                            </button>
+                          )}
+
                           <button 
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenMoveModal(p);
+                              setDeletingProjectId(p.id);
                             }}
-                            className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-purple-100 border border-slate-700 theme-light:border-purple-300 text-purple-300 theme-light:text-purple-700 hover:text-white hover:bg-purple-600 hover:border-purple-500 transition shadow-sm"
-                            title={isAr ? 'نقل هذا الفيديو ومحتواه إلى مجلد آخر' : 'Move video and all contents to another folder'}
+                            className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-rose-100 border border-slate-700 theme-light:border-rose-200 text-slate-400 theme-light:text-rose-600 hover:text-rose-400 hover:border-rose-500/50 transition shadow-sm"
+                            title={isAr ? 'حذف المشروع' : 'Delete Project'}
                           >
-                            <FolderInput className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        )}
-
-                        {/* Delete Project Button */}
-                        <button 
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeletingProjectId(p.id);
-                          }}
-                          className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-rose-100 border border-slate-700 theme-light:border-rose-200 text-slate-400 theme-light:text-rose-600 hover:text-rose-400 hover:border-rose-500/50 transition shadow-sm"
-                          title={isAr ? 'حذف المشروع' : 'Delete Project'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Meta Info */}
-                    <div className="mt-auto space-y-4">
-                      
-                      {/* Date */}
-                      <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-slate-400 theme-light:text-slate-500 font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>
-                          {new Date(p.createdAt || p.id).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', {
-                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-
-                      {/* Audit Progress Bar */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-[10px] font-black">
-                          <span className="text-purple-300 theme-light:text-purple-800">{isAr ? 'الترجمة والتدقيق' : 'Subtitling Progress'}</span>
-                          <span className={progressPercent === 100 ? 'text-emerald-400' : 'text-pink-400'}>{progressPercent}%</span>
-                        </div>
-                        <div className="w-full bg-slate-800 theme-light:bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-1000 ${progressPercent === 100 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-gradient-to-r from-pink-500 to-purple-500 shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}
-                            style={{ width: `${progressPercent}%` }}
-                          />
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="pt-2 flex items-center space-x-2 rtl:space-x-reverse">
-                        <button
-                          onClick={() => onEditProject(p)}
-                          className="flex-1 flex items-center justify-center space-x-2 rtl:space-x-reverse bg-purple-950 theme-light:bg-purple-700 hover:bg-purple-900 theme-light:hover:bg-purple-800 text-white py-2.5 rounded-xl border border-purple-500/30 transition text-xs font-black shadow-md wizard-white-text"
-                        >
-                          <Edit3 className="w-4 h-4 text-purple-300 theme-light:text-purple-200" />
-                          <span>{isAr ? 'فتح المحرر' : 'Open Editor'}</span>
-                        </button>
-                        
-                        {(user?.role === 'Admin' || user?.role === 'Translator') && (
+                      {/* Meta Info & Progress */}
+                      <div className="mt-auto space-y-4 pt-4">
+                        <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-slate-300 theme-light:text-slate-500 font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>
+                            {new Date(p.createdAt || p.id).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', {
+                              year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+
+                        {/* Audit Progress Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-[10px] font-black">
+                            <span className="text-purple-300 theme-light:text-purple-800">{isAr ? 'الترجمة والتدقيق' : 'Subtitling Progress'}</span>
+                            <span className={progressPercent === 100 ? 'text-emerald-400' : 'text-pink-400'}>{progressPercent}%</span>
+                          </div>
+                          <div className="w-full bg-slate-800/80 theme-light:bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-1000 ${progressPercent === 100 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-gradient-to-r from-pink-500 to-purple-500 shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 flex items-center space-x-2 rtl:space-x-reverse" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => onOpenAssignAuditor(p)}
-                            className="p-2.5 rounded-xl bg-slate-800 theme-light:bg-slate-200 border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 hover:text-white theme-light:hover:bg-purple-100 transition shadow-sm"
-                            title={isAr ? 'تعيين مدقق' : 'Assign Auditor'}
+                            onClick={() => onEditProject(p)}
+                            className="flex-1 flex items-center justify-center space-x-2 rtl:space-x-reverse bg-purple-950/90 theme-light:bg-purple-700 hover:bg-purple-900 theme-light:hover:bg-purple-800 text-white py-2.5 rounded-xl border border-purple-500/40 transition text-xs font-black shadow-md wizard-white-text"
                           >
-                            <Shield className="w-4 h-4" />
+                            <Edit3 className="w-4 h-4 text-purple-300 theme-light:text-purple-200" />
+                            <span>{isAr ? 'فتح المحرر' : 'Open Editor'}</span>
                           </button>
-                        )}
+                          
+                          {(user?.role === 'Admin' || user?.role === 'Translator') && (
+                            <button
+                              onClick={() => onOpenAssignAuditor(p)}
+                              className="p-2.5 rounded-xl bg-slate-800/90 theme-light:bg-slate-200 border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 hover:text-white theme-light:hover:bg-purple-100 transition shadow-sm"
+                              title={isAr ? 'تعيين مدقق' : 'Assign Auditor'}
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          );
+        }
+
+        // 2B. INSIDE FOLDER: DRAGGABLE EPISODE LIST VIEW (Req 3 & 6)
+        return (
+          <div className="glass-panel rounded-3xl border border-purple-500/30 overflow-hidden shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right" dir={isAr ? 'rtl' : 'ltr'}>
+                <thead>
+                  <tr className="bg-purple-950/60 border-b border-purple-500/20 text-xs font-black text-purple-200 uppercase tracking-wider">
+                    <th className="py-4 px-4 w-12 text-center">{isAr ? 'ترتيب' : 'Order'}</th>
+                    <th className="py-4 px-6">{isAr ? 'الحلقة والمعاينة' : 'Episode & Preview'}</th>
+                    {user?.role === 'Admin' && <th className="py-4 px-6">{isAr ? 'المالك' : 'Owner'}</th>}
+                    <th className="py-4 px-6">{isAr ? 'الحالة' : 'Status'}</th>
+                    <th className="py-4 px-6">{isAr ? 'نسبة الإنجاز' : 'Progress'}</th>
+                    <th className="py-4 px-6">{isAr ? 'التاريخ' : 'Date'}</th>
+                    <th className="py-4 px-6 text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-purple-500/10 text-xs font-bold text-white">
+                  {orderedEpisodes.map((p, index) => {
+                    const lineCount = p.subtitles?.length || 0;
+                    const approvedCount = p.subtitles?.filter(s => s.approved)?.length || 0;
+                    const progressPercent = lineCount > 0 ? Math.round((approvedCount / lineCount) * 100) : 0;
+                    const bgImage = getEpisodeBackground(p);
+
+                    return (
+                      <tr
+                        key={p.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragLeave={(e) => handleDragLeave(e, index)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`hover:bg-purple-950/30 transition duration-150 group ${
+                          draggedIndex === index ? 'opacity-30 bg-purple-950/50' : ''
+                        } ${
+                          dragOverIndex === index ? 'bg-purple-900/40 border-t-2 border-b-2 border-pink-500' : ''
+                        }`}
+                      >
+                        {/* Drag Handle */}
+                        <td className="py-4 px-4 text-center cursor-grab active:cursor-grabbing text-slate-400 group-hover:text-pink-300">
+                          <GripVertical className="w-4 h-4 mx-auto" />
+                        </td>
+
+                        {/* Title and Thumbnail Preview */}
+                        <td className="py-4 px-6 flex items-center space-x-3 rtl:space-x-reverse">
+                          <div className="w-16 h-10 rounded-xl bg-purple-950/80 border border-purple-400/30 overflow-hidden shrink-0 flex items-center justify-center relative shadow-md">
+                            {bgImage ? (
+                              <img src={bgImage} alt={p.mediaTitle} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            ) : (
+                              <Film className="w-5 h-5 text-pink-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black text-white group-hover:text-pink-300 transition truncate">
+                              {p.mediaTitle}
+                            </h4>
+                            <div className="flex items-center space-x-2 rtl:space-x-reverse text-[11px] text-slate-400">
+                              <span>{getCategoryLabel(p.projectType)}</span>
+                              <span>•</span>
+                              <span>{lineCount} {isAr ? 'سطر' : 'lines'}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Owner (Admin only) */}
+                        {user?.role === 'Admin' && (
+                          <td className="py-4 px-6">
+                            {p.ownerName ? (
+                              <span className="inline-flex items-center space-x-1 rtl:space-x-reverse px-2 py-0.5 rounded-full bg-amber-950/70 border border-amber-500/40 text-amber-300 text-[10px]">
+                                <UserCheck className="w-3 h-3 text-amber-400" />
+                                <span>{p.ownerName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">-</span>
+                            )}
+                          </td>
+                        )}
+
+                        {/* Status */}
+                        <td className="py-4 px-6">
+                          {p.status === 'ready' ? (
+                            <span className="inline-flex items-center space-x-1 rtl:space-x-reverse px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[11px]">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>{isAr ? 'جاهز' : 'Ready'}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 rtl:space-x-reverse px-2.5 py-0.5 rounded-full bg-pink-950/80 border border-pink-500/40 text-pink-300 text-[11px] animate-pulse">
+                              <Sparkles className="w-3 h-3 text-pink-400" />
+                              <span>{p.status || 'Processing'}</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Audit Progress */}
+                        <td className="py-4 px-6">
+                          <div className="w-28 space-y-1">
+                            <div className="flex justify-between text-[10px]">
+                              <span className="text-slate-300">{progressPercent}%</span>
+                              <span className="text-purple-300">{approvedCount}/{lineCount}</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${progressPercent === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-pink-500 to-purple-500'}`}
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Date */}
+                        <td className="py-4 px-6 text-slate-400 text-xs">
+                          {new Date(p.createdAt || p.id).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                          })}
+                        </td>
+
+                        {/* Actions (All available in list view) */}
+                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center space-x-1.5 rtl:space-x-reverse">
+                            <button
+                              onClick={() => onEditProject(p)}
+                              className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition flex items-center space-x-1 rtl:space-x-reverse"
+                              title={isAr ? 'فتح المحرر' : 'Open Editor'}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>{isAr ? 'فتح المحرر' : 'Edit'}</span>
+                            </button>
+
+                            {(user?.role === 'Admin' || user?.role === 'Translator') && (
+                              <button
+                                onClick={() => onOpenAssignAuditor(p)}
+                                className="p-2 rounded-xl bg-slate-800 hover:bg-purple-900 border border-slate-700 text-slate-300 hover:text-white transition"
+                                title={isAr ? 'تعيين مدقق' : 'Assign Auditor'}
+                              >
+                                <Shield className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {(!user || user.role === 'Admin' || p.ownerId === user?.id) && (
+                              <button
+                                onClick={() => handleOpenMoveModal(p)}
+                                className="p-2 rounded-xl bg-slate-800 hover:bg-purple-900 border border-slate-700 text-slate-300 hover:text-white transition"
+                                title={isAr ? 'نقل إلى مجلد آخر' : 'Move to another folder'}
+                              >
+                                <FolderInput className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => setDeletingProjectId(p.id)}
+                              className="p-2 rounded-xl bg-slate-800 hover:bg-rose-900/80 border border-slate-700 text-slate-400 hover:text-rose-300 transition"
+                              title={isAr ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })()}
 
-            {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
       {deletingProjectId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
           <div className="bg-slate-900 theme-light:bg-white p-6 rounded-3xl border border-rose-500/30 max-w-sm w-full shadow-2xl relative overflow-hidden">
-            
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-500 to-pink-500" />
-            
             <div className="flex flex-col items-center text-center space-y-4">
               <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center">
                 <AlertTriangle className="w-8 h-8 text-rose-500" />
               </div>
-              
               <h3 className="text-xl font-black text-white theme-light:text-slate-950">
                 {lang === 'ar' ? 'حذف المشروع' : 'Delete Project'}
               </h3>
-              
               <p className="text-sm font-bold text-slate-400 theme-light:text-slate-600 leading-relaxed">
                 {lang === 'ar' 
                   ? 'هل أنت متأكد من حذف هذا المشروع؟ سيتم حذف جميع الملفات النصية والصوتية المرتبطة به نهائياً ولن يمكنك التراجع.' 
                   : 'Are you sure you want to delete this project? All associated media and text files will be permanently erased. This cannot be undone.'}
               </p>
             </div>
-
             <div className="mt-8 flex space-x-3 rtl:space-x-reverse">
               <button
                 onClick={() => setDeletingProjectId(null)}
@@ -689,7 +1319,6 @@ export default function ProjectsGallery({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-slate-900 theme-light:bg-white p-6 sm:p-7 rounded-3xl border border-purple-500/30 max-w-md w-full shadow-2xl relative overflow-hidden space-y-5">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500" />
-
             <div className="flex items-center space-x-3 rtl:space-x-reverse">
               <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md shrink-0">
                 <FolderInput className="w-6 h-6 text-pink-400" />
@@ -725,11 +1354,13 @@ export default function ProjectsGallery({
                   type="button"
                   onClick={() => {
                     setMoveFolderMode('existing');
-                    const allFolders = [...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName);
+                    const currentUserId = user?.id || 'usr_guest';
+                    const userProjects = projects.filter(p => (p.ownerId || 'usr_guest') === currentUserId);
+                    const allFolders = [...new Set(userProjects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName);
                     if (allFolders.length > 0) setTargetFolderName(allFolders[0]);
                   }}
-                  disabled={[...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${moveFolderMode === 'existing' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'} ${[...new Set(projects.map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={[...new Set(projects.filter(p => (p.ownerId || 'usr_guest') === (user?.id || 'usr_guest')).map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${moveFolderMode === 'existing' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-800 theme-light:bg-slate-200 text-slate-400 theme-light:text-slate-600 hover:bg-slate-700'} ${[...new Set(projects.filter(p => (p.ownerId || 'usr_guest') === (user?.id || 'usr_guest')).map(p => p.projectName).filter(Boolean))].filter(f => f !== movingProject.projectName).length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isAr ? 'مجلد موجود' : 'Existing Folder'}
                 </button>
@@ -752,7 +1383,7 @@ export default function ProjectsGallery({
                   onChange={(e) => setTargetFolderName(e.target.value)}
                   className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
                 >
-                  {[...new Set(projects.map(p => p.projectName).filter(Boolean))]
+                  {[...new Set(projects.filter(p => (p.ownerId || 'usr_guest') === (user?.id || 'usr_guest')).map(p => p.projectName).filter(Boolean))]
                     .filter(f => f !== movingProject.projectName)
                     .map(folder => (
                       <option key={folder} value={folder}>{folder}</option>
