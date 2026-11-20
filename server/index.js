@@ -3684,6 +3684,8 @@ app.post('/api/project/:id/move-folder', (req, res) => {
 
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
+
+
   }
 
   if (!user) {
@@ -3791,6 +3793,68 @@ app.post('/api/project/:id/move-folder', (req, res) => {
 
 
 // --- Admin Cluster & API Pool Monitoring ---
+
+
+// ====================================================
+// UPDATE EPISODE / VIDEO TITLE ENDPOINT
+// Permission: Project owner or Admin
+// ====================================================
+const handleUpdateProjectTitle = (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mediaTitle } = req.body;
+    const userId = req.headers['x-user-id'] || req.body?.userId || 'usr_guest';
+    const projects = readProjects();
+    const users = readUsers();
+    const user = users[userId];
+    const project = projects[id];
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Permission check: Must be owner of the project or Admin
+    const isOwner = (project.ownerId || 'usr_guest') === userId;
+    const isAdmin = user && user.role === 'Admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Only the project owner or an administrator can edit the title.' });
+    }
+
+    if (!mediaTitle || !mediaTitle.trim()) {
+      return res.status(400).json({ error: 'Episode title cannot be empty.' });
+    }
+
+    const oldTitle = project.mediaTitle;
+    project.mediaTitle = mediaTitle.trim();
+    project.updatedAt = new Date().toISOString();
+    writeProjects(projects);
+
+    if (typeof logSystemEvent === 'function') {
+      logSystemEvent('info', 'project_title_updated', `Updated title for project ${id} from "${oldTitle}" to "${project.mediaTitle}"`, {
+        userId,
+        projectId: id,
+        oldTitle,
+        newTitle: project.mediaTitle
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Episode title updated successfully',
+      mediaTitle: project.mediaTitle,
+      project
+    });
+  } catch (err) {
+    console.error('[UpdateProjectTitle Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal server error while updating title' });
+  }
+};
+
+app.post('/api/project/:id/title', handleUpdateProjectTitle);
+app.put('/api/project/:id/title', handleUpdateProjectTitle);
+
+
 app.get('/api/admin/cluster-metrics', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search, Trash2, ArrowLeft, AlertTriangle, Edit3, Film, Sparkles, CheckCircle2,
   PlusCircle, Tv, Video, Layers, Filter, UserCheck, Shield, FolderInput, Folder,
-  LayoutGrid, List, GripVertical, Clock, Calendar, ChevronRight, FolderPlus
+  LayoutGrid, List, GripVertical, Clock, Calendar, ChevronRight, FolderPlus,
+  Pencil, Check, X
 } from 'lucide-react';
 
 // ====================================================
@@ -97,6 +98,85 @@ export default function ProjectsGallery({
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+
+  // Title Editing State (Inline & Modal)
+  const [editingTitleId, setEditingTitleId] = useState(null);
+  const [editingModalProject, setEditingModalProject] = useState(null);
+  const [newTitleValue, setNewTitleValue] = useState('');
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState(null);
+
+  // Permission Check: Owner of the file/project or Admin
+  const canEditTitle = (project) => {
+    if (!project) return false;
+    if (user?.role === 'Admin') return true;
+    const currentUserId = user?.id || 'usr_guest';
+    const ownerId = project.ownerId || 'usr_guest';
+    return ownerId === currentUserId;
+  };
+
+  const handleStartInlineEditTitle = (project) => {
+    setEditingTitleId(project.id);
+    setNewTitleValue(project.mediaTitle || '');
+    setTitleError(null);
+  };
+
+  const handleCancelInlineEditTitle = () => {
+    setEditingTitleId(null);
+    setNewTitleValue('');
+    setTitleError(null);
+  };
+
+  const handleOpenEditTitleModal = (project) => {
+    setEditingModalProject(project);
+    setNewTitleValue(project.mediaTitle || '');
+    setTitleError(null);
+  };
+
+  const handleSaveTitle = async (projectId) => {
+    const trimmed = newTitleValue.trim();
+    if (!trimmed) {
+      setTitleError(isAr ? 'لا يمكن ترك عنوان الفيديو فارغاً' : 'Episode title cannot be empty');
+      return;
+    }
+
+    setIsSavingTitle(true);
+    setTitleError(null);
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(user?.id ? { 'x-user-id': user.id } : {})
+      };
+
+      const res = await fetch(`/api/project/${projectId}/title`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ mediaTitle: trimmed })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update title');
+      }
+
+      // Optimistically update project title in local lists
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, mediaTitle: trimmed } : p));
+      setOrderedEpisodes(prev => prev.map(p => p.id === projectId ? { ...p, mediaTitle: trimmed } : p));
+
+      setToastMsg(isAr ? 'تم تعديل عنوان الفيديو بنجاح' : 'Episode title updated successfully');
+      setTimeout(() => setToastMsg(null), 3500);
+
+      setEditingTitleId(null);
+      setEditingModalProject(null);
+      setNewTitleValue('');
+    } catch (err) {
+      console.error('Update title error:', err);
+      setTitleError(err.message || 'Error updating title');
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
 
   // Browser history sync
   useEffect(() => {
@@ -1017,16 +1097,88 @@ export default function ProjectsGallery({
                             </div>
                           )}
 
-                          <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight mb-1 line-clamp-2 drop-shadow-md">
-                            {p.mediaTitle}
-                          </h3>
+                          {/* Editable Media Title (Owner / Admin) */}
+                          {editingTitleId === p.id ? (
+                            <div className="mb-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center space-x-1.5 rtl:space-x-reverse">
+                                <input
+                                  type="text"
+                                  dir="auto"
+                                  value={newTitleValue}
+                                  onChange={(e) => setNewTitleValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveTitle(p.id);
+                                    if (e.key === 'Escape') handleCancelInlineEditTitle();
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingTitle}
+                                  className="flex-1 bg-slate-950 border border-purple-500 rounded-xl px-2.5 py-1.5 text-xs text-white font-black outline-none focus:ring-2 focus:ring-pink-500 shadow-inner"
+                                  placeholder={isAr ? 'عنوان الحلقة الجديد...' : 'New episode title...'}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveTitle(p.id)}
+                                  disabled={isSavingTitle || !newTitleValue.trim()}
+                                  className="p-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-sm disabled:opacity-50"
+                                  title={isAr ? 'حفظ التعديل (Enter)' : 'Save (Enter)'}
+                                >
+                                  {isSavingTitle ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelInlineEditTitle}
+                                  disabled={isSavingTitle}
+                                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                                  title={isAr ? 'إلغاء (Esc)' : 'Cancel (Esc)'}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {titleError && <p className="text-[10px] text-rose-400 font-bold">{titleError}</p>}
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-1 mb-1 group/title">
+                              <h3 className="text-lg font-black text-white theme-light:text-slate-950 leading-tight line-clamp-2 drop-shadow-md flex-1">
+                                {p.mediaTitle}
+                              </h3>
+                              {canEditTitle(p) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartInlineEditTitle(p);
+                                  }}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-pink-300 hover:bg-purple-900/60 transition opacity-80 group-hover:opacity-100 shrink-0"
+                                  title={isAr ? 'تعديل عنوان الحلقة' : 'Edit episode title'}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           <p className="text-xs font-bold text-slate-300 theme-light:text-slate-600 line-clamp-1">
                             {p.projectName}
                           </p>
                         </div>
 
-                        {/* Action buttons (Move & Delete) */}
+                        {/* Action buttons (Edit Title, Move & Delete) */}
                         <div className="flex items-center space-x-1.5 rtl:space-x-reverse group-hover:opacity-100 opacity-90 sm:opacity-0 transition" onClick={(e) => e.stopPropagation()}>
+                          {/* Edit Title Button (Owner or Admin) */}
+                          {canEditTitle(p) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditTitleModal(p);
+                              }}
+                              className="p-2 rounded-xl bg-slate-900/80 theme-light:bg-purple-100 border border-slate-700 theme-light:border-purple-300 text-purple-300 theme-light:text-purple-700 hover:text-white hover:bg-purple-600 hover:border-purple-500 transition shadow-sm"
+                              title={isAr ? 'تعديل عنوان هذا الفيديو' : 'Edit episode title'}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
+
                           {(!user || user.role === 'Admin' || p.ownerId === user?.id) && (
                             <button 
                               type="button"
@@ -1161,10 +1313,64 @@ export default function ProjectsGallery({
                               <Film className="w-5 h-5 text-pink-300" />
                             )}
                           </div>
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-black text-white group-hover:text-pink-300 transition truncate">
-                              {p.mediaTitle}
-                            </h4>
+                          <div className="min-w-0 flex-1">
+                            {/* Inline Edit in List View */}
+                            {editingTitleId === p.id ? (
+                              <div className="flex items-center space-x-1.5 rtl:space-x-reverse my-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  dir="auto"
+                                  value={newTitleValue}
+                                  onChange={(e) => setNewTitleValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveTitle(p.id);
+                                    if (e.key === 'Escape') handleCancelInlineEditTitle();
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingTitle}
+                                  className="flex-1 bg-slate-950 border border-purple-500 rounded-xl px-2.5 py-1 text-xs text-white font-black outline-none focus:ring-2 focus:ring-pink-500 min-w-[180px]"
+                                  placeholder={isAr ? 'عنوان الحلقة الجديد...' : 'New episode title...'}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveTitle(p.id)}
+                                  disabled={isSavingTitle || !newTitleValue.trim()}
+                                  className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-sm disabled:opacity-50"
+                                  title={isAr ? 'حفظ (Enter)' : 'Save (Enter)'}
+                                >
+                                  {isSavingTitle ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelInlineEditTitle}
+                                  disabled={isSavingTitle}
+                                  className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                                  title={isAr ? 'إلغاء (Esc)' : 'Cancel (Esc)'}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-1.5 rtl:space-x-reverse group/rowtitle">
+                                <h4 className="text-sm font-black text-white group-hover:text-pink-300 transition truncate max-w-xs">
+                                  {p.mediaTitle}
+                                </h4>
+                                {canEditTitle(p) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartInlineEditTitle(p);
+                                    }}
+                                    className="p-1 rounded-lg text-slate-500 hover:text-pink-300 hover:bg-purple-900/50 transition opacity-0 group-hover:opacity-100 group-hover/rowtitle:opacity-100"
+                                    title={isAr ? 'تعديل عنوان الحلقة' : 'Edit episode title'}
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
                             <div className="flex items-center space-x-2 rtl:space-x-reverse text-[11px] text-slate-400">
                               <span>{getCategoryLabel(p.projectType)}</span>
                               <span>•</span>
@@ -1236,6 +1442,18 @@ export default function ProjectsGallery({
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>{isAr ? 'فتح المحرر' : 'Edit'}</span>
                             </button>
+
+                            {/* Edit Title Button (Owner or Admin) */}
+                            {canEditTitle(p) && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditTitleModal(p)}
+                                className="p-2 rounded-xl bg-slate-800 hover:bg-purple-900 border border-slate-700 text-slate-300 hover:text-white transition"
+                                title={isAr ? 'تعديل عنوان الفيديو' : 'Edit episode title'}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {(user?.role === 'Admin' || user?.role === 'Translator') && (
                               <button
@@ -1314,11 +1532,88 @@ export default function ProjectsGallery({
         </div>
       )}
 
+      {/* Edit Episode Title Modal */}
+      {editingModalProject && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="bg-slate-900 theme-light:bg-white p-6 sm:p-7 rounded-3xl border border-purple-500/30 max-w-md w-full shadow-2xl relative overflow-hidden space-y-5">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500" />
+
+            <div className="flex items-center space-x-3 rtl:space-x-reverse">
+              <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md shrink-0">
+                <Pencil className="w-6 h-6 text-pink-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-black text-white theme-light:text-slate-950 truncate">
+                  {isAr ? 'تعديل عنوان الفيديو' : 'Edit Episode Title'}
+                </h3>
+                <p className="text-xs text-slate-400 theme-light:text-slate-600 truncate">
+                  {editingModalProject.projectName}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-300 theme-light:text-slate-950 mb-2">
+                {isAr ? 'العنوان الجديد للحلقة / الفيديو:' : 'New Episode / Video Title:'}
+              </label>
+              <input
+                type="text"
+                dir="auto"
+                value={newTitleValue}
+                onChange={(e) => setNewTitleValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle(editingModalProject.id);
+                  if (e.key === 'Escape') setEditingModalProject(null);
+                }}
+                autoFocus
+                disabled={isSavingTitle}
+                placeholder={isAr ? 'اكتب عنوان الفيديو الجديد...' : 'Enter new episode title...'}
+                className="w-full bg-slate-950 theme-light:bg-white border border-slate-700 theme-light:border-purple-300 focus:border-purple-500 rounded-2xl px-4 py-3 text-sm text-white theme-light:text-slate-950 font-bold outline-none transition"
+              />
+            </div>
+
+            {titleError && (
+              <div className="flex items-center space-x-2 rtl:space-x-reverse text-xs text-rose-400 bg-rose-950/50 border border-rose-500/30 p-3 rounded-xl font-bold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{titleError}</span>
+              </div>
+            )}
+
+            <div className="flex space-x-3 rtl:space-x-reverse pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingModalProject(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 theme-light:border-slate-300 text-slate-300 theme-light:text-slate-700 font-black hover:bg-slate-800 theme-light:hover:bg-slate-100 transition"
+                disabled={isSavingTitle}
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveTitle(editingModalProject.id)}
+                disabled={isSavingTitle || !newTitleValue.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:opacity-90 text-white font-black shadow-lg hover:shadow-purple-500/25 transition disabled:opacity-50 flex items-center justify-center space-x-2 rtl:space-x-reverse"
+              >
+                {isSavingTitle ? (
+                  <span>{isAr ? 'جاري الحفظ...' : 'Saving...'}</span>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{isAr ? 'حفظ العنوان' : 'Save Title'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Move Project to Another Folder Modal */}
       {movingProject && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir={isAr ? 'rtl' : 'ltr'}>
           <div className="bg-slate-900 theme-light:bg-white p-6 sm:p-7 rounded-3xl border border-purple-500/30 max-w-md w-full shadow-2xl relative overflow-hidden space-y-5">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500" />
+
             <div className="flex items-center space-x-3 rtl:space-x-reverse">
               <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md shrink-0">
                 <FolderInput className="w-6 h-6 text-pink-400" />
